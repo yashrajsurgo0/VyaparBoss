@@ -352,13 +352,42 @@ function renderInsights(){
   $("#catBars").innerHTML=Object.keys(CATS).map(c=>`<div class="b"><span>${CATS[c]}</span><div class="track"><div class="fill" style="width:${((by[c]||0)/max*100).toFixed(1)}%"></div></div><span class="num">${lakh(by[c]||0)}</span></div>`).join("");
 }
 
+/* ===================== WHATSAPP INTAKE ===================== */
+let waChat=[];const WA_TEST_FROM="919800000001";
+async function renderWhatsApp(){
+  const el=$("#waPanel");
+  if($("#v-insights").hidden&&el.innerHTML)return; // only refresh while visible
+  const typed=$("#waInput")?.value||"",hadFocus=document.activeElement?.id==="waInput";
+  if(Repo.mode!=="server"){
+    el.innerHTML=`<div class="wahead"><h4>WhatsApp intake</h4><span class="pill">Needs the server</span></div>
+      <p class="muted" style="margin:0;font-size:13px">Buyers text their requirement to your WhatsApp Business number and get landed-cost quotes back; replying "APPROVE 1" raises the PO. This runs on the VyaparBoss server (<span class="num">npm start</span>), not in this static demo. Setup guide: docs/WHATSAPP_SETUP.md in the repo.</p>`;return;
+  }
+  let log=[];try{log=(await Repo.waLog()).log.filter(l=>!l.simulated).slice(-30).reverse();}catch(e){}
+  el.innerHTML=`<div class="wahead"><h4>WhatsApp intake</h4>${Repo.info.whatsapp?`<span class="pill good">Connected to WhatsApp Cloud API</span>`:`<span class="pill warn">Not connected · simulator only</span>`}</div>
+    <p class="muted" style="margin:0;font-size:13px">Try it as a buyer would. Messages here go through the same pipeline as real WhatsApp messages but nothing is sent to a phone.${Repo.info.whatsapp?"":" To connect a real number, follow docs/WHATSAPP_SETUP.md."}</p>
+    <div class="waphone">
+      <div><div class="wachat" id="waChat">${waChat.length?waChat.map(m=>`<div class="b ${m.dir}">${esc(m.text)}</div>`).join(""):`<div class="muted" style="font-size:12.5px">Example: <b>5000 3-ply boxes Pune 7 din</b>, then <b>APPROVE 1</b>. Also try STATUS.</div>`}</div>
+        <div class="warow" style="margin-top:8px"><input id="waInput" placeholder="Type as a buyer on WhatsApp…" aria-label="WhatsApp test message"><button class="btn primary" data-action="wa-send">Send</button></div></div>
+      <div><div class="eyebrow" style="margin-bottom:6px">Recent real conversations</div><div class="walog">${log.length?log.map(l=>`<div><span class="muted num">${dstr(l.at)} · ${esc(l.from)}</span><br><b>${esc(l.in)}</b><br>${esc(l.out.split("\n")[0])}</div>`).join(""):`<span class="muted">No WhatsApp messages yet.</span>`}</div></div>
+    </div>`;
+  const c=$("#waChat");if(c)c.scrollTop=c.scrollHeight;
+  const inp=$("#waInput");if(inp){inp.value=typed;if(hadFocus)inp.focus();}
+}
+async function waSend(){
+  const inp=$("#waInput");const text=(inp?.value||"").trim();if(!text)return;
+  waChat.push({dir:"in",text});inp.value="";renderWhatsApp();
+  try{const {reply}=await Repo.waSimulate(WA_TEST_FROM,text);waChat.push({dir:"out",text:reply});await Repo.refresh();renderAll();}
+  catch(e){waChat.push({dir:"out",text:"⚠️ "+e.message});renderWhatsApp();}
+  setTimeout(()=>$("#waInput")?.focus(),0);
+}
+
 /* ===================== AI CHIP ===================== */
 function renderAiChip(){const c=$("#aichip");const live=aiState==="server"||aiState==="live";c.className="aichip"+(live?" live":"");
   c.querySelector("span").textContent=aiState==="server"?"Claude via VyaparBoss server":aiState==="live"?"Claude reads your requests":aiState==="pending"?"Connecting…":(Repo.mode==="server"?"Server · rule parser":"Offline parser (rules)");
   c.title=live?"Requests are understood by Claude; prices and suppliers always come from supplier records.":Repo.mode==="server"?"Server running without ANTHROPIC_API_KEY, so the built-in Hinglish rule parser reads requests.":"Claude isn't available here, so a built-in Hinglish rule parser reads requests.";}
 
 /* ===================== WIRING ===================== */
-function renderAll(){renderOrders();renderSuppliers();renderDesk();renderInsights();}
+function renderAll(){renderOrders();renderSuppliers();renderDesk();renderInsights();renderWhatsApp();}
 function showTab(t){document.querySelectorAll("#tabs button").forEach(b=>b.setAttribute("aria-selected",b.dataset.tab===t));document.querySelectorAll(".view").forEach(v=>v.hidden=v.id!=="v-"+t);try{localStorage.setItem(KEY+".tab",t);}catch(e){}if(t!=="procure")renderAll();if(Repo.mode==="server")Repo.refresh().then(ch=>ch&&renderAll()).catch(()=>{});}
 $("#tabs").addEventListener("click",e=>{const b=e.target.closest("button[data-tab]");if(b)showTab(b.dataset.tab);});
 $("#sendBtn").addEventListener("click",()=>send($("#ask").value));
@@ -384,6 +413,7 @@ const ACTIONS={
   resolve:a=>{Repo.updateOrder(a.dataset.po,{issue:null}).catch(fail);renderAll();},
   "clear-samples":async()=>{try{const n=await Repo.clearSamples();renderAll();toast(n?`Removed ${n} sample orders`:"No sample orders left");}catch(e){fail(e);}},
   draft:a=>draftReply(a.dataset.rfq,a),
+  "wa-send":()=>waSend(),
   "sf-open":()=>openSupplierForm(null),
   "sf-edit":a=>openSupplierForm(store().suppliers.find(x=>x.id===a.dataset.sid)),
   "sf-cancel":()=>closeSupplierForm(),
@@ -397,7 +427,7 @@ const ACTIONS={
   copy:a=>{const ta=document.getElementById("reply-"+a.dataset.rfq);const done=()=>toast("Reply copied");try{navigator.clipboard.writeText(ta.value).then(done,()=>{ta.select();toast("Press Ctrl/Cmd+C to copy");});}catch(err){ta.select();toast("Press Ctrl/Cmd+C to copy");}}
 };
 document.addEventListener("click",e=>{const a=e.target.closest("[data-action]");if(a&&ACTIONS[a.dataset.action])ACTIONS[a.dataset.action](a,e);});
-document.addEventListener("keydown",e=>{if((e.key==="Enter"||e.key===" ")&&e.target.matches(".q[data-action]")){e.preventDefault();selected=e.target.dataset.sid;renderResults();}});
+document.addEventListener("keydown",e=>{if(e.key==="Enter"&&e.target.id==="waInput"){e.preventDefault();waSend();return;}if((e.key==="Enter"||e.key===" ")&&e.target.matches(".q[data-action]")){e.preventDefault();selected=e.target.dataset.sid;renderResults();}});
 document.addEventListener("input",e=>{if(e.target.id==="sfGst")updateGstHint();});
 document.addEventListener("change",e=>{
   const id=e.target.id;

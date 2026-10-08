@@ -84,5 +84,8 @@ const Repo={
   },
   /* Server-side Claude (Anthropic API). Only call when info.ai is true. */
   async parse(text,partial){return this.api("POST","api/parse",{text,partial});},
-  async draft(rfqId,sid){return this.api("POST","api/draft",{rfqId,sid});}
+  async draft(rfqId,sid){return this.api("POST","api/draft",{rfqId,sid});},
+  /* WhatsApp intake (server only) */
+  async waLog(){return this.api("GET","api/whatsapp/log");},
+  async waSimulate(from,text){return this.api("POST","api/whatsapp/simulate",{from,text});}
 };

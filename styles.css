@@ -233,3 +233,19 @@ footer{border-top:1px solid var(--line);padding-block:16px;font-size:12px;color:
 .formacts{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .scard .cardacts{display:flex;gap:6px;margin-top:auto}
 .btn.danger{color:var(--bad);border-color:var(--bad)}
+
+/* WhatsApp intake */
+.wa{padding:16px;display:flex;flex-direction:column;gap:12px}
+.wa h4{margin:0;font-family:var(--f-display);font-size:16px}
+.wa .wahead{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:baseline}
+.wa .waphone{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}
+@media(max-width:820px){.wa .waphone{grid-template-columns:1fr}}
+.wachat{background:var(--sunk);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px;max-height:420px;overflow-y:auto;min-height:160px}
+.wachat .b{max-width:90%;padding:7px 10px;border-radius:10px;font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere}
+.wachat .b.in{align-self:flex-end;background:var(--verify-tint);color:var(--ink)}
+.wachat .b.out{align-self:flex-start;background:var(--surface);border:1px solid var(--line)}
+.wachat .b small{display:block;color:var(--muted);font-size:10.5px;margin-top:3px}
+.warow{display:flex;gap:8px}
+.warow input{flex:1;min-width:0;border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:7px 10px}
+.walog{font-size:12.5px;display:flex;flex-direction:column;gap:6px;max-height:420px;overflow-y:auto}
+.walog div{border-bottom:1px dashed var(--line);padding-bottom:6px}
