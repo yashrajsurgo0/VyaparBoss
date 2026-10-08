@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server/index.js",
     "static": "npx --yes serve src -l 5173",
-    "test": "node tests/engine.test.js && node tests/server.test.js",
+    "test": "node tests/engine.test.js && node tests/server.test.js && node tests/ui.smoke.js",
     "wa": "node scripts/wa-simulate.js",
     "build:single": "node scripts/build-single.js",
     "deploy:pages": "git push origin $(git subtree split --prefix src HEAD):refs/heads/gh-pages --force"
