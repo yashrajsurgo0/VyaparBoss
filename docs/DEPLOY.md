@@ -9,11 +9,11 @@ The server has no dependencies, so any host that runs Node 18+ works. The one re
 The repo includes a `render.yaml` blueprint.
 
 1. Sign up at **render.com** with your GitHub account.
-2. **New → Blueprint**, pick the **VyaparBoss** repo, and click **Apply**. Render reads `render.yaml` and creates the web service with a 1 GB disk mounted at `/var/data`.
+2. **New → Blueprint**, pick the **VyaparBoss** repo, and click **Apply**. Render reads `render.yaml` and creates the web service on the **free** plan.
 3. When asked for environment values, paste your `GEMINI_API_KEY` (from aistudio.google.com → Get API key). Add the WhatsApp ones later, following WHATSAPP_SETUP.md.
 4. After the first deploy you get an address like `https://vyaparboss.onrender.com`. Open `/api/health` on it to check: it should show `"app":"vyaparboss"`.
 
-Cost: persistent disks need a paid instance (Render's Starter plan plus disk, a few dollars a month; check render.com/pricing). The free plan works for a quick look, but its disk is wiped on restart.
+**Free vs paid.** The free plan sleeps when idle (the first request takes about a minute) and **wipes data on every restart or redeploy**. Before real orders, upgrade: in Render open the service → **Settings → Instance type → Starter**, then **Disks → Add disk** (mount path `/var/data`, 1 GB) and set `DATA_FILE=/var/data/db.json` under **Environment**. Or edit `render.yaml` as its comments describe. Check render.com/pricing for current prices.
 
 Every push to `main` redeploys automatically.
 
