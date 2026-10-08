@@ -33,6 +33,9 @@ test("Hindi number words", () => {
   assert.deepStrictEqual([r.productId, r.city, r.deadline], ["box5", "Delhi", 10]);
 });
 test("missing fields are reported", () => assert.deepStrictEqual(plain(C.missing(parse("need gloves"))), ["quantity", "city"]));
+test("parse prompt forbids the AI from promising availability", () => {
+  assert.match(C.buildParsePrompt("x", null), /Never promise availability/);
+});
 test("model output is sanitised before use", () => {
   const p = plain(C.cleanParsed({ product_id: "made-up", quantity: "-5", city: "Atlantis", deadline_days: 3, reply: 42 }));
   assert.deepStrictEqual([p.product_id, p.quantity, p.city, p.deadline_days, p.reply], [null, null, null, 3, null]);
