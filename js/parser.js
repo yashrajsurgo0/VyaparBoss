@@ -49,9 +49,10 @@ function applyParsed(p,base){
 }
 function missing(r){const m=[];if(!r?.productId)m.push("product");if(!r?.qty)m.push("quantity");if(!r?.city)m.push("city");return m;}
 
-async function aiParse(text,partial){
+/* Prompts are shared by the browser (claude.ai artifact runtime) and the server (Anthropic API). */
+function buildParsePrompt(text,partial){
   const catalog=PRODUCTS.map(p=>`${p.id}: ${p.name} (${p.spec}; sold per ${p.unit}${p.unit!=="kg"?`, ~${p.kgPer} kg each`:""})`).join("\n");
-  const prompt=`You are the Buyer Intelligence Agent of VyaparBoss, an Indian B2B procurement platform. Read the buyer's message (English, Hindi or Hinglish) and extract a structured purchase requirement.
+  return `You are the Buyer Intelligence Agent of VyaparBoss, an Indian B2B procurement platform. Read the buyer's message (English, Hindi or Hinglish) and extract a structured purchase requirement.
 
 Catalog product ids (use only these):
 ${catalog}
@@ -60,10 +61,20 @@ Delivery cities we serve (use exact spelling): ${Object.keys(CITIES).join(", ")}
 
 Requirement collected so far (merge with it; the new message overrides): ${JSON.stringify(partial?{product_id:partial.productId||null,quantity:partial.qty||null,city:partial.city||null,deadline_days:partial.deadline||null}:{})}
 
-Buyer message: """${text}"""
+Buyer message: """${String(text).slice(0,2000)}"""
 
 Reply with only this JSON object:
 {"product_id": string|null, "quantity": number|null, "unit": string|null, "city": string|null, "deadline_days": number|null, "notes": string, "reply": string}
 Rules: quantity is the number the buyer said and unit is the unit they used (kg, tonne, pcs, rolls, bags...). Keep the earlier values when the new message doesn't change them. deadline_days is days from today (a week = 7, kal = 1). If the city isn't in the list, use the nearest listed city and say so in notes. If no catalog product fits, product_id is null. notes: one short line of any spec details the buyer mentioned. reply: one short friendly sentence to the buyer, in the same language style they wrote in, saying what you understood or asking for what's missing (product, quantity or delivery city).`;
-  return await ai.json(prompt,{modelTier:"quick",cache:false});
+}
+function buildReplyPrompt(r,s,mine){
+  const p=PMAP[r.productId];
+  return `Write a short WhatsApp reply (3-4 sentences, Hinglish, polite and businesslike, no emojis) from Indian supplier "${s.name}" (${s.city}) answering a buyer RFQ on the VyaparBoss platform. RFQ: ${qfmt(r.qty)} ${p.unit} of ${p.name} (${p.spec}) delivered to ${r.city}${r.deadline?` within ${r.deadline} days`:""}. Our price: ${inr(mine.unit,2)} per ${unitOne(p.unit)} plus GST ${p.gst}%. Delivery in ${mine.eta} days. Payment terms: ${s.terms}. Certifications: ${(s.certs||[]).join(", ")||"none listed"}. Only use these facts; do not invent discounts or stock levels. Reply with only the message text.`;
+}
+/* Validate whatever the model returned before it touches the engine. */
+function cleanParsed(x){
+  if(!x||typeof x!=="object")return null;
+  const num=v=>{const n=Number(v);return isFinite(n)&&n>0?n:null;};
+  return {product_id:PMAP[x.product_id]?x.product_id:null,quantity:num(x.quantity),unit:typeof x.unit==="string"?x.unit:null,
+    city:CITIES[x.city]?x.city:null,deadline_days:num(x.deadline_days),notes:typeof x.notes==="string"?x.notes.slice(0,200):"",reply:typeof x.reply==="string"?x.reply.slice(0,400):null};
 }
