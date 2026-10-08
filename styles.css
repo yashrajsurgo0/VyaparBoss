@@ -127,7 +127,8 @@ main{padding-block:24px 40px}
 @media(min-width:860px){.hero{grid-template-columns:minmax(0,1.25fr) minmax(0,.75fr);gap:40px;padding-block:28px 28px}}
 .hero-art{order:-1;justify-self:start}
 @media(min-width:860px){.hero-art{order:1;justify-self:center}}
-.bhai-xl{width:clamp(120px,22vw,280px);height:auto;aspect-ratio:1}
+.bhai-xl{width:clamp(96px,22vw,280px);height:auto;aspect-ratio:1}
+@media(max-width:859px){.bhai-xl{width:96px}.hero{gap:14px}}
 .hello{font-family:var(--f-display);font-weight:700;font-size:20px;color:var(--accent-deep);margin-bottom:6px}
 :root[data-theme="dark"] .hello{color:var(--accent)}
 .hero h1{font-size:clamp(34px,6vw,58px);font-weight:800;line-height:1.02;letter-spacing:-.02em}
@@ -136,6 +137,7 @@ main{padding-block:24px 40px}
 .askbox input{flex:1;min-width:0;border:0;background:none;font-size:18px;padding:8px 0;outline:none}
 .askbox:focus-within{box-shadow:0 0 0 4px var(--brand-tint),var(--lift)}
 .try{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px;font-size:15px;color:var(--muted);align-items:center}
+@media(max-width:600px){.try{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;margin-inline:-16px;padding-inline:16px}.try::-webkit-scrollbar{display:none}.try button{flex:none}}
 .try button{border:0;background:var(--sunk);border-radius:999px;padding:4px 12px;font-size:14.5px;cursor:pointer;color:var(--ink)}
 .try button:hover{background:var(--brand-tint)}
 .cats-title{margin:34px 0 12px;font-weight:600;color:var(--muted)}
