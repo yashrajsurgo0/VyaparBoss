@@ -1,0 +1,11 @@
+{
+  "name": "vyaparboss",
+  "version": "0.1.0",
+  "private": true,
+  "description": "VyaparBoss — AI-powered B2B procurement and supplier marketplace for Indian MSMEs (MVP prototype). A House of 24 Pvt. Ltd. initiative.",
+  "scripts": {
+    "start": "npx --yes serve src -l 5173",
+    "test": "node tests/engine.test.js"
+  },
+  "engines": { "node": ">=18" }
+}
