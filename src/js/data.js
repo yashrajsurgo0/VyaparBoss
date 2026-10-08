@@ -28,7 +28,7 @@ const CITIES={
 const ALIASES={bangalore:"Bengaluru",bengaluru:"Bengaluru",gurgaon:"Gurugram","new delhi":"Delhi",ncr:"Delhi",dilli:"Delhi",bombay:"Mumbai",calcutta:"Kolkata",madras:"Chennai",cochin:"Kochi",ambattur:"Chennai",vatva:"Ahmedabad",peenya:"Bengaluru",narela:"Delhi",pimpri:"Pune","chhatrapati sambhajinagar":"Aurangabad"};
 
 const S=(id,name,city,area,gstin,o)=>({id,name,city,area,gstin,...o});
-const SUPPLIERS=[
+const SAMPLE_SUPPLIERS=[
  S("s1","Shreeji Corrugators","Chakan","Chakan MIDC","27AAKFS4821M1Z3",{yrs:11,rating:4.6,onTime:94,orders:312,lead:3,coverage:900,maxDisc:.04,terms:"30% advance, balance on delivery",certs:["ISO 9001"],offers:[{p:"box3",tiers:[[500,17.9],[2000,16.2],[10000,14.8]],cap:60000},{p:"box5",tiers:[[300,41],[1500,37.5],[5000,34.9]],cap:20000}]}),
  S("s2","Bhiwandi Packaging Hub","Bhiwandi","Kalher","27AAGCB7710K1Z8",{yrs:8,rating:4.3,onTime:88,orders:540,lead:2,coverage:900,maxDisc:.05,terms:"Full advance",certs:[],offers:[{p:"box3",tiers:[[1000,16.9],[5000,15.4],[20000,14.1]],cap:100000},{p:"tape",tiers:[[100,38],[500,34],[2000,31]],cap:20000},{p:"stretch",tiers:[[50,168],[300,156],[1000,148]],cap:8000}]}),
  S("s3","Vapi Polyfilms","Vapi","GIDC Vapi","24AACCV3390F1Z1",{yrs:14,rating:4.5,onTime:92,orders:205,lead:4,coverage:1500,maxDisc:.03,terms:"15-day credit after 3 orders",certs:["ISO 9001","Food-contact test report"],offers:[{p:"ldpe",tiers:[[200,142],[1000,134],[5000,127]],cap:30000},{p:"stretch",tiers:[[100,160],[500,151],[2000,143]],cap:15000},{p:"mulch",tiers:[[200,165],[1000,155],[5000,148]],cap:20000}]}),
@@ -45,7 +45,14 @@ const SUPPLIERS=[
  S("s14","Narela Pack & Ship","Delhi","Narela DSIIDC","07AAGFN3348K1Z6",{yrs:9,rating:4.4,onTime:90,orders:300,lead:2,coverage:900,maxDisc:.04,terms:"30% advance",certs:["ISO 9001"],offers:[{p:"box3",tiers:[[500,18.6],[3000,16.9],[15000,15.3]],cap:50000},{p:"box5",tiers:[[200,43],[1000,39]],cap:12000},{p:"tape",tiers:[[100,39],[1000,33.5]],cap:15000},{p:"stretch",tiers:[[50,172],[500,158]],cap:6000}]}),
  S("s15","Peenya Packaging Works","Bengaluru","Peenya Industrial Area","29AACFP7709G1Z3",{yrs:12,rating:4.2,onTime:87,orders:240,lead:3,coverage:800,maxDisc:.04,terms:"50% advance",certs:["ISO 9001","Food-contact test report"],offers:[{p:"box3",tiers:[[500,17.4],[5000,15.6]],cap:40000},{p:"box5",tiers:[[300,40],[2000,36.5]],cap:15000},{p:"ldpe",tiers:[[200,146],[1000,138]],cap:8000}]})
 ];
-const SMAP=Object.fromEntries(SUPPLIERS.map(s=>[s.id,s]));
+SAMPLE_SUPPLIERS.forEach(s=>{s.sample=true;});
+// Live supplier list = sample network (optional) + suppliers onboarded through the app.
+let SUPPLIERS=SAMPLE_SUPPLIERS.slice();
+let SMAP=Object.fromEntries(SUPPLIERS.map(s=>[s.id,s]));
+function setSuppliers(custom,useSamples=true){
+  SUPPLIERS=(useSamples?SAMPLE_SUPPLIERS:[]).concat(custom||[]);
+  SMAP=Object.fromEntries(SUPPLIERS.map(s=>[s.id,s]));
+}
 const STAGES=["PO sent","Confirmed by supplier","Dispatched","In transit","Delivered"];
 const TAKE=0.015;
 

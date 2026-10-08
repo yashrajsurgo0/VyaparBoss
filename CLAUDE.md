@@ -3,14 +3,17 @@
 B2B procurement MVP for Indian MSMEs. Founder: Yashraj Surgoniwar (House of 24 Pvt. Ltd.). Full brief: `docs/PROJECT_BRIEF.md`.
 
 ## Commands
-- `npm test` — parser and engine tests. Run after any change to `src/js/data.js`, `engine.js` or `parser.js`.
-- `npm start` — static server on :5173. No build step, no framework.
+- `npm test` — engine, parser and API tests. Run after any change in `src/js/` or `server/`.
+- `npm start` — app + API on :5173 (reads `.env`). No build step, no framework, no npm dependencies.
 
 ## Architecture
-- Plain browser scripts loaded in order: data → util → engine → parser → app. They share globals; keep that order.
-- `engine.js` is pure logic (no DOM). Keep it that way so `tests/` can load it in Node.
+- Plain browser scripts loaded in order: data → util → engine → parser → repo → app. They share globals; keep that order.
+- `data.js`, `util.js`, `engine.js`, `parser.js` must stay DOM-free: `server/core.js` loads them into Node so server and browser share one engine. Add new shared functions to the `EXPORTS` list in `server/core.js`.
+- `repo.js` is the only place that persists data: server API when `/api/health` answers, else localStorage.
+- Server: `server/index.js` routes; business actions in `makeServices()` so REST and WhatsApp share them.
 - Agents map to code: Buyer Intelligence = `parser.js`; Supplier Discovery + RFQ + Optimization = `discover()` / `quoteFor()` in `engine.js`; Negotiation = `negotiate` action in `app.js`.
-- State persists to `localStorage` key `vyaparboss.v1`.
+- Server data: `data/db.json` (gitignored). Browser data: localStorage key `vyaparboss.v1`.
+- Never commit `.env` or `data/`.
 
 ## Rules
 - Commercial outputs (prices, availability, suppliers) must come from structured data, never from the LLM. The LLM only extracts requirements and drafts messages.

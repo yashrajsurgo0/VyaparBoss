@@ -10,11 +10,34 @@ An initiative of House of 24 Pvt. Ltd. Current stage: pre-MVP prototype.
 ## Run it
 
 ```bash
-npm start        # serves src/ at http://localhost:5173
-npm test         # parser + landed-cost engine tests (Node 18+, no dependencies)
+cp .env.example .env     # optional: add ANTHROPIC_API_KEY to switch on Claude
+npm start                # app + API at http://localhost:5173
+npm test                 # engine, parser and API tests (Node 18+, no dependencies)
 ```
 
-Or open `src/index.html` directly in a browser. No build step.
+Two ways the same app runs:
+
+| | Data lives in | Request parsing | Used for |
+|---|---|---|---|
+| **With the server** (`npm start`) | `data/db.json` on the server, shared by everyone | Claude through the Anthropic API (rule parser if no key) | Pilot operations, WhatsApp |
+| **Static page** (GitHub Pages, claude.ai, opening `src/index.html`) | The viewer's browser | Claude inside claude.ai, otherwise the rule parser | Demos |
+
+The app checks for `api/health` on load and picks the mode by itself.
+
+## API
+
+| Method | Path | Does |
+|---|---|---|
+| GET | `/api/health` | App, AI and WhatsApp status |
+| GET | `/api/state` | Orders, RFQs, onboarded suppliers, settings |
+| POST | `/api/parse` | `{text, partial}` → structured requirement (Claude or rules) |
+| POST | `/api/quotes` | `{productId, qty, city, deadline}` → ranked landed-cost quotes |
+| POST / PATCH | `/api/rfqs`, `/api/rfqs/:id` | Create / update RFQs (server assigns `RFQ-2627-0001` ids) |
+| POST / PATCH | `/api/orders`, `/api/orders/:po` | Raise POs (`VB/PO/2026-27/0001`), move stages, flag issues |
+| PUT / DELETE | `/api/suppliers/:id` | Onboard, edit or remove a supplier (validated, GSTIN checksum) |
+| PUT | `/api/settings` | `{useSamples}`: show or hide the 15 sample suppliers |
+| POST | `/api/draft` | AI-drafted supplier reply for an RFQ |
+| DELETE | `/api/samples` | Remove sample orders |
 
 ## What's in the prototype
 
@@ -31,15 +54,21 @@ Categories live: packaging, industrial consumables, agri inputs (14 products).
 ## Code map
 
 ```
+server/
+  index.js          HTTP server: static files + JSON API (no dependencies)
+  core.js           loads src/js engine into Node so server and browser share one engine
+  store.js          JSON-file database (data/db.json)
+  anthropic.js      Anthropic Messages API client
 src/
   index.html        markup for all tabs
   styles.css        design tokens (light + dark) and components
   js/data.js        products, cities, sample suppliers (rate-card tiers, MOQ, capacity, coverage)
   js/util.js        ₹ formatting (en-IN), distance, Indian FY
   js/engine.js      state + discovery, tier pricing, GST, freight, ranking
-  js/parser.js      Buyer Intelligence Agent: Hinglish rule parser + Claude JSON parser
+  js/parser.js      Buyer Intelligence Agent: Hinglish rule parser, Claude prompts, output sanitising
+  js/repo.js        storage: server API when available, otherwise localStorage
   js/app.js         UI rendering and event wiring
-tests/engine.test.js
+tests/            engine.test.js, server.test.js
 docs/               project brief and prototype notes
 ```
 
@@ -54,9 +83,11 @@ docs/               project brief and prototype notes
 
 ## AI
 
-`parser.js` calls Claude through the artifact runtime (`window.claude.use("sample")`) when the page is opened as a claude.ai artifact. Anywhere else it falls back to the rule parser. Prices and suppliers always come from structured records, never from the model.
+Claude reads buyer messages and drafts supplier replies. It never sets prices or picks suppliers: those come from supplier rate cards through `engine.js`, and model output is validated by `cleanParsed()` before use.
 
-Next step for production: swap that call for a backend endpoint using the Anthropic API.
+- With the server: set `ANTHROPIC_API_KEY` in `.env` (model defaults to `claude-haiku-5-5`, override with `ANTHROPIC_MODEL`).
+- As a claude.ai artifact: uses the artifact runtime's Claude access.
+- Anywhere else: the built-in Hinglish rule parser.
 
 ## Roadmap (next)
 
