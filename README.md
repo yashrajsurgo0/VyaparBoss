@@ -13,7 +13,11 @@ An initiative of House of 24 Pvt. Ltd. Current stage: pre-MVP prototype.
 cp .env.example .env     # optional: add ANTHROPIC_API_KEY to switch on Claude
 npm start                # app + API at http://localhost:5173
 npm test                 # engine, parser and API tests (Node 18+, no dependencies)
+npm run deploy:pages     # publish src/ to GitHub Pages (gh-pages branch)
+npm run build:single     # dist/vyaparboss.html: whole app in one file, for sharing
 ```
+
+**Live demo:** https://yashrajsurgo0.github.io/VyaparBoss/ (static mode; data stays in your browser). Redeploy after changes with `npm run deploy:pages`.
 
 Two ways the same app runs:
 

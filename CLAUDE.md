@@ -5,6 +5,8 @@ B2B procurement MVP for Indian MSMEs. Founder: Yashraj Surgoniwar (House of 24 P
 ## Commands
 - `npm test` — engine, parser and API tests. Run after any change in `src/js/` or `server/`.
 - `npm start` — app + API on :5173 (reads `.env`). No build step, no framework, no npm dependencies.
+- `npm run deploy:pages` — publish `src/` to GitHub Pages (live demo: https://yashrajsurgo0.github.io/VyaparBoss/). Run after UI changes are pushed to main.
+- `npm run build:single` — single-file build in `dist/` (gitignored).
 
 ## Architecture
 - Plain browser scripts loaded in order: data → util → engine → parser → repo → app. They share globals; keep that order.
