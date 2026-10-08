@@ -25,7 +25,7 @@ function renderThread(){
 /* Buyer Intelligence Agent: server Claude → in-artifact Claude → rule parser. */
 async function understand(text,base){
   if(aiState==="server"){
-    try{const j=await Repo.parse(text,base);const p=cleanParsed(j.parsed);if(p)return{parsed:p,via:j.via||"Claude"};}catch(e){console.warn("server parse failed",e);}
+    try{const j=await Repo.parse(text,base);const p=cleanParsed(j.parsed);if(p)return{parsed:p,via:j.via||"AI"};}catch(e){console.warn("server parse failed",e);}
   }else if(ai&&aiState==="live"){
     try{const p=cleanParsed(await ai.json(buildParsePrompt(text,base),{modelTier:"quick",cache:false}));if(p)return{parsed:p,via:"Claude"};}
     catch(e){if(["not_granted","sampling_disabled","not_declared","capability_disabled","capability_removed"].includes(e.code)){aiState="off";renderAiChip();}}
@@ -383,8 +383,8 @@ async function waSend(){
 
 /* ===================== AI CHIP ===================== */
 function renderAiChip(){const c=$("#aichip");const live=aiState==="server"||aiState==="live";c.className="aichip"+(live?" live":"");
-  c.querySelector("span").textContent=aiState==="server"?"Claude via VyaparBoss server":aiState==="live"?"Claude reads your requests":aiState==="pending"?"Connecting…":(Repo.mode==="server"?"Server · rule parser":"Offline parser (rules)");
-  c.title=live?"Requests are understood by Claude; prices and suppliers always come from supplier records.":Repo.mode==="server"?"Server running without ANTHROPIC_API_KEY, so the built-in Hinglish rule parser reads requests.":"Claude isn't available here, so a built-in Hinglish rule parser reads requests.";}
+  c.querySelector("span").textContent=aiState==="server"?`${Repo.info.provider||"AI"} via VyaparBoss server`:aiState==="live"?"Claude reads your requests":aiState==="pending"?"Connecting…":(Repo.mode==="server"?"Server · rule parser":"Offline parser (rules)");
+  c.title=live?`Requests are understood by ${aiState==="server"?(Repo.info.provider||"AI"):"Claude"}; prices and suppliers always come from supplier records.`:Repo.mode==="server"?"Server running without an AI key (GEMINI_API_KEY or ANTHROPIC_API_KEY), so the built-in Hinglish rule parser reads requests.":"Claude isn't available here, so a built-in Hinglish rule parser reads requests.";}
 
 /* ===================== WIRING ===================== */
 function renderAll(){renderOrders();renderSuppliers();renderDesk();renderInsights();renderWhatsApp();}
