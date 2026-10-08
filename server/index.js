@@ -164,7 +164,7 @@ function createApp(opts = {}) {
 
 function pickLLM(env) {
   const gKey = env.GEMINI_API_KEY || env.GOOGLE_API_KEY;
-  if (gKey) return createGemini({ apiKey: gKey, model: env.GEMINI_MODEL || "gemini-3.8-flash" });
+  if (gKey) return createGemini({ apiKey: gKey, model: env.GEMINI_MODEL || "gemini-3.8-flash", fallbackModel: env.GEMINI_FALLBACK_MODEL ?? "gemini-3.7-flash" });
   if (env.ANTHROPIC_API_KEY) return createClaude({ apiKey: env.ANTHROPIC_API_KEY, model: env.ANTHROPIC_MODEL || "claude-haiku-5-5" });
   return null;
 }

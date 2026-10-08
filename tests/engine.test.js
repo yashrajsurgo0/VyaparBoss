@@ -95,6 +95,12 @@ test("onboarding rejects bad input with readable reasons", () => {
   assert.strictEqual(ok, false);
   assert.ok(errors.length >= 5, errors.join("; "));
 });
+test("WhatsApp quote explains when option 1 isn't the cheapest", () => {
+  const r = { productId: "box3", qty: 5000, city: "Pune", deadline: 7 };
+  const msg = C.quoteMessage(r, C.discover(r));
+  assert.match(msg, /% on-time/);
+  if (/mehenga/.test(msg)) assert.match(msg, /Sabse sasta: option \d/);
+});
 test("sample data builds three linked orders", () => {
   const d = plain(C.buildSampleData());
   assert.strictEqual(d.orders.length, 3);

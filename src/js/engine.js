@@ -113,6 +113,9 @@ function quoteMessage(r,res){
   const p=PMAP[r.productId];const ok=res.eligible.filter(q=>q.meets);
   if(!res.eligible.length)return `${qfmt(r.qty)} ${p.unit} ${p.name} → ${r.city}: abhi koi verified supplier yeh order nahi le sakta. Quantity ya city badal ke dobara bhejiye.`;
   const top=(ok.length?ok:res.eligible).slice(0,3);
-  const lines=top.map((q,i)=>`${i+1}. ${q.s.name} (${q.s.city}): ${inr(q.landed)} landed, ${inr(q.per,2)}/${unitOne(p.unit)}, ${q.eta} din${q.meets?"":" (deadline miss)"}`);
-  return `${r.id?`${r.id}\n`:""}${qfmt(r.qty)} ${p.unit} ${p.name} → ${r.city}${r.deadline?`, ${r.deadline} din mein`:""}\n\n${lines.join("\n")}\n\nTotal landed = rate + GST + freight. Order karne ke liye reply karein "APPROVE 1" (ya 2/3).`;
+  const track=s=>s.onTime!=null?`${s.onTime}% on-time`:"naya supplier";
+  const lines=top.map((q,i)=>`${i+1}. ${q.s.name} (${q.s.city}): ${inr(q.landed)} landed, ${inr(q.per,2)}/${unitOne(p.unit)}, ${q.eta} din, ${track(q.s)}${q.meets?"":" (deadline miss)"}`);
+  const cheapest=top.reduce((a,b)=>b.landed<a.landed?b:a);
+  const why=cheapest!==top[0]?`\nOption 1 ${inr(top[0].landed-cheapest.landed)} mehenga hai par delivery record behtar hai. Sabse sasta: option ${top.indexOf(cheapest)+1}.`:"";
+  return `${r.id?`${r.id}\n`:""}${qfmt(r.qty)} ${p.unit} ${p.name} → ${r.city}${r.deadline?`, ${r.deadline} din mein`:""}\n\n${lines.join("\n")}${why}\n\nTotal landed = rate + GST + freight. Order karne ke liye reply karein "APPROVE 1" (ya 2/3).`;
 }

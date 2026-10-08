@@ -37,6 +37,21 @@ const { createApp } = require("../server");
       assert.deepStrictEqual([mk({ GEMINI_API_KEY: "g", ANTHROPIC_API_KEY: "a" }).provider, mk({ GOOGLE_API_KEY: "g" }).provider, mk({ ANTHROPIC_API_KEY: "a" }).provider, mk({})], ["Gemini", "Gemini", "Claude", null]);
       assert.strictEqual(mk({ GEMINI_API_KEY: "g" }).model, "gemini-3.8-flash");
     });
+    await test("Gemini retries a busy model, then falls back", async () => {
+      const { createGemini } = require("../server/gemini");
+      const calls = []; const realFetch = global.fetch;
+      global.fetch = async url => { const m = url.match(/models\/([^:]+)/)[1]; calls.push(m);
+        if (m === "busy-model") return { ok: false, status: 503, json: async () => ({ error: { message: "high demand" } }) };
+        return { ok: true, json: async () => ({ candidates: [{ content: { parts: [{ text: "{\"ok\":1}" }] } }] }) }; };
+      try {
+        const g = createGemini({ apiKey: "k", model: "busy-model", fallbackModel: "spare-model", retryDelayMs: 1 });
+        assert.deepStrictEqual(await g.json("x"), { ok: 1 });
+        assert.deepStrictEqual(calls, ["busy-model", "busy-model", "spare-model"]);
+        calls.length = 0;
+        global.fetch = async () => ({ ok: false, status: 400, json: async () => ({ error: { message: "API key not valid" } }) });
+        await assert.rejects(g.json("x"), /API key not valid/);
+      } finally { global.fetch = realFetch; }
+    });
     await test("static app is served", async () => {
       const { status, body } = await call("GET", "/");
       assert.strictEqual(status, 200); assert.ok(body.includes("VyaparBoss"));
