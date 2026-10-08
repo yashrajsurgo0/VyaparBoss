@@ -64,8 +64,13 @@
   <!-- SUPPLIERS -->
   <section class="view" id="v-suppliers" hidden>
     <div class="sectionhead">
-      <div><h2>Verified supplier network</h2><p>Sample network of 15 suppliers in industrial clusters. Suppliers are ranked by transaction readiness: verification, fulfillment history and on-time rate, not by listing count.</p></div>
+      <div><h2>Supplier network</h2><p id="snetIntro">Suppliers are ranked by transaction readiness: verification, fulfillment history and on-time rate, not by listing count.</p></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <label class="toggle"><input type="checkbox" id="useSamples" checked> Show 15 sample suppliers</label>
+        <button class="btn primary" data-action="sf-open">Add supplier</button>
+      </div>
     </div>
+    <div id="sform" hidden></div>
     <div class="filters">
       <input id="sq" type="search" placeholder="Search supplier, city or product">
       <div class="seg" id="scat">
@@ -109,7 +114,7 @@
   </section>
 </main>
 
-<footer><div class="wrap">VyaparBoss prototype · House of 24 Pvt. Ltd. · Suppliers, GSTINs, prices and GST rates are illustrative sample data. No real RFQs or orders are sent.</div></footer>
+<footer><div class="wrap">VyaparBoss prototype · House of 24 Pvt. Ltd. · The 15 sample suppliers, their GSTINs and prices, and the GST rates are illustrative. No real RFQs or orders are sent to suppliers.</div></footer>
 <div class="toast" id="toast" hidden></div>
 <script src="js/data.js"></script>
 <script src="js/util.js"></script>
