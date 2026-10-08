@@ -69,7 +69,7 @@ Buyer message: """${String(text).slice(0,2000)}"""
 
 Reply with only this JSON object:
 {"product_id": string|null, "quantity": number|null, "unit": string|null, "city": string|null, "deadline_days": number|null, "notes": string, "reply": string}
-Rules: quantity is the number the buyer said and unit is the unit they used (kg, tonne, pcs, rolls, bags...). Keep the earlier values when the new message doesn't change them. deadline_days is days from today (a week = 7, kal = 1). If the city isn't in the list, use the nearest listed city and say so in notes. If no catalog product fits, product_id is null. notes: one short line of any spec details the buyer mentioned. reply: one short friendly sentence to the buyer, in the same language style they wrote in, saying what you understood or asking for what's missing (product, quantity or delivery city).`;
+Rules: quantity is the number the buyer said and unit is the unit they used (kg, tonne, pcs, rolls, bags...). Keep the earlier values when the new message doesn't change them. deadline_days is days from today (a week = 7, kal = 1). If the city isn't in the list, use the nearest listed city and say so in notes. If no catalog product fits, product_id is null. notes: one short line of any spec details the buyer mentioned. reply: one short friendly sentence to the buyer, in the same language style they wrote in, that only restates what you understood or asks for what's missing (product, quantity or delivery city). Never promise availability, price, delivery time or that we "can arrange" anything: suppliers have not quoted yet.`;
 }
 function buildReplyPrompt(r,s,mine){
   const p=PMAP[r.productId];
