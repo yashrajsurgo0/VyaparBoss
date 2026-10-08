@@ -56,7 +56,7 @@ function missing(r){const m=[];if(!r?.productId)m.push("product");if(!r?.qty)m.p
 /* Prompts are shared by the browser (claude.ai artifact runtime) and the server (Anthropic API). */
 function buildParsePrompt(text,partial){
   const catalog=PRODUCTS.map(p=>`${p.id}: ${p.name} (${p.spec}; sold per ${p.unit}${p.unit!=="kg"?`, ~${p.kgPer} kg each`:""})`).join("\n");
-  return `You are the Buyer Intelligence Agent of VyaparBoss, an Indian B2B procurement platform. Read the buyer's message (English, Hindi or Hinglish) and extract a structured purchase requirement.
+  return `You are Bhai, the friendly buying assistant of VyaparBoss, an Indian B2B procurement platform for small businesses. You talk like a helpful elder brother at a trusted wholesale shop: warm, short, practical. Read the buyer's message (English, Hindi or Hinglish) and extract a structured purchase requirement.
 
 Catalog product ids (use only these):
 ${catalog}

@@ -3,120 +3,233 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>VyaparBoss MVP</title>
+<title>VyaparBoss</title>
+<meta name="description" content="Bolo kya chahiye. Bhai finds verified suppliers and shows the total delivered cost.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Cpath fill='%230B5D5E' d='M15 3h18a12 12 0 0 1 12 12v12a12 12 0 0 1-12 12H21l-9 7v-7.6A12 12 0 0 1 3 27V15A12 12 0 0 1 15 3z'/%3E%3Cpath fill='%23F6A21C' d='M14 18h20v12a2 2 0 0 1-2 2H16a2 2 0 0 1-2-2z'/%3E%3Cpath fill='%23FFC965' d='M12.5 18 16 12.5h16l3.5 5.5z'/%3E%3Cpath d='M20 18l4 6 4-6' fill='none' stroke='%23084445' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Mukta:wght@500;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Mukta:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
+<!-- ========== Drawings (original artwork, colored through CSS tokens) ========== -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <!-- Logo: a speech bubble ("bolo") carrying a parcel whose tape folds into a V -->
+    <symbol id="logo" viewBox="0 0 48 48">
+      <path class="f-brand" d="M15 3h18a12 12 0 0 1 12 12v12a12 12 0 0 1-12 12H21l-9 7v-7.6A12 12 0 0 1 3 27V15A12 12 0 0 1 15 3z"/>
+      <path class="f-accent" d="M14 18h20v12a2 2 0 0 1-2 2H16a2 2 0 0 1-2-2z"/>
+      <path class="f-accent-lite" d="M12.5 18 16 12.5h16l3.5 5.5z"/>
+      <path class="s-brand-deep" d="M20 18l4 6 4-6" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+
+    <!-- Bhai: friendly procurement helper with a headset and a marigold gamcha -->
+    <symbol id="bhai" viewBox="0 0 160 160">
+      <circle class="f-accent-tint" cx="80" cy="80" r="78"/>
+      <clipPath id="bhaiClip"><circle cx="80" cy="80" r="78"/></clipPath>
+      <g clip-path="url(#bhaiClip)">
+        <path class="f-brand" d="M18 164c2-38 28-56 62-56s60 18 62 56z"/>
+        <path class="f-brand-deep" d="M69 108l11 19 11-19z"/>
+        <circle class="f-accent" cx="80" cy="136" r="2.6"/><circle class="f-accent" cx="80" cy="147" r="2.6"/>
+        <path class="f-accent" d="M40 122c16-9 30-6 38 12l-8 7c-6-14-17-18-33-12z"/>
+        <path class="f-accent-lite" d="M46 124l4 7M54 121l3 8M62 121l2 8" fill="none" stroke-width="2" stroke-linecap="round" style="stroke:var(--accent-lite)"/>
+        <rect class="f-skin-shade" x="70" y="90" width="20" height="22" rx="7"/>
+        <circle class="f-skin" cx="46" cy="70" r="7.5"/><circle class="f-skin" cx="114" cy="70" r="7.5"/>
+        <circle class="f-skin" cx="80" cy="68" r="34"/>
+        <path class="f-hair" d="M46 64c-1-26 15-37 35-37 21 0 35 11 34 34-7-10-19-15-35-14-14 1-26 6-34 17z"/>
+        <path class="s-hair" d="M62 57q7-5 14 0M86 57q7-5 14 0" fill="none" stroke-width="3.2" stroke-linecap="round"/>
+        <circle class="f-ink" cx="69" cy="68" r="4.4"/><circle class="f-ink" cx="91" cy="68" r="4.4"/>
+        <circle class="f-white" cx="70.5" cy="66.5" r="1.4"/><circle class="f-white" cx="92.5" cy="66.5" r="1.4"/>
+        <ellipse class="f-blush" cx="59" cy="80" rx="5.5" ry="3.2"/><ellipse class="f-blush" cx="101" cy="80" rx="5.5" ry="3.2"/>
+        <path class="f-hair" d="M66 84c6-4.5 12-3.5 14-.5 2-3 8-4 14 .5-4 3.5-10 3.5-14 2-4 1.5-10 1.5-14-2z"/>
+        <path class="s-ink" d="M71 91q9 7 18 0" fill="none" stroke-width="3" stroke-linecap="round"/>
+        <path class="s-ink" d="M44 67c0-38 72-38 72 0" fill="none" stroke-width="5" stroke-linecap="round"/>
+        <rect class="f-ink" x="37" y="60" width="12" height="19" rx="5"/><rect class="f-ink" x="111" y="60" width="12" height="19" rx="5"/>
+        <path class="s-ink" d="M44 79c2 13 11 19 22 19" fill="none" stroke-width="3.4" stroke-linecap="round"/>
+        <circle class="f-accent" cx="68" cy="98" r="4.2"/>
+      </g>
+    </symbol>
+
+    <!-- Category: packaging (a kraft parcel) -->
+    <symbol id="cat-pack" viewBox="0 0 64 64">
+      <path class="f-kraft-dark" d="M10 24 18 12h28l8 12z"/>
+      <rect class="f-kraft" x="10" y="24" width="44" height="30" rx="3"/>
+      <rect class="f-brand" x="28" y="24" width="8" height="30"/>
+      <path class="f-brand-deep" d="M28 12h8l1 12h-10z"/>
+      <rect class="f-kraft-dark" x="15" y="44" width="9" height="5" rx="1.2"/>
+    </symbol>
+    <!-- Category: industrial (safety helmet and a gear) -->
+    <symbol id="cat-ind" viewBox="0 0 64 64">
+      <g class="f-brand"><circle cx="46" cy="22" r="10"/><rect x="44" y="7" width="4" height="30" rx="1.5"/><rect x="31" y="20" width="30" height="4" rx="1.5"/><rect x="44" y="7" width="4" height="30" rx="1.5" transform="rotate(45 46 22)"/><rect x="44" y="7" width="4" height="30" rx="1.5" transform="rotate(-45 46 22)"/></g>
+      <circle class="f-surface" cx="46" cy="22" r="4"/>
+      <path class="f-accent" d="M10 44c0-14 9-24 21-24s21 10 21 24z"/>
+      <rect class="f-accent-deep" x="28" y="18" width="6" height="26" rx="3"/>
+      <rect class="f-accent-deep" x="6" y="43" width="50" height="7" rx="3.5"/>
+    </symbol>
+    <!-- Category: agri inputs (sprout with a drip) -->
+    <symbol id="cat-agri" viewBox="0 0 64 64">
+      <path class="f-kraft" d="M14 46h36l-4 12H18z"/>
+      <rect class="f-kraft-dark" x="12" y="42" width="40" height="6" rx="2"/>
+      <path class="s-good" d="M32 42V24" fill="none" stroke-width="3.5" stroke-linecap="round"/>
+      <path class="f-good" d="M32 30c-12 1-18-6-18-14 10-1 17 4 18 14z"/>
+      <path class="f-good-lite" d="M32 26c2-10 9-15 19-14 0 9-7 15-19 14z"/>
+      <path class="f-brand" d="M50 26c0 0-5 6-5 9a5 5 0 0 0 10 0c0-3-5-9-5-9z"/>
+    </symbol>
+
+    <!-- Empty state: delivery truck in truck-art colors -->
+    <symbol id="art-truck" viewBox="0 0 260 150">
+      <rect class="f-sunk" x="0" y="128" width="260" height="6" rx="3"/>
+      <path class="s-muted" d="M8 78h22M2 92h26M12 106h18" stroke-width="3" stroke-linecap="round" fill="none"/>
+      <rect class="f-kraft" x="52" y="20" width="34" height="26" rx="2"/><rect class="f-kraft-dark" x="66" y="20" width="6" height="26"/>
+      <rect class="f-kraft" x="90" y="28" width="28" height="18" rx="2"/><rect class="f-kraft-dark" x="101" y="28" width="6" height="18"/>
+      <rect class="f-brand" x="40" y="46" width="136" height="70" rx="9"/>
+      <rect class="f-accent" x="40" y="46" width="136" height="11" rx="5"/>
+      <g class="f-accent"><circle cx="54" cy="58" r="4"/><circle cx="72" cy="58" r="4"/><circle cx="90" cy="58" r="4"/><circle cx="108" cy="58" r="4"/><circle cx="126" cy="58" r="4"/><circle cx="144" cy="58" r="4"/><circle cx="162" cy="58" r="4"/></g>
+      <path class="s-on-brand" d="M60 86h46M60 98h30" stroke-width="5" stroke-linecap="round" fill="none" opacity=".55"/>
+      <path class="f-accent" d="M176 66h38l24 27v23h-62z"/>
+      <path class="f-glass" d="M184 72h26l16 18h-42z"/>
+      <rect class="f-accent-deep" x="230" y="104" width="10" height="7" rx="2"/>
+      <circle class="f-ink" cx="74" cy="118" r="15"/><circle class="f-surface" cx="74" cy="118" r="6"/>
+      <circle class="f-ink" cx="206" cy="118" r="15"/><circle class="f-surface" cx="206" cy="118" r="6"/>
+    </symbol>
+
+    <!-- Empty state: supplier shop with a striped awning -->
+    <symbol id="art-shop" viewBox="0 0 260 160">
+      <rect class="f-sunk" x="0" y="146" width="260" height="6" rx="3"/>
+      <rect class="f-ink" x="88" y="8" width="84" height="22" rx="6"/>
+      <rect class="f-accent" x="104" y="16" width="52" height="6" rx="3"/>
+      <rect class="f-surface s-line" x="42" y="54" width="176" height="92" rx="4" stroke-width="2"/>
+      <g><rect class="f-brand" x="38" y="34" width="31" height="22"/><rect class="f-accent-lite" x="69" y="34" width="31" height="22"/><rect class="f-brand" x="100" y="34" width="30" height="22"/><rect class="f-accent-lite" x="130" y="34" width="31" height="22"/><rect class="f-brand" x="161" y="34" width="30" height="22"/><rect class="f-accent-lite" x="191" y="34" width="31" height="22"/></g>
+      <g><circle class="f-brand" cx="53.5" cy="56" r="15.5"/><circle class="f-accent-lite" cx="84.5" cy="56" r="15.5"/><circle class="f-brand" cx="115" cy="56" r="15"/><circle class="f-accent-lite" cx="145.5" cy="56" r="15.5"/><circle class="f-brand" cx="176" cy="56" r="15"/><circle class="f-accent-lite" cx="206.5" cy="56" r="15.5"/></g>
+      <rect class="f-glass" x="58" y="88" width="44" height="32" rx="3"/>
+      <rect class="f-brand-tint" x="112" y="88" width="36" height="58" rx="3"/><circle class="f-brand" cx="141" cy="118" r="2.5"/>
+      <rect class="f-kraft" x="162" y="112" width="40" height="34" rx="2"/><rect class="f-kraft-dark" x="179" y="112" width="6" height="34"/>
+      <rect class="f-kraft" x="168" y="92" width="26" height="20" rx="2"/><rect class="f-kraft-dark" x="178" y="92" width="6" height="20"/>
+    </symbol>
+
+    <!-- Empty state: ledger chart with a coin -->
+    <symbol id="art-chart" viewBox="0 0 260 150">
+      <rect class="f-surface s-line" x="30" y="14" width="170" height="122" rx="12" stroke-width="2"/>
+      <rect class="f-sunk" x="48" y="112" width="134" height="4" rx="2"/>
+      <rect class="f-brand-tint" x="56" y="84" width="22" height="28" rx="4"/>
+      <rect class="f-brand-tint" x="88" y="66" width="22" height="46" rx="4"/>
+      <rect class="f-brand" x="120" y="52" width="22" height="60" rx="4"/>
+      <rect class="f-brand" x="152" y="34" width="22" height="78" rx="4"/>
+      <path class="s-accent" d="M58 74l34-18 30 6 44-34" fill="none" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path class="f-accent" d="M160 22l14 2-3 14z"/>
+      <circle class="f-accent" cx="214" cy="108" r="28"/><circle class="f-accent-lite" cx="214" cy="108" r="20"/>
+      <path class="s-accent-deep" d="M206 98h16M206 104h16M210 98c10 0 10 12 0 12l10 10" fill="none" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+
+    <!-- Success: parcel with a tick and confetti -->
+    <symbol id="art-done" viewBox="0 0 220 160">
+      <g><rect class="f-accent" x="30" y="30" width="10" height="5" rx="2" transform="rotate(-20 35 32)"/><rect class="f-brand" x="176" y="22" width="10" height="5" rx="2" transform="rotate(25 181 24)"/><rect class="f-good" x="22" y="88" width="9" height="5" rx="2" transform="rotate(35 26 90)"/><rect class="f-accent" x="186" y="84" width="10" height="5" rx="2" transform="rotate(-30 191 86)"/><circle class="f-brand" cx="60" cy="16" r="4"/><circle class="f-accent" cx="160" cy="54" r="3.5"/><circle class="f-good" cx="48" cy="58" r="3"/></g>
+      <path class="f-kraft-dark" d="M58 64l14-22h76l14 22z"/>
+      <rect class="f-kraft" x="58" y="64" width="104" height="76" rx="5"/>
+      <rect class="f-brand" x="102" y="64" width="16" height="76"/>
+      <circle class="f-good" cx="160" cy="124" r="24"/>
+      <path class="s-white" d="M149 124l8 8 15-16" fill="none" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+
+    <!-- UI icons (stroke = currentColor) -->
+    <symbol id="i-send" viewBox="0 0 24 24"><path d="M4 12l16-8-6 16-3-7z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
+    <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16zM13 7l4 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24"><path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="M14 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M8.5 12l2.5 2.5 4.5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 7.5V12l3 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-6.5-6-6.5-11a6.5 6.5 0 0 1 13 0c0 5-6.5 11-6.5 11z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="10" r="2.3" fill="currentColor"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.8l-5.2 2.8 1-5.8-4.3-4.1 5.9-.8z" fill="currentColor"/></symbol>
+    <symbol id="i-buy" viewBox="0 0 24 24"><path d="M5 8h14l-1.2 11.2a2 2 0 0 1-2 1.8H8.2a2 2 0 0 1-2-1.8z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M9 8V6.5a3 3 0 0 1 6 0V8" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+    <symbol id="i-orders" viewBox="0 0 24 24"><rect x="3" y="7" width="12" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M15 10h3.5l2.5 3v4h-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="7.5" cy="18" r="1.8" fill="currentColor"/><circle cx="17.5" cy="18" r="1.8" fill="currentColor"/></symbol>
+    <symbol id="i-store" viewBox="0 0 24 24"><path d="M4 9l1.5-5h13L20 9M4 9h16v1.5a2.7 2.7 0 0 1-5.3 0 2.7 2.7 0 0 1-5.4 0A2.7 2.7 0 0 1 4 10.5zM5.5 13v7h13v-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M10 20v-4h4v4" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20V4M4 20h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M8 16v-4M12 16V9M16 16v-6M20 16V6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 19l1.4-3.8A7.5 7.5 0 1 1 8.6 18z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
+  </defs>
+</svg>
+
 <header class="top">
-  <div class="wrap bar">
-    <div class="brand"><h1>Vyapar<b>Boss</b></h1><span class="hi">बोलो क्या चाहिए</span></div>
-    <div class="spacer"></div>
-    <span class="aichip" id="aichip" title="How requests are understood"><i></i><span>Connecting to Claude…</span></span>
-  </div>
-  <div class="wrap">
-    <nav class="tabs" role="tablist" id="tabs">
-      <button role="tab" data-tab="procure" aria-selected="true">Procure</button>
-      <button role="tab" data-tab="orders" aria-selected="false">Orders<span class="count" id="ordCount">0</span></button>
-      <button role="tab" data-tab="suppliers" aria-selected="false">Supplier network</button>
-      <button role="tab" data-tab="desk" aria-selected="false">Supplier desk</button>
-      <button role="tab" data-tab="insights" aria-selected="false">Pilot metrics</button>
+  <div class="wrap topbar">
+    <a class="brand" href="#" data-action="go" data-tab="buy" aria-label="VyaparBoss home">
+      <svg class="logo"><use href="#logo"/></svg>
+      <span class="wordmark">VyaparBoss</span>
+    </a>
+    <nav class="tabs" id="tabs" aria-label="Main">
+      <button data-tab="buy" aria-current="page"><svg><use href="#i-buy"/></svg>Buy</button>
+      <button data-tab="orders"><svg><use href="#i-orders"/></svg>Orders<span class="count" id="ordCount" hidden></span></button>
+      <button data-tab="suppliers"><svg><use href="#i-store"/></svg>Suppliers</button>
+      <button data-tab="insights"><svg><use href="#i-chart"/></svg>Insights</button>
     </nav>
+    <span class="bhai-status" id="aichip" title="Bhai's status"><svg class="avatar-xs"><use href="#bhai"/></svg><i></i><span>Bhai</span></span>
   </div>
 </header>
 
 <main class="wrap">
-  <!-- PROCURE -->
-  <section class="view" id="v-procure">
-    <div class="desk">
-      <div class="chatcol">
-        <div class="panel chat">
-          <div class="chathead">
-            <h2>Procurement assistant</h2>
-            <p class="muted">Type what you need in English, Hindi or Hinglish. Product, quantity and delivery city are enough to start.</p>
-          </div>
-          <div class="thread" id="thread" aria-live="polite"></div>
-          <div class="composer">
-            <div class="examples" id="examples"></div>
-            <div class="row">
-              <textarea id="ask" rows="2" placeholder="e.g. 5000 3-ply boxes chahiye Ahmedabad mein, ek hafte mein"></textarea>
-              <button class="btn primary" id="sendBtn">Send</button>
-            </div>
-          </div>
+  <section class="view" id="v-buy" aria-label="Buy"></section>
+  <section class="view" id="v-orders" aria-label="Orders" hidden></section>
+  <section class="view" id="v-suppliers" aria-label="Suppliers" hidden>
+    <div class="pagehead">
+      <div><h1>Suppliers</h1><p id="snetIntro" class="muted"></p></div>
+      <div class="seg" role="tablist" aria-label="Supplier pages">
+        <button data-sview="network" aria-selected="true">Network</button>
+        <button data-sview="desk" aria-selected="false">Supplier view</button>
+      </div>
+    </div>
+    <div id="s-network">
+      <div class="toolbar">
+        <input id="sq" type="search" placeholder="Search supplier, city or product" aria-label="Search suppliers">
+        <div class="chips" id="scat">
+          <button class="chip" data-cat="all" aria-pressed="true">All</button>
+          <button class="chip" data-cat="pack" aria-pressed="false">Packaging</button>
+          <button class="chip" data-cat="ind" aria-pressed="false">Industrial</button>
+          <button class="chip" data-cat="agri" aria-pressed="false">Agri</button>
         </div>
+        <button class="btn primary" data-action="sf-open"><svg class="ic"><use href="#i-plus"/></svg>Add supplier</button>
       </div>
-      <div id="results" style="min-width:0"></div>
+      <div id="sform" hidden></div>
+      <div class="sgrid" id="sgrid"></div>
+      <label class="toggle"><input type="checkbox" id="useSamples" checked> Show the 15 sample suppliers</label>
+    </div>
+    <div id="s-desk" hidden>
+      <p class="muted lede-sm">See VyaparBoss as a supplier does: the requests you qualified for, your automatic quote, and a reply Bhai drafts for you.</p>
+      <div class="field narrow"><label for="deskSel">Viewing as</label><select id="deskSel"></select></div>
+      <div class="desklist" id="deskList"></div>
     </div>
   </section>
-
-  <!-- ORDERS -->
-  <section class="view" id="v-orders" hidden>
-    <div class="sectionhead">
-      <div><h2>Purchase orders</h2><p>Every order here was approved by the buyer before a PO was raised. Move an order along its stages to simulate fulfillment, or flag a delivery issue.</p></div>
-      <button class="btn sm" data-action="clear-samples">Remove sample orders</button>
-    </div>
-    <div class="orders" id="orders"></div>
-  </section>
-
-  <!-- SUPPLIERS -->
-  <section class="view" id="v-suppliers" hidden>
-    <div class="sectionhead">
-      <div><h2>Supplier network</h2><p id="snetIntro">Suppliers are ranked by transaction readiness: verification, fulfillment history and on-time rate, not by listing count.</p></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        <label class="toggle"><input type="checkbox" id="useSamples" checked> Show 15 sample suppliers</label>
-        <button class="btn primary" data-action="sf-open">Add supplier</button>
-      </div>
-    </div>
-    <div id="sform" hidden></div>
-    <div class="filters">
-      <input id="sq" type="search" placeholder="Search supplier, city or product">
-      <div class="seg" id="scat">
-        <button data-cat="all" aria-pressed="true">All</button>
-        <button data-cat="pack" aria-pressed="false">Packaging</button>
-        <button data-cat="ind" aria-pressed="false">Industrial</button>
-        <button data-cat="agri" aria-pressed="false">Agri inputs</button>
-      </div>
-    </div>
-    <div class="sgrid" id="sgrid"></div>
-  </section>
-
-  <!-- SUPPLIER DESK -->
-  <section class="view" id="v-desk" hidden>
-    <div class="sectionhead">
-      <div><h2>Supplier desk</h2><p>The supplier side of the marketplace. Each RFQ a supplier qualified for arrives here with an auto-quote from their rate card; the sales assistant drafts the WhatsApp reply.</p></div>
-      <div class="field" style="min-width:240px"><label for="deskSel">Viewing as supplier</label><select id="deskSel"></select></div>
-    </div>
-    <div class="deskgrid" id="deskList"></div>
-  </section>
-
-  <!-- INSIGHTS -->
-  <section class="view" id="v-insights" hidden>
-    <div class="sectionhead">
-      <div><h2>Pilot metrics</h2><p>The unit economics the concierge pilot has to prove, computed live from the RFQs and orders in this prototype.</p></div>
-    </div>
+  <section class="view" id="v-insights" aria-label="Insights" hidden>
+    <div class="pagehead"><div><h1>Insights</h1><p class="muted">How the pilot is doing, from the requests and orders so far.</p></div></div>
     <div class="kpis" id="kpis"></div>
-    <div class="panel wa" id="waPanel" style="margin-bottom:12px"></div>
     <div class="two">
-      <div class="panel"><h4>GMV by category</h4><div class="bars" id="catBars"></div></div>
-      <div class="panel"><h4>How the numbers are built</h4>
-        <ul class="notes">
-          <li>Landed cost = supplier price at the matching quantity tier + GST + estimated road freight.</li>
-          <li>Freight: part load at ₹2.50/kg plus ₹0.006/kg per km, or ₹9,000 + ₹38/km per 9-tonne truck when cheaper. Minimum ₹1,200.</li>
-          <li>Road distance = straight-line distance × 1.3. Transit = 1 day per 450 km.</li>
-          <li>Ranking: 60% landed cost, 25% on-time rate, 15% buyer rating. Suppliers that miss the deadline are listed separately.</li>
-          <li>Savings compare the chosen quote with the average of all eligible quotes for that RFQ.</li>
-          <li>Take rate of 1.5% on goods value is a placeholder until the pilot sets real pricing.</li>
-        </ul>
-      </div>
+      <div class="panel pad"><h3>Spend by category</h3><div class="bars" id="catBars"></div></div>
+      <div class="panel pad" id="waPanel"></div>
     </div>
+    <details class="howcalc">
+      <summary>How these numbers are worked out</summary>
+      <ul>
+        <li>Delivered cost is the supplier's price for your quantity, plus GST, plus estimated road freight.</li>
+        <li>Freight: part load ₹2.50/kg plus ₹0.006/kg per km, or ₹9,000 + ₹38/km per 9-tonne truck when that's cheaper. Minimum ₹1,200.</li>
+        <li>Road distance is straight-line distance × 1.3, and trucks cover about 450 km a day.</li>
+        <li>Bhai's pick weighs delivered cost 60%, on-time record 25% and buyer rating 15%. Suppliers who can't meet your date are shown separately.</li>
+        <li>Savings compare the chosen quote with the average of all quotes for that request.</li>
+        <li>Platform revenue assumes a 1.5% fee on goods value until the pilot sets real pricing.</li>
+      </ul>
+    </details>
   </section>
 </main>
 
-<footer><div class="wrap">VyaparBoss prototype · House of 24 Pvt. Ltd. · The 15 sample suppliers, their GSTINs and prices, and the GST rates are illustrative. No real RFQs or orders are sent to suppliers.</div></footer>
-<div class="toast" id="toast" hidden></div>
+<nav class="bottomnav" id="bottomnav" aria-label="Main">
+  <button data-tab="buy" aria-current="page"><svg><use href="#i-buy"/></svg>Buy</button>
+  <button data-tab="orders"><svg><use href="#i-orders"/></svg>Orders</button>
+  <button data-tab="suppliers"><svg><use href="#i-store"/></svg>Suppliers</button>
+  <button data-tab="insights"><svg><use href="#i-chart"/></svg>Insights</button>
+</nav>
+
+<footer class="wrap foot">VyaparBoss by House of 24 Pvt. Ltd. The 15 sample suppliers, their GSTINs and prices, and the GST rates are illustrative. No real requests or orders are sent to suppliers.</footer>
+<div class="toast" id="toast" role="status" hidden></div>
+
 <script src="js/data.js"></script>
 <script src="js/util.js"></script>
 <script src="js/engine.js"></script>
