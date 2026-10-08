@@ -8,7 +8,7 @@ const { createApp } = require("../server");
 (async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "vb-"));
   const sent = [];
-  const fakeClaude = { model: "fake", async json() { return { product_id: "box3", quantity: 3000, unit: "pcs", city: "Pune", deadline_days: 4, notes: "", reply: "Samajh gaya" }; }, async complete() { return "Namaste ji, rate confirmed."; } };
+  const fakeClaude = { model: "fake", async json(prompt) { if (!prompt.includes("3000 dabbe pune\"\"\"")) throw new Error("fake Claude: no canned answer"); return { product_id: "box3", quantity: 3000, unit: "pcs", city: "Pune", deadline_days: 4, notes: "", reply: "Samajh gaya" }; }, async complete() { return "Namaste ji, rate confirmed."; } };
   const { server } = createApp({
     dataFile: path.join(dir, "db.json"), claude: fakeClaude,
     env: { WHATSAPP_VERIFY_TOKEN: "verify-me", WHATSAPP_TOKEN: "t", WHATSAPP_PHONE_NUMBER_ID: "123" },
@@ -109,6 +109,31 @@ const { createApp } = require("../server");
       assert.match(body.reply, /PO VB\/PO\//);
       const st = (await call("GET", "/api/state")).body;
       assert.strictEqual(st.orders[0].source, "whatsapp");
+      sent.length = 0;
+      await call("PATCH", "/api/orders/" + encodeURIComponent(st.orders[0].po), { stage: 2 });
+      assert.match(sent.at(-1)?.text || "", /Dispatched/, "buyer gets a dispatch update on WhatsApp");
+      assert.strictEqual(sent.at(-1).to, from);
+    });
+    if (health.whatsapp) await test("WhatsApp: STATUS lists the buyer's orders, APPROVE twice is refused", async () => {
+      const from = "919844444444";
+      assert.match((await call("POST", "/api/whatsapp/simulate", { from, text: "status" })).body.reply, /Dispatched/);
+      assert.match((await call("POST", "/api/whatsapp/simulate", { from, text: "approve 1" })).body.reply, /pehle hi place/);
+    });
+    if (health.whatsapp) await test("WhatsApp: signed webhooks are enforced when an app secret is set", async () => {
+      const crypto = require("crypto");
+      const { server: s2 } = createApp({ dataFile: path.join(dir, "db2.json"), claude: null, env: { WHATSAPP_APP_SECRET: "sec", WHATSAPP_TOKEN: "t", WHATSAPP_PHONE_NUMBER_ID: "1" }, waSend: async () => {} });
+      await new Promise(r => s2.listen(0, r));
+      const url = `http://127.0.0.1:${s2.address().port}/webhooks/whatsapp`;
+      const raw = JSON.stringify({ entry: [] });
+      const badSig = await fetch(url, { method: "POST", headers: { "x-hub-signature-256": "sha256=00" }, body: raw });
+      const good = await fetch(url, { method: "POST", headers: { "x-hub-signature-256": "sha256=" + crypto.createHmac("sha256", "sec").update(raw).digest("hex") }, body: raw });
+      s2.close();
+      assert.deepStrictEqual([badSig.status, good.status], [401, 200]);
+    });
+    if (health.whatsapp) await test("WhatsApp: log masks phone numbers", async () => {
+      const { body } = await call("GET", "/api/whatsapp/log");
+      assert.ok(body.log.length > 3);
+      assert.ok(body.log.every(l => !/\d{10}/.test(l.from)));
     });
     await test("draft reply uses Claude", async () => {
       const st = (await call("GET", "/api/state")).body;

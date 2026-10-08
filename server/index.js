@@ -29,7 +29,7 @@ function createApp(opts = {}) {
   const claude = opts.claude !== undefined ? opts.claude : createClaude({ apiKey: env.ANTHROPIC_API_KEY, model: env.ANTHROPIC_MODEL || "claude-haiku-5-5" });
   const ctx = { core, store, claude, syncSuppliers, env };
   ctx.services = makeServices(ctx);
-  const whatsapp = createWhatsApp(ctx, { verifyToken: env.WHATSAPP_VERIFY_TOKEN, accessToken: env.WHATSAPP_TOKEN, phoneNumberId: env.WHATSAPP_PHONE_NUMBER_ID, appSecret: env.WHATSAPP_APP_SECRET, send: opts.waSend });
+  const whatsapp = createWhatsApp(ctx, { verifyToken: env.WHATSAPP_VERIFY_TOKEN, accessToken: env.WHATSAPP_TOKEN, phoneNumberId: env.WHATSAPP_PHONE_NUMBER_ID, appSecret: env.WHATSAPP_APP_SECRET, apiVersion: env.WHATSAPP_API_VERSION, send: opts.waSend });
 
   const send = (res, code, body, headers = {}) => {
     res.writeHead(code, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...headers });
@@ -63,10 +63,13 @@ function createApp(opts = {}) {
     ["PATCH", /^\/api\/orders\/(.+)$/, async (req, m) => {
       const o = store.data.orders.find(x => x.po === m[1]); if (!o) throw notFound("Order");
       const p = await jsonBody(req);
+      const before = [o.stage, o.issue];
       if ("stage" in p) { const s = Math.round(p.stage); if (s < 0 || s > 4) throw bad("stage must be 0–4"); o.stage = s; }
       if (Array.isArray(p.history)) o.history = p.history.slice(0, 5);
       if ("issue" in p) o.issue = p.issue ? String(p.issue).slice(0, 200) : null;
-      store.save(); return o;
+      store.save();
+      if (o.stage !== before[0] || (o.issue && o.issue !== before[1])) whatsapp.notifyOrder(o);
+      return o;
     }],
     ["DELETE", /^\/api\/samples$/, () => {
       store.data.orders = store.data.orders.filter(o => !o.sample);

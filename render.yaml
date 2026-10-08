@@ -1,0 +1,31 @@
+# Render blueprint: render.com → New → Blueprint → pick this repo.
+services:
+  - type: web
+    name: vyaparboss
+    runtime: node
+    plan: starter            # persistent disks need a paid plan
+    buildCommand: echo "no build step"
+    startCommand: node server/index.js
+    healthCheckPath: /api/health
+    autoDeploy: true
+    disk:
+      name: vyaparboss-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: DATA_FILE
+        value: /var/data/db.json
+      - key: ANTHROPIC_MODEL
+        value: claude-haiku-5-5
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: WHATSAPP_TOKEN
+        sync: false
+      - key: WHATSAPP_PHONE_NUMBER_ID
+        sync: false
+      - key: WHATSAPP_VERIFY_TOKEN
+        generateValue: true
+      - key: WHATSAPP_APP_SECRET
+        sync: false

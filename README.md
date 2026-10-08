@@ -41,6 +41,9 @@ The app checks for `api/health` on load and picks the mode by itself.
 | PUT / DELETE | `/api/suppliers/:id` | Onboard, edit or remove a supplier (validated, GSTIN checksum) |
 | PUT | `/api/settings` | `{useSamples}`: show or hide the 15 sample suppliers |
 | POST | `/api/draft` | AI-drafted supplier reply for an RFQ |
+| GET / POST | `/webhooks/whatsapp` | Meta webhook verification and incoming messages (HMAC-checked when `WHATSAPP_APP_SECRET` is set) |
+| POST | `/api/whatsapp/simulate` | `{from, text}` → the reply a buyer would get (no message sent) |
+| GET | `/api/whatsapp/log` | Recent conversations, phone numbers masked |
 | DELETE | `/api/samples` | Remove sample orders |
 
 ## What's in the prototype
@@ -51,7 +54,7 @@ The app checks for `api/health` on load and picks the mode by itself.
 | Orders | POs (`VB/PO/2026-27/0001`) through PO sent → Confirmed → Dispatched → In transit → Delivered; issue reporting |
 | Supplier network | Onboard real suppliers (GSTIN checksum, products, price tiers, MOQ, capacity, delivery radius, negotiation limit); 15 sample suppliers you can hide |
 | Supplier desk | Supplier view of RFQs they qualified for, auto-quote, rank, drafted WhatsApp reply |
-| Pilot metrics | GMV, AOV, buyer savings, RFQ→PO conversion, est. take-rate revenue, category mix |
+| Pilot metrics | GMV, AOV, buyer savings, RFQ→PO conversion, est. take-rate revenue, category mix, WhatsApp simulator and conversation log |
 
 Categories live: packaging, industrial consumables, agri inputs (14 products).
 
@@ -63,6 +66,9 @@ server/
   core.js           loads src/js engine into Node so server and browser share one engine
   store.js          JSON-file database (data/db.json)
   anthropic.js      Anthropic Messages API client
+  whatsapp.js       WhatsApp Cloud API: webhook, conversation state, APPROVE flow, order updates
+scripts/            build-single.js, wa-simulate.js
+render.yaml         one-click Render deploy with a persistent disk
 src/
   index.html        markup for all tabs
   styles.css        design tokens (light + dark) and components
@@ -73,7 +79,7 @@ src/
   js/repo.js        storage: server API when available, otherwise localStorage
   js/app.js         UI rendering and event wiring
 tests/            engine.test.js, server.test.js
-docs/               project brief and prototype notes
+docs/               PROJECT_BRIEF.md, DEPLOY.md, WHATSAPP_SETUP.md
 ```
 
 ## Model assumptions (all illustrative — validate in the pilot)
@@ -85,6 +91,13 @@ docs/               project brief and prototype notes
 - Take rate 1.5% of goods value.
 - Suppliers, GSTINs, prices and GST rates are sample data.
 
+## WhatsApp
+
+Buyers text the business number in English, Hindi or Hinglish. The server parses the message, asks for anything missing, and replies with the top 3 landed-cost quotes. When the buyer replies **APPROVE 1**, it raises the PO, and stage changes go back to the buyer.
+
+- Try it without Meta: **Pilot metrics → WhatsApp intake** (server mode), or `npm run wa -- "5000 3-ply boxes Pune 7 din"`.
+- Connect a real number: [docs/WHATSAPP_SETUP.md](docs/WHATSAPP_SETUP.md). Put the server online first: [docs/DEPLOY.md](docs/DEPLOY.md) (Render blueprint included).
+
 ## AI
 
 Claude reads buyer messages and drafts supplier replies. It never sets prices or picks suppliers: those come from supplier rate cards through `engine.js`, and model output is validated by `cleanParsed()` before use.
@@ -95,7 +108,9 @@ Claude reads buyer messages and drafts supplier replies. It never sets prices or
 
 ## Roadmap (next)
 
-1. Real supplier onboarding and rate cards; replace sample data with a database.
-2. Backend + auth for buyers and suppliers; WhatsApp intake.
-3. Live freight quotes from a 3PL partner; GST rates by HSN from a maintained table.
-4. Payments through a licensed gateway; e-invoice generation.
+1. Onboard the first 10–15 real suppliers and hide the samples.
+2. Deploy the server (Render) and connect the WhatsApp number.
+3. WhatsApp message templates for dispatch updates after 24 hours.
+4. Buyer and supplier logins; move from `db.json` to Postgres.
+5. Live freight quotes from a 3PL partner; GST rates by HSN from a maintained table.
+6. Payments through a licensed gateway; e-invoice generation.

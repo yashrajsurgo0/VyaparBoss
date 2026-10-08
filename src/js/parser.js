@@ -1,6 +1,8 @@
 /* VyaparBoss — Buyer Intelligence Agent: rule parser + Claude parser. Plain browser script (no build step); loaded in order by index.html. */
 /* ===================== PARSING ===================== */
 const HNUM={ek:1,do:2,teen:3,char:4,chaar:4,paanch:5,panch:5,chhe:6,saat:7,aath:8,nau:9,das:10,a:1,one:1,two:2,three:3,four:4,five:5,seven:7,ten:10};
+const HWORD={ek:1,do:2,teen:3,char:4,chaar:4,paanch:5,panch:5,chhe:6,saat:7,aath:8,nau:9,das:10,bees:20,pachaas:50,sau:100,dedh:1.5,dhai:2.5,dhaai:2.5,adha:0.5};
+const HMULT={sau:100,hazaar:1000,hazar:1000,hajar:1000,lakh:1e5,lac:1e5};
 function ruleParse(text){
   let t=" "+text.toLowerCase().replace(/[–—]/g,"-")+" ";
   const out={product_id:null,quantity:null,unit:null,city:null,deadline_days:null};
@@ -17,6 +19,8 @@ function ruleParse(text){
   else if(/\b(kal|tomorrow)\b/.test(t))out.deadline_days=1;
   else if(/\bparso\b/.test(t))out.deadline_days=2;
   else if(/\bnext week\b/.test(t))out.deadline_days=7;
+  // Hindi number words with a multiplier: "do hazaar" → 2000, "dedh lakh" → 150000, "paanch sau" → 500
+  t=t.replace(new RegExp(`\\b(\\d+(?:\\.\\d+)?|${Object.keys(HWORD).join("|")})\\s*(sau|hazaar|hazar|hajar|lakh|lac)\\b`,"g"),(m,a,b)=>" "+String(Math.round((HWORD[a]??+a)*HMULT[b]))+" ");
   // mask spec numbers
   t=t.replace(/\d+\s*-?\s*(ply|mm|micron|lph|gsm|inch|in\b|m\b)/g," ").replace(/\d+:\d+:\d+/g," ").replace(/\d+\s*x\s*\d+/g," ");
   // quantity

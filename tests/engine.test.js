@@ -25,6 +25,13 @@ test("'2k' shorthand and city alias", () => {
   const r = parse("2k 3 ply boxes bangalore");
   assert.deepStrictEqual([r.qty, r.city], [2000, "Bengaluru"]);
 });
+test("Hindi number words", () => {
+  assert.strictEqual(parse("do hazaar 5 ply export box dilli 10 din").qty, 2000);
+  assert.strictEqual(parse("dedh lakh labels wale 3 ply boxes pune").qty, 150000);
+  assert.strictEqual(parse("paanch sau kg mulch film nashik").qty, 500);
+  const r = parse("do hazaar 5 ply export box dilli 10 din");
+  assert.deepStrictEqual([r.productId, r.city, r.deadline], ["box5", "Delhi", 10]);
+});
 test("missing fields are reported", () => assert.deepStrictEqual(plain(C.missing(parse("need gloves"))), ["quantity", "city"]));
 test("model output is sanitised before use", () => {
   const p = plain(C.cleanParsed({ product_id: "made-up", quantity: "-5", city: "Atlantis", deadline_days: 3, reply: 42 }));
