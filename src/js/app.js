@@ -219,12 +219,90 @@ function supplierCard(s){
     <div class="stats"><div><span>On time</span><span class="num">${s.onTime!=null?s.onTime+"%":"—"}</span></div><div><span>Rating</span><span class="num">${s.rating!=null?"★ "+s.rating:"—"}</span></div><div><span>Orders</span><span class="num">${s.orders??0}</span></div></div>
     <ul class="plist">${offers.map(o=>`<li><span>${esc(PMAP[o.p].name)}</span><span class="num">from ${inr(o.tiers[o.tiers.length-1][1],2)}/${unitOne(PMAP[o.p].unit)} · MOQ ${qfmt(o.tiers[0][0])}</span></li>`).join("")}</ul>
     <div class="muted" style="font-size:12px">Delivers within ${qfmt(s.coverage)} km · ready in ${s.lead} day${s.lead>1?"s":""}${s.terms?` · ${esc(s.terms)}`:""}</div>
+    ${s.sample?"":`<div class="cardacts"><button class="btn sm" data-action="sf-edit" data-sid="${esc(s.id)}">Edit</button><button class="btn sm ghost" data-action="sf-remove" data-sid="${esc(s.id)}">Remove</button></div>`}
   </div>`;
 }
 function renderSuppliers(){
+  const own=store().suppliers.length;
+  $("#useSamples").checked=store().useSamples;
+  $("#snetIntro").textContent=`${own} onboarded supplier${own===1?"":"s"}${store().useSamples?" plus 15 sample suppliers":""}. Suppliers are ranked by transaction readiness: verification, fulfillment history and on-time rate, not by listing count.`;
   const q=($("#sq").value||"").toLowerCase().trim();
   const list=SUPPLIERS.filter(s=>(scat==="all"||s.offers.some(o=>PMAP[o.p]?.cat===scat))&&(!q||(s.name+" "+s.city+" "+(s.area||"")+" "+s.offers.map(o=>PMAP[o.p]?.name).join(" ")).toLowerCase().includes(q)));
   $("#sgrid").innerHTML=list.length?list.map(supplierCard).join(""):`<div class="panel empty"><h3>No supplier matches</h3><p>Try another search term.</p></div>`;
+}
+
+/* ===================== SUPPLIER ONBOARDING ===================== */
+let sf=null; // form state: {id, offers:[{p,tiersText,cap}], errors}
+function openSupplierForm(s){
+  sf=s?{id:s.id,createdAt:s.createdAt,offers:s.offers.map(o=>({p:o.p,tiersText:tiersText(o.tiers),cap:o.cap})),errors:[]}
+      :{id:null,offers:[{p:"",tiersText:"",cap:""}],errors:[]};
+  renderSupplierForm(s||{});
+  const box=$("#sform");box.hidden=false;
+  try{box.scrollIntoView({behavior:"smooth",block:"start"});}catch(e){}
+  setTimeout(()=>document.getElementById("sfName")?.focus(),50);
+}
+function closeSupplierForm(){sf=null;const box=$("#sform");box.hidden=true;box.innerHTML="";}
+function offerRow(o,i){
+  const opts=Object.entries(CATS).map(([c,l])=>`<optgroup label="${l}">${PRODUCTS.filter(x=>x.cat===c).map(x=>`<option value="${x.id}" ${x.id===o.p?"selected":""}>${esc(x.name)}</option>`).join("")}</optgroup>`).join("");
+  const unit=PMAP[o.p]?unitOne(PMAP[o.p].unit):"unit";
+  return `<div class="offer" data-i="${i}">
+    <div class="field"><label for="sfP${i}">Product</label><select id="sfP${i}" data-off="p"><option value="">Select…</option>${opts}</select></div>
+    <div class="field tiers"><label for="sfT${i}">Price tiers (qty:₹ per ${esc(unit)})</label><input id="sfT${i}" data-off="tiersText" placeholder="500:17.9, 2000:16.2, 10000:14.8" value="${esc(o.tiersText)}"></div>
+    <div class="field"><label for="sfC${i}">Max per order</label><input id="sfC${i}" data-off="cap" type="number" min="1" inputmode="numeric" value="${esc(o.cap)}"></div>
+    <button class="btn sm ghost" data-action="sf-del-offer" data-i="${i}" ${sf.offers.length<2?"disabled":""} aria-label="Remove product">Remove</button>
+  </div>`;
+}
+function renderSupplierForm(s){
+  const cityOpts=Object.keys(CITIES).sort().map(c=>`<option ${c===s.city?"selected":""}>${c}</option>`).join("");
+  const v=(k,d="")=>esc(s[k]??d);
+  $("#sform").innerHTML=`<div class="panel sform">
+    <div><h3>${sf.id?"Edit supplier":"Add a supplier"}</h3><p class="hint">Their rate card goes straight into matching. Prices and capacity come only from what you enter here.</p></div>
+    <div class="fields">
+      <div class="field wide"><label for="sfName">Business name</label><input id="sfName" value="${v("name")}" placeholder="e.g. Hadapsar Cartons Pvt. Ltd."></div>
+      <div class="field"><label for="sfCity">Ships from</label><select id="sfCity"><option value="">Select…</option>${cityOpts}</select></div>
+      <div class="field"><label for="sfArea">Area / industrial estate</label><input id="sfArea" value="${v("area")}" placeholder="e.g. Hadapsar MIDC"></div>
+      <div class="field wide"><label for="sfGst">GSTIN</label><input id="sfGst" value="${v("gstin")}" maxlength="15" autocapitalize="characters" placeholder="27AAPFU0939F1ZV" class="num"><span class="hint" id="sfGstHint">15 characters. Checked with the official checksum.</span></div>
+      <div class="field"><label for="sfContact">WhatsApp number (optional)</label><input id="sfContact" value="${v("contact")}" inputmode="tel" placeholder="+91 98xxxxxxxx"></div>
+      <div class="field"><label for="sfLead">Days to dispatch</label><input id="sfLead" type="number" min="1" max="60" value="${v("lead",2)}"></div>
+      <div class="field"><label for="sfCov">Delivers up to (km)</label><input id="sfCov" type="number" min="25" max="3500" value="${v("coverage",500)}"></div>
+      <div class="field"><label for="sfDisc">Max discount on negotiation (%)</label><input id="sfDisc" type="number" min="0" max="15" step="0.5" value="${esc(s.maxDiscPct??(s.maxDisc!=null?+(s.maxDisc*100).toFixed(1):3))}"></div>
+      <div class="field wide"><label for="sfTerms">Payment terms</label><input id="sfTerms" value="${v("terms")}" placeholder="e.g. 30% advance, balance on delivery"></div>
+      <div class="field wide"><label for="sfCerts">Certifications (comma separated)</label><input id="sfCerts" value="${esc(Array.isArray(s.certs)?s.certs.join(", "):(s.certs||""))}" placeholder="ISO 9001, BIS licence"></div>
+    </div>
+    <div><div class="eyebrow" style="margin-bottom:6px">Products and rate card</div>
+      <div class="offers" id="sfOffers">${sf.offers.map(offerRow).join("")}</div>
+      <p class="hint" style="margin:6px 0 0">Each tier is "minimum quantity:price". The first tier's quantity is the minimum order. Prices must not rise as quantity rises.</p>
+      <button class="btn sm" data-action="sf-add-offer" style="margin-top:8px">Add another product</button>
+    </div>
+    ${sf.errors.length?`<ul class="errors" role="alert">${sf.errors.map(e=>`<li>${esc(e)}</li>`).join("")}</ul>`:""}
+    <div class="formacts"><button class="btn primary" data-action="sf-save">${sf.id?"Save changes":"Add to network"}</button><button class="btn ghost" data-action="sf-cancel">Cancel</button></div>
+  </div>`;
+  updateGstHint();
+}
+function readOffers(){document.querySelectorAll("#sfOffers .offer").forEach(row=>{const o=sf.offers[+row.dataset.i];row.querySelectorAll("[data-off]").forEach(inp=>{o[inp.dataset.off]=inp.value;});});}
+function readSupplierForm(){
+  readOffers();
+  const g=id=>document.getElementById(id)?.value??"";
+  return {id:sf.id,createdAt:sf.createdAt,name:g("sfName"),city:g("sfCity"),area:g("sfArea"),gstin:g("sfGst"),contact:g("sfContact"),lead:g("sfLead"),coverage:g("sfCov"),maxDiscPct:g("sfDisc"),terms:g("sfTerms"),certs:g("sfCerts"),
+    offers:sf.offers.filter(o=>o.p||o.tiersText||o.cap).map(o=>({p:o.p,tiersText:o.tiersText,cap:o.cap}))};
+}
+function updateGstHint(){
+  const el=document.getElementById("sfGstHint"),v=document.getElementById("sfGst")?.value.trim();if(!el)return;
+  if(!v){el.className="hint";el.textContent="15 characters. Checked with the official checksum.";return;}
+  if(v.length<15){el.className="hint";el.textContent=`${v.length}/15 characters`;return;}
+  const r=checkGstin(v,document.getElementById("sfCity")?.value);
+  el.className="hint "+(!r.ok?"bad":r.warn?"warn":"ok");el.textContent=!r.ok?r.why:r.warn||"✓ Valid GSTIN format and checksum. Confirm it on the GST portal before the first order.";
+}
+async function saveSupplier(btn){
+  const input=readSupplierForm();
+  const {ok,s,errors}=normalizeSupplier(input);
+  if(!ok){sf.errors=errors;renderSupplierForm(input);return;}
+  btn.disabled=true;
+  try{
+    const saved=await Repo.upsertSupplier(s);
+    toast(`${saved.name} ${input.id?"updated":"added to the network"}`);
+    closeSupplierForm();renderSuppliers();renderDesk();if(rfq)renderResults();
+  }catch(e){sf.errors=[e.message];renderSupplierForm(input);}
 }
 
 /* ===================== SUPPLIER DESK ===================== */
@@ -306,12 +384,26 @@ const ACTIONS={
   resolve:a=>{Repo.updateOrder(a.dataset.po,{issue:null}).catch(fail);renderAll();},
   "clear-samples":async()=>{try{const n=await Repo.clearSamples();renderAll();toast(n?`Removed ${n} sample orders`:"No sample orders left");}catch(e){fail(e);}},
   draft:a=>draftReply(a.dataset.rfq,a),
+  "sf-open":()=>openSupplierForm(null),
+  "sf-edit":a=>openSupplierForm(store().suppliers.find(x=>x.id===a.dataset.sid)),
+  "sf-cancel":()=>closeSupplierForm(),
+  "sf-save":a=>saveSupplier(a),
+  "sf-add-offer":()=>{const cur=readSupplierForm();sf.offers.push({p:"",tiersText:"",cap:""});renderSupplierForm(cur);document.getElementById("sfP"+(sf.offers.length-1))?.focus();},
+  "sf-del-offer":a=>{const cur=readSupplierForm();sf.offers.splice(+a.dataset.i,1);renderSupplierForm(cur);},
+  "sf-remove":a=>{
+    if(a.dataset.armed!=="1"){a.dataset.armed="1";a.textContent="Confirm remove";a.classList.add("danger");setTimeout(()=>{if(a.isConnected){a.dataset.armed="";a.textContent="Remove";a.classList.remove("danger");}},4000);return;}
+    const s=SMAP[a.dataset.sid];Repo.deleteSupplier(a.dataset.sid).then(()=>{toast(`${s?.name||"Supplier"} removed`);renderSuppliers();renderDesk();if(rfq)renderResults();}).catch(fail);
+  },
   copy:a=>{const ta=document.getElementById("reply-"+a.dataset.rfq);const done=()=>toast("Reply copied");try{navigator.clipboard.writeText(ta.value).then(done,()=>{ta.select();toast("Press Ctrl/Cmd+C to copy");});}catch(err){ta.select();toast("Press Ctrl/Cmd+C to copy");}}
 };
 document.addEventListener("click",e=>{const a=e.target.closest("[data-action]");if(a&&ACTIONS[a.dataset.action])ACTIONS[a.dataset.action](a,e);});
 document.addEventListener("keydown",e=>{if((e.key==="Enter"||e.key===" ")&&e.target.matches(".q[data-action]")){e.preventDefault();selected=e.target.dataset.sid;renderResults();}});
+document.addEventListener("input",e=>{if(e.target.id==="sfGst")updateGstHint();});
 document.addEventListener("change",e=>{
   const id=e.target.id;
+  if(id==="useSamples"){Repo.setUseSamples(e.target.checked).then(()=>{renderSuppliers();renderDesk();if(rfq)renderResults();}).catch(fail);return;}
+  if(id==="sfCity"){updateGstHint();return;}
+  if(/^sfP\d+$/.test(id)){const cur=readSupplierForm();renderSupplierForm(cur);return;}
   if(id==="fOk"){$("#approveBtn").disabled=!e.target.checked;return;}
   if(!rfq||!["fProd","fQty","fCity","fDl"].includes(id))return;
   if(id==="fProd"){rfq.productId=e.target.value||null;neg={};negLast=null;}

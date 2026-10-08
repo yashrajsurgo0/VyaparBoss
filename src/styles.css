@@ -215,3 +215,21 @@ main{padding-block:20px 48px}
 footer{border-top:1px solid var(--line);padding-block:16px;font-size:12px;color:var(--muted)}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:8px;font-size:13.5px;z-index:50;box-shadow:var(--shadow);max-width:calc(100vw - 32px)}
 @media(prefers-reduced-motion:no-preference){.msg,.q{animation:rise .25s ease-out both}@keyframes rise{from{transform:translateY(4px)}to{transform:none}}}
+
+/* supplier onboarding */
+.toggle{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);cursor:pointer}
+.sform{padding:18px;margin-bottom:16px;display:flex;flex-direction:column;gap:16px}
+.sform h3{font-size:18px}
+.sform .hint{font-size:12px;color:var(--muted)}
+.sform .hint.ok{color:var(--good)}
+.sform .hint.bad{color:var(--bad)}
+.sform .hint.warn{color:var(--warn)}
+.field textarea{border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:7px 9px;min-width:0;width:100%;resize:vertical}
+.offers{display:flex;flex-direction:column;gap:8px}
+.offer{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1.6fr) minmax(0,.7fr) auto;gap:8px;align-items:end;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+.offer .field input,.offer .field select{background:var(--surface)}
+@media(max-width:720px){.offer{grid-template-columns:1fr 1fr}.offer .field.tiers{grid-column:1/-1}}
+.errors{margin:0;padding:10px 12px 10px 28px;background:var(--bad-tint);color:var(--bad);border-radius:8px;font-size:13px;display:flex;flex-direction:column;gap:2px}
+.formacts{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.scard .cardacts{display:flex;gap:6px;margin-top:auto}
+.btn.danger{color:var(--bad);border-color:var(--bad)}

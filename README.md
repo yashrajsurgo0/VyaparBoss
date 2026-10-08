@@ -45,7 +45,7 @@ The app checks for `api/health` on load and picks the mode by itself.
 |---|---|
 | Procure | Procurement chat → editable RFQ → supplier discovery → landed-cost ranking → negotiation → approval → PO |
 | Orders | POs (`VB/PO/2026-27/0001`) through PO sent → Confirmed → Dispatched → In transit → Delivered; issue reporting |
-| Supplier network | 15 sample verified suppliers with GSTIN, audits, certifications, on-time rate, rate cards |
+| Supplier network | Onboard real suppliers (GSTIN checksum, products, price tiers, MOQ, capacity, delivery radius, negotiation limit); 15 sample suppliers you can hide |
 | Supplier desk | Supplier view of RFQs they qualified for, auto-quote, rank, drafted WhatsApp reply |
 | Pilot metrics | GMV, AOV, buyer savings, RFQ→PO conversion, est. take-rate revenue, category mix |
 
