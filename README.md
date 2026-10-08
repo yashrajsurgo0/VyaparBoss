@@ -17,7 +17,8 @@ npm run deploy:pages     # publish src/ to GitHub Pages (gh-pages branch)
 npm run build:single     # dist/vyaparboss.html: whole app in one file, for sharing
 ```
 
-**Live demo:** https://yashrajsurgo0.github.io/VyaparBoss/ (static mode; data stays in your browser). Redeploy after changes with `npm run deploy:pages`.
+**Live server:** https://vyaparboss.onrender.com (shared data, Gemini AI; Render free plan, so it sleeps when idle and data resets on redeploy).
+**Static demo:** https://yashrajsurgo0.github.io/VyaparBoss/ (data stays in your browser). Redeploy with `npm run deploy:pages`.
 
 Two ways the same app runs:
 
@@ -110,7 +111,7 @@ AI reads buyer messages and drafts supplier replies. It never sets prices or pic
 ## Roadmap (next)
 
 1. Onboard the first 10–15 real suppliers and hide the samples.
-2. Deploy the server (Render) and connect the WhatsApp number.
+2. Connect the WhatsApp number (code ready; needs a Meta business admin) and upgrade Render to Starter + disk before real orders.
 3. WhatsApp message templates for dispatch updates after 24 hours.
 4. Buyer and supplier logins; move from `db.json` to Postgres.
 5. Live freight quotes from a 3PL partner; GST rates by HSN from a maintained table.
