@@ -38,7 +38,8 @@
 .f-accent{fill:var(--accent)}.f-accent-lite{fill:var(--accent-lite)}.f-accent-deep{fill:var(--accent-deep)}.f-accent-tint{fill:var(--accent-tint)}
 .f-kraft{fill:var(--kraft)}.f-kraft-dark{fill:var(--kraft-dark)}.f-glass{fill:var(--glass)}
 .f-good{fill:var(--good)}.f-good-lite{fill:var(--good-lite)}
-.f-skin{fill:var(--skin)}.f-skin-shade{fill:var(--skin-shade)}.f-hair{fill:var(--hair)}.f-blush{fill:var(--blush);opacity:.55}
+.f-skin{fill:var(--skin)}.f-sun{fill:#FFE7A6}.f-sun-core{fill:#FFC93F;opacity:.55}.f-shirt{fill:#1E1F25}.f-shirt-lite{fill:#34363F}.f-tee{fill:#2A2B33}
+.f-gold{fill:#F2B33D}.s-gold{stroke:#F2B33D}.s-gold-deep{stroke:#B97E0E}.f-lens{fill:#D92E46;opacity:.92}.f-stubble{fill:#2A2233;opacity:.2}.s-skin-shade{stroke:var(--skin-shade)}.f-skin-shade{fill:var(--skin-shade)}.f-hair{fill:var(--hair)}.f-blush{fill:var(--blush);opacity:.55}
 .f-ink{fill:#13232A}.f-white{fill:var(--white)}.f-surface{fill:var(--surface)}.f-sunk{fill:var(--sunk)}
 .s-brand-deep{stroke:var(--brand-deep)}.s-hair{stroke:var(--hair)}.s-ink{stroke:#13232A}.s-good{stroke:var(--good)}.s-muted{stroke:var(--muted)}
 .s-line{stroke:var(--line)}.s-accent{stroke:var(--accent)}.s-accent-deep{stroke:var(--accent-deep)}.s-white{stroke:var(--white)}.s-on-brand{stroke:var(--on-brand)}
@@ -134,8 +135,8 @@ main{padding-block:24px 40px}
 .bhai-says{position:relative;background:var(--surface);border:1.5px solid var(--line);border-radius:18px;padding:10px 16px;font-family:var(--f-display);font-weight:700;font-size:18px;line-height:1.2;box-shadow:var(--lift);max-width:220px}
 .bhai-says::after{content:"";position:absolute;width:14px;height:14px;background:var(--surface);border:1.5px solid var(--line);border-top:0;border-right:0;left:-8px;top:50%;transform:translateY(-50%) rotate(45deg)}
 @media(min-width:860px){.bhai-says{font-size:21px;max-width:260px;text-align:center}.bhai-says::after{left:50%;top:auto;bottom:-8px;transform:translateX(-50%) rotate(-45deg)}}
-.bhai-xl{width:clamp(96px,22vw,280px);height:auto;aspect-ratio:1}
-@media(max-width:859px){.bhai-xl{width:96px}.hero{gap:14px}}
+.bhai-xl{width:clamp(110px,26vw,320px);height:auto;aspect-ratio:200/180}
+@media(max-width:859px){.bhai-xl{width:118px}.hero{gap:14px}}
 .hello{font-family:var(--f-display);font-weight:700;font-size:20px;color:var(--accent-deep);margin-bottom:6px}
 :root[data-theme="dark"] .hello{color:var(--accent)}
 .hero h1{font-size:clamp(34px,6vw,58px);font-weight:800;line-height:1.02;letter-spacing:-.02em}
