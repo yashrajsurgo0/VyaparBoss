@@ -10,7 +10,7 @@ An initiative of House of 24 Pvt. Ltd. Current stage: pre-MVP prototype.
 ## Run it
 
 ```bash
-cp .env.example .env     # optional: add ANTHROPIC_API_KEY to switch on Claude
+cp .env.example .env     # optional: add GEMINI_API_KEY (or ANTHROPIC_API_KEY) to switch on AI parsing
 npm start                # app + API at http://localhost:5173
 npm test                 # engine, parser and API tests (Node 18+, no dependencies)
 npm run deploy:pages     # publish src/ to GitHub Pages (gh-pages branch)
@@ -23,7 +23,7 @@ Two ways the same app runs:
 
 | | Data lives in | Request parsing | Used for |
 |---|---|---|---|
-| **With the server** (`npm start`) | `data/db.json` on the server, shared by everyone | Claude through the Anthropic API (rule parser if no key) | Pilot operations, WhatsApp |
+| **With the server** (`npm start`) | `data/db.json` on the server, shared by everyone | Gemini or Claude via your API key (rule parser if no key) | Pilot operations, WhatsApp |
 | **Static page** (GitHub Pages, claude.ai, opening `src/index.html`) | The viewer's browser | Claude inside claude.ai, otherwise the rule parser | Demos |
 
 The app checks for `api/health` on load and picks the mode by itself.
@@ -65,6 +65,7 @@ server/
   index.js          HTTP server: static files + JSON API (no dependencies)
   core.js           loads src/js engine into Node so server and browser share one engine
   store.js          JSON-file database (data/db.json)
+  gemini.js         Google Gemini API client
   anthropic.js      Anthropic Messages API client
   whatsapp.js       WhatsApp Cloud API: webhook, conversation state, APPROVE flow, order updates
 scripts/            build-single.js, wa-simulate.js
@@ -100,9 +101,9 @@ Buyers text the business number in English, Hindi or Hinglish. The server parses
 
 ## AI
 
-Claude reads buyer messages and drafts supplier replies. It never sets prices or picks suppliers: those come from supplier rate cards through `engine.js`, and model output is validated by `cleanParsed()` before use.
+AI reads buyer messages and drafts supplier replies. It never sets prices or picks suppliers: those come from supplier rate cards through `engine.js`, and model output is validated by `cleanParsed()` before use.
 
-- With the server: set `ANTHROPIC_API_KEY` in `.env` (model defaults to `claude-haiku-5-5`, override with `ANTHROPIC_MODEL`).
+- With the server: set `GEMINI_API_KEY` (Google, model `gemini-3.8-flash` by default, override with `GEMINI_MODEL`) or `ANTHROPIC_API_KEY` (Claude, `claude-haiku-5-5`). If both are set, Gemini is used.
 - As a claude.ai artifact: uses the artifact runtime's Claude access.
 - Anywhere else: the built-in Hinglish rule parser.
 

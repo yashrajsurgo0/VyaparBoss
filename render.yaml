@@ -17,9 +17,9 @@ services:
         value: "22"
       - key: DATA_FILE
         value: /var/data/db.json
-      - key: ANTHROPIC_MODEL
-        value: claude-haiku-5-5
-      - key: ANTHROPIC_API_KEY
+      - key: GEMINI_MODEL
+        value: gemini-3.8-flash
+      - key: GEMINI_API_KEY
         sync: false
       - key: WHATSAPP_TOKEN
         sync: false

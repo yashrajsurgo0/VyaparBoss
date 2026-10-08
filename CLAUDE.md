@@ -19,6 +19,7 @@ B2B procurement MVP for Indian MSMEs. Founder: Yashraj Surgoniwar (House of 24 P
 - Never commit `.env` or `data/`.
 
 ## Rules
+- AI provider is pluggable (`server/gemini.js`, `server/anthropic.js`, chosen in `pickLLM()`); both expose `{provider, model, complete, json}`.
 - Commercial outputs (prices, availability, suppliers) must come from structured data, never from the LLM. The LLM only extracts requirements and drafts messages.
 - No purchase commitment without explicit buyer approval: the UI approval checkbox, or the buyer's own "APPROVE n" WhatsApp reply. Never auto-approve.
 - Money formatted with `en-IN` grouping (lakh/crore). Financial year format `2026-27`.

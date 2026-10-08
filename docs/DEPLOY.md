@@ -10,7 +10,7 @@ The repo includes a `render.yaml` blueprint.
 
 1. Sign up at **render.com** with your GitHub account.
 2. **New → Blueprint**, pick the **VyaparBoss** repo, and click **Apply**. Render reads `render.yaml` and creates the web service with a 1 GB disk mounted at `/var/data`.
-3. When asked for environment values, paste your `ANTHROPIC_API_KEY`. Add the WhatsApp ones later, following WHATSAPP_SETUP.md.
+3. When asked for environment values, paste your `GEMINI_API_KEY` (from aistudio.google.com → Get API key). Add the WhatsApp ones later, following WHATSAPP_SETUP.md.
 4. After the first deploy you get an address like `https://vyaparboss.onrender.com`. Open `/api/health` on it to check: it should show `"app":"vyaparboss"`.
 
 Cost: persistent disks need a paid instance (Render's Starter plan plus disk, a few dollars a month; check render.com/pricing). The free plan works for a quick look, but its disk is wiped on restart.
@@ -31,8 +31,9 @@ Put it behind Caddy or nginx for HTTPS, since WhatsApp requires `https://`.
 
 | Variable | Needed for | Where to get it |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | Claude reads buyer messages, drafts supplier replies | console.anthropic.com → API Keys |
-| `ANTHROPIC_MODEL` | Optional, default `claude-haiku-5-5` | — |
+| `GEMINI_API_KEY` | AI reads buyer messages, drafts supplier replies | aistudio.google.com → Get API key |
+| `GEMINI_MODEL` | Optional, default `gemini-3.8-flash` | — |
+| `ANTHROPIC_API_KEY` | Alternative to Gemini (Claude) | console.anthropic.com → API Keys |
 | `DATA_FILE` | Where data is saved (`/var/data/db.json` on Render) | — |
 | `WHATSAPP_*` | WhatsApp intake | docs/WHATSAPP_SETUP.md |
 

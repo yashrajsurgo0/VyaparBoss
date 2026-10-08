@@ -6,6 +6,7 @@ const path = require("path");
 const { loadCore } = require("./core");
 const { Store } = require("./store");
 const { createClaude } = require("./anthropic");
+const { createGemini } = require("./gemini");
 const { createWhatsApp } = require("./whatsapp");
 
 const ROOT = path.join(__dirname, "..");
@@ -26,7 +27,8 @@ function createApp(opts = {}) {
   const store = new Store(opts.dataFile || env.DATA_FILE || path.join(ROOT, "data", "db.json"), () => ({ ...core.buildSampleData(), suppliers: [], useSamples: true }));
   const syncSuppliers = () => core.setSuppliers(store.data.suppliers, store.data.useSamples);
   syncSuppliers();
-  const claude = opts.claude !== undefined ? opts.claude : createClaude({ apiKey: env.ANTHROPIC_API_KEY, model: env.ANTHROPIC_MODEL || "claude-haiku-5-5" });
+  // AI provider: Gemini if a Google key is set, else Claude if an Anthropic key is set, else the rule parser.
+  const claude = opts.claude !== undefined ? opts.claude : pickLLM(env);
   const ctx = { core, store, claude, syncSuppliers, env };
   ctx.services = makeServices(ctx);
   const whatsapp = createWhatsApp(ctx, { verifyToken: env.WHATSAPP_VERIFY_TOKEN, accessToken: env.WHATSAPP_TOKEN, phoneNumberId: env.WHATSAPP_PHONE_NUMBER_ID, appSecret: env.WHATSAPP_APP_SECRET, apiVersion: env.WHATSAPP_API_VERSION, send: opts.waSend });
@@ -44,7 +46,7 @@ function createApp(opts = {}) {
   const jsonBody = async req => { const raw = await readBody(req); if (!raw.length) return {}; try { return JSON.parse(raw); } catch { throw Object.assign(new Error("Body must be JSON"), { status: 400 }); } };
 
   const routes = [
-    ["GET", /^\/api\/health$/, () => ({ ok: true, app: "vyaparboss", ai: !!claude, model: claude?.model || null, whatsapp: whatsapp.configured })],
+    ["GET", /^\/api\/health$/, () => ({ ok: true, app: "vyaparboss", ai: !!claude, provider: claude?.provider || null, model: claude?.model || null, whatsapp: whatsapp.configured })],
     ["GET", /^\/api\/state$/, () => store.publicState()],
 
     ["POST", /^\/api\/rfqs$/, async req => ctx.services.createRfq(await jsonBody(req))],
@@ -114,7 +116,7 @@ function createApp(opts = {}) {
       const r = store.data.rfqs.find(x => x.id === rfqId), s = core.getSMAP()[sid];
       const mine = r?.quotes.find(q => q.sid === sid);
       if (!r || !s || !mine) throw notFound("RFQ or supplier");
-      if (!claude) throw Object.assign(new Error("AI drafting needs ANTHROPIC_API_KEY on the server"), { status: 503 });
+      if (!claude) throw Object.assign(new Error("AI drafting needs GEMINI_API_KEY or ANTHROPIC_API_KEY on the server"), { status: 503 });
       return { text: await claude.complete(core.buildReplyPrompt(r, s, mine), { maxTokens: 400 }) };
     }],
 
@@ -160,6 +162,13 @@ function createApp(opts = {}) {
   return { server, store, ctx };
 }
 
+function pickLLM(env) {
+  const gKey = env.GEMINI_API_KEY || env.GOOGLE_API_KEY;
+  if (gKey) return createGemini({ apiKey: gKey, model: env.GEMINI_MODEL || "gemini-3.8-flash" });
+  if (env.ANTHROPIC_API_KEY) return createClaude({ apiKey: env.ANTHROPIC_API_KEY, model: env.ANTHROPIC_MODEL || "claude-haiku-5-5" });
+  return null;
+}
+
 function bad(msg) { return Object.assign(new Error(msg), { status: 400 }); }
 function notFound(what) { return Object.assign(new Error(`${what} not found`), { status: 404 }); }
 
@@ -171,8 +180,8 @@ function makeServices({ core, store, claude }) {
       if (claude) {
         try {
           const p = core.cleanParsed(await claude.json(core.buildParsePrompt(text, partial)));
-          if (p) return { parsed: p, via: "Claude" };
-        } catch (e) { console.warn("Claude parse failed, using rules:", e.message); }
+          if (p) return { parsed: p, via: claude.provider || "AI" };
+        } catch (e) { console.warn(`${claude.provider || "AI"} parse failed, using rules:`, e.message); }
       }
       return { parsed: plain(core.ruleParse(text)), via: "Rules" };
     },
@@ -198,7 +207,7 @@ if (require.main === module) {
   const { ctx, server } = createApp();
   server.listen(port, () => {
     console.log(`VyaparBoss running at http://localhost:${port}`);
-    console.log(`  AI parsing: ${ctx.claude ? `Claude (${ctx.claude.model})` : "rule parser (set ANTHROPIC_API_KEY in .env to enable Claude)"}`);
+    console.log(`  AI parsing: ${ctx.claude ? `${ctx.claude.provider} (${ctx.claude.model})` : "rule parser (set GEMINI_API_KEY or ANTHROPIC_API_KEY in .env)"}`);
     console.log(`  WhatsApp:   ${process.env.WHATSAPP_TOKEN ? "configured" : "not configured (see docs/WHATSAPP_SETUP.md)"}`);
   });
 }

@@ -20,7 +20,7 @@ function createClaude({ apiKey, model }) {
     if (start === -1 || end < start) throw new Error("Model reply had no JSON");
     return JSON.parse(text.slice(start, end + 1));
   }
-  return { complete, json, model };
+  return { provider: "Claude", complete, json, model };
 }
 
 module.exports = { createClaude };

@@ -8,7 +8,7 @@ const { createApp } = require("../server");
 (async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "vb-"));
   const sent = [];
-  const fakeClaude = { model: "fake", async json(prompt) { if (!prompt.includes("3000 dabbe pune\"\"\"")) throw new Error("fake Claude: no canned answer"); return { product_id: "box3", quantity: 3000, unit: "pcs", city: "Pune", deadline_days: 4, notes: "", reply: "Samajh gaya" }; }, async complete() { return "Namaste ji, rate confirmed."; } };
+  const fakeClaude = { provider: "Claude", model: "fake", async json(prompt) { if (!prompt.includes("3000 dabbe pune\"\"\"")) throw new Error("fake Claude: no canned answer"); return { product_id: "box3", quantity: 3000, unit: "pcs", city: "Pune", deadline_days: 4, notes: "", reply: "Samajh gaya" }; }, async complete() { return "Namaste ji, rate confirmed."; } };
   const { server } = createApp({
     dataFile: path.join(dir, "db.json"), claude: fakeClaude,
     env: { WHATSAPP_VERIFY_TOKEN: "verify-me", WHATSAPP_TOKEN: "t", WHATSAPP_PHONE_NUMBER_ID: "123" },
@@ -31,6 +31,11 @@ const { createApp } = require("../server");
     await test("state starts with sample orders", async () => {
       const { body } = await call("GET", "/api/state");
       assert.strictEqual(body.orders.length, 3);
+    });
+    await test("Gemini key wins provider selection, Anthropic is the fallback", async () => {
+      const mk = env => createApp({ dataFile: path.join(dir, "p.json"), env: { GEMINI_API_KEY: "", GOOGLE_API_KEY: "", ANTHROPIC_API_KEY: "", ...env } }).ctx.claude;
+      assert.deepStrictEqual([mk({ GEMINI_API_KEY: "g", ANTHROPIC_API_KEY: "a" }).provider, mk({ GOOGLE_API_KEY: "g" }).provider, mk({ ANTHROPIC_API_KEY: "a" }).provider, mk({})], ["Gemini", "Gemini", "Claude", null]);
+      assert.strictEqual(mk({ GEMINI_API_KEY: "g" }).model, "gemini-3.8-flash");
     });
     await test("static app is served", async () => {
       const { status, body } = await call("GET", "/");

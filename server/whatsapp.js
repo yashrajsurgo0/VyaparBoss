@@ -66,7 +66,7 @@ function createWhatsApp(ctx, cfg) {
       const ask = miss.includes("product") ? "Kaunsa product chahiye? Abhi live: corrugated boxes, LDPE film, BOPP tape, stretch film, gloves, helmets, cutting wheels, MIG wire, cotton waste, drip lateral, crates, mulch film, NPK."
         : miss.includes("quantity") ? `Kitna chahiye? Quantity ${core.PMAP[r0.productId].unit} mein batayiye.`
         : "Delivery kis city mein chahiye?";
-      return (via === "Claude" && parsed.reply ? parsed.reply + "\n\n" : "") + ask;
+      return (via !== "Rules" && parsed.reply ? parsed.reply + "\n\n" : "") + ask;
     }
     s.partial = null;
     const res = core.discover(r0);

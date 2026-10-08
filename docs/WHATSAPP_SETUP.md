@@ -64,4 +64,4 @@ Now send `hi` from your phone to the test number. You should get the help messag
 | "Verify and save" fails | Server not reachable at that URL, or verify token differs. Open `https://YOUR-SERVER/api/health` in a browser: it should show `"app":"vyaparboss"` |
 | Message sent, no reply | Check the server log. `WhatsApp send failed: 401` means the token expired (see step 4). `Bad signature` means `WHATSAPP_APP_SECRET` is wrong |
 | Reply never arrives on a new phone | During testing that phone must be in the **To** list (step 1.4) |
-| Replies are understood poorly | Add `ANTHROPIC_API_KEY` so Claude reads messages instead of the rule parser |
+| Replies are understood poorly | Add `GEMINI_API_KEY` (or `ANTHROPIC_API_KEY`) so AI reads messages instead of the rule parser |
