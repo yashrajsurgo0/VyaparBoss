@@ -49,13 +49,15 @@ The app checks for `api/health` on load and picks the mode by itself.
 
 ## What's in the prototype
 
+**Bhai** is the built-in buying assistant. The Buy screen starts with one question ("Bolo kya chahiye?") and three category tiles. Each answer reveals the next question (product → quantity → city → date). Then comes Bhai's pick with the delivered price, with the breakdown, all quotes and negotiation one tap away, then confirm and approve.
+
 | Tab | What it does |
 |---|---|
-| Procure | Procurement chat → editable RFQ → supplier discovery → landed-cost ranking → negotiation → approval → PO |
+| Buy | Talk to Bhai or tap through categories → quotes ranked by delivered cost → ask for a better price → approve → PO |
 | Orders | POs (`VB/PO/2026-27/0001`) through PO sent → Confirmed → Dispatched → In transit → Delivered; issue reporting |
-| Supplier network | Onboard real suppliers (GSTIN checksum, products, price tiers, MOQ, capacity, delivery radius, negotiation limit); 15 sample suppliers you can hide |
-| Supplier desk | Supplier view of RFQs they qualified for, auto-quote, rank, drafted WhatsApp reply |
-| Pilot metrics | GMV, AOV, buyer savings, RFQ→PO conversion, est. take-rate revenue, category mix, WhatsApp simulator and conversation log |
+| Suppliers | Network: onboard real suppliers (GSTIN checksum, products, price tiers, MOQ, capacity, delivery radius, negotiation limit); 15 sample suppliers you can hide |
+| Suppliers → Supplier view | What a supplier sees: requests they qualified for, auto-quote, rank, drafted WhatsApp reply |
+| Insights | Value bought, buyer savings, request→order conversion, platform revenue, spend by category, WhatsApp practice chat |
 
 Categories live: packaging, industrial consumables, agri inputs (14 products).
 
@@ -72,15 +74,15 @@ server/
 scripts/            build-single.js, wa-simulate.js
 render.yaml         one-click Render deploy with a persistent disk
 src/
-  index.html        markup for all tabs
-  styles.css        design tokens (light + dark) and components
+  index.html        page shell + all drawings (logo, Bhai, illustrations, icons) as inline SVG symbols
+  styles.css        design tokens (peacock teal, marigold, kraft; light + dark), Baloo 2 + Mukta type
   js/data.js        products, cities, sample suppliers (rate-card tiers, MOQ, capacity, coverage)
   js/util.js        ₹ formatting (en-IN), distance, Indian FY
   js/engine.js      state + discovery, tier pricing, GST, freight, ranking
   js/parser.js      Buyer Intelligence Agent: Hinglish rule parser, Claude prompts, output sanitising
   js/repo.js        storage: server API when available, otherwise localStorage
   js/app.js         UI rendering and event wiring
-tests/            engine.test.js, server.test.js
+tests/            engine.test.js, server.test.js, ui.smoke.js (drives the Buy flow in a fake DOM)
 docs/               PROJECT_BRIEF.md, DEPLOY.md, WHATSAPP_SETUP.md
 ```
 
@@ -97,7 +99,7 @@ docs/               PROJECT_BRIEF.md, DEPLOY.md, WHATSAPP_SETUP.md
 
 Buyers text the business number in English, Hindi or Hinglish. The server parses the message, asks for anything missing, and replies with the top 3 landed-cost quotes. When the buyer replies **APPROVE 1**, it raises the PO, and stage changes go back to the buyer.
 
-- Try it without Meta: **Pilot metrics → WhatsApp intake** (server mode), or `npm run wa -- "5000 3-ply boxes Pune 7 din"`.
+- Try it without Meta: **Insights → Bhai on WhatsApp** (server mode), or `npm run wa -- "5000 3-ply boxes Pune 7 din"`.
 - Connect a real number: [docs/WHATSAPP_SETUP.md](docs/WHATSAPP_SETUP.md). Put the server online first: [docs/DEPLOY.md](docs/DEPLOY.md) (Render blueprint included).
 
 ## AI

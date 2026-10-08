@@ -82,8 +82,8 @@ async function showQuotes(lead){
   flow.stage="quotes";flow.sel=null;flow.showNeg=false;flow.newCard=true;
   let line;
   if(!res.eligible.length)line=res.offering?`${res.offering} supplier${res.offering>1?"s":""} sell this, but none can take ${qfmt(r.qty)} ${p.unit} to ${r.city} right now. Try a different quantity or city.`:`No supplier in the network sells ${p.name} yet.`;
-  else if(!ok.length)line=`Mil gaye ${res.eligible.length} option${res.eligible.length>1?"s":""}, but none can make it in ${r.deadline} days. The fastest takes ${best.eta} days.`;
-  else line=`Mil gaye ${res.eligible.length} option${res.eligible.length>1?"s":""}! My pick: ${best.s.name}, ${inr(best.landed)} delivered to ${r.city}.`;
+  else if(!ok.length)line=`${res.eligible.length>1?"Mil gaye":"Mila"} ${res.eligible.length} option${res.eligible.length>1?"s":""}, but none can make it in ${r.deadline} days. The fastest takes ${best.eta} days.`;
+  else line=`${res.eligible.length>1?`Mil gaye ${res.eligible.length} options! My pick:`:"Mila 1 option:"} ${best.s.name}, ${inr(best.landed)} delivered to ${r.city}.`;
   bhai((lead?lead+"\n":"")+line);
   renderBuy();
 }
