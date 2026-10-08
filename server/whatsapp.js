@@ -31,7 +31,7 @@ function createWhatsApp(ctx, cfg) {
     if (wa.log.length > 300) wa.log.splice(0, wa.log.length - 300);
   }
 
-  const HELP = `Namaste! Main Bhai hoon, VyaparBoss ka buying assistant.\n\nBas likhiye kya chahiye, jaise:\n"5000 3-ply boxes Pune, 7 din mein"\n"2 tonne NPK 19:19:19 Indore"\n\nHum verified suppliers se landed-cost quotes bhejenge (rate + GST + freight). Commands: STATUS (aapke orders), RESET (naya request).`;
+  const HELP = `Namaste! Main Bhai hoon, VyaparBoss ka buying assistant. Tu business badha, jugaad mera!\n\nBas likhiye kya chahiye, jaise:\n"5000 3-ply boxes Pune, 7 din mein"\n"2 tonne NPK 19:19:19 Indore"\n\nHum verified suppliers se landed-cost quotes bhejenge (rate + GST + freight). Commands: STATUS (aapke orders), RESET (naya request).`;
 
   async function handleText(from, text, { simulated } = {}) {
     const t = text.trim();

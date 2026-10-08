@@ -1,7 +1,9 @@
 # VyaparBoss
 VyaparBoss | AI-powered B2B procurement and supply chain platform connecting Indian businesses with verified suppliers through intelligent sourcing, price comparison, automated negotiation, and seamless fulfillment.
 
-**Bolo kya chahiye. VyaparBoss sambhal lega.**
+**Vyapar bada, jhanjhat chhota!**
+
+Meet **Bhai**, the built-in buying assistant: *Tu business badha, jugaad mera!*
 
 AI-powered B2B procurement for Indian MSMEs: a buyer describes what they need in English, Hindi or Hinglish, and VyaparBoss turns it into a structured RFQ, finds qualified verified suppliers, compares total landed cost, negotiates within the buyer's target, and raises a purchase order only after the buyer approves.
 

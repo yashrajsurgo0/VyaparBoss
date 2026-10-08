@@ -67,6 +67,9 @@ header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:30;backgroun
 .brand{display:flex;align-items:center;gap:9px;text-decoration:none;color:var(--ink)}
 .logo{width:38px;height:38px}
 .wordmark{font-family:var(--f-display);font-weight:800;font-size:23px;letter-spacing:-.02em;line-height:1}
+.lockup{display:flex;flex-direction:column;gap:1px}
+.tagline{font-size:13px;font-weight:600;color:var(--muted);line-height:1.1;white-space:nowrap}
+@media(max-width:380px){.tagline{display:none}}
 .tabs{display:none;gap:4px;margin-left:12px}
 @media(min-width:760px){.tabs{display:flex}}
 .tabs button{display:flex;align-items:center;gap:7px;border:0;background:none;padding:8px 14px;border-radius:999px;cursor:pointer;color:var(--muted);font-weight:600;font-size:16px}
@@ -87,6 +90,7 @@ header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:30;backgroun
 main{padding-block:24px 40px}
 .view{animation:none}
 .foot{font-size:13px;color:var(--muted);padding-block:8px 28px;max-width:720px}
+.foot b{font-family:var(--f-display);font-size:15px;color:var(--ink)}
 
 /* ---------- buttons, chips, fields ---------- */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1.5px solid var(--line);background:var(--surface);border-radius:999px;padding:10px 18px;font-weight:600;font-size:16px;cursor:pointer;text-decoration:none;color:var(--ink);white-space:nowrap}
@@ -125,8 +129,11 @@ main{padding-block:24px 40px}
 /* ---------- Buy: start screen ---------- */
 .hero{display:grid;gap:24px;align-items:center;padding-block:8px 20px}
 @media(min-width:860px){.hero{grid-template-columns:minmax(0,1.25fr) minmax(0,.75fr);gap:40px;padding-block:28px 28px}}
-.hero-art{order:-1;justify-self:start}
-@media(min-width:860px){.hero-art{order:1;justify-self:center}}
+.hero-art{order:-1;justify-self:start;display:flex;flex-direction:row-reverse;align-items:center;gap:12px}
+@media(min-width:860px){.hero-art{order:1;justify-self:center;flex-direction:column;gap:14px}}
+.bhai-says{position:relative;background:var(--surface);border:1.5px solid var(--line);border-radius:18px;padding:10px 16px;font-family:var(--f-display);font-weight:700;font-size:18px;line-height:1.2;box-shadow:var(--lift);max-width:220px}
+.bhai-says::after{content:"";position:absolute;width:14px;height:14px;background:var(--surface);border:1.5px solid var(--line);border-top:0;border-right:0;left:-8px;top:50%;transform:translateY(-50%) rotate(45deg)}
+@media(min-width:860px){.bhai-says{font-size:21px;max-width:260px;text-align:center}.bhai-says::after{left:50%;top:auto;bottom:-8px;transform:translateX(-50%) rotate(-45deg)}}
 .bhai-xl{width:clamp(96px,22vw,280px);height:auto;aspect-ratio:1}
 @media(max-width:859px){.bhai-xl{width:96px}.hero{gap:14px}}
 .hello{font-family:var(--f-display);font-weight:700;font-size:20px;color:var(--accent-deep);margin-bottom:6px}
