@@ -121,7 +121,7 @@ function heroHTML(){
       <p class="cats-title">Or pick what you're buying</p>
       <div class="cats">${Object.entries(CAT_INFO).map(([k,c])=>`<button class="cat" data-action="cat" data-cat="${k}">${ico(c.icon,"")}<b>${c.name}</b><span>${c.hint}</span></button>`).join("")}</div>
     </div>
-    <div class="hero-art"><p class="bhai-says">Tu business badha, jugaad mera!</p><svg class="bhai-xl" role="img" aria-label="Bhai, your buying assistant, pointing at you"><use href="#bhai-hero"/></svg></div>
+    <div class="hero-art"><p class="bhai-says">Tu business badha, jugaad mera!</p><svg class="bhai-xl" role="img" aria-label="Bhai, your buying assistant"><use href="#bhai"/></svg></div>
   </section>
   <section class="how">
     <div><span class="n">1</span><p><b>Tell Bhai what you need</b><span>Type it the way you'd say it, in English, Hindi or Hinglish.</span></p></div>
