@@ -232,9 +232,26 @@ const { createApp } = require("../server");
         const pubRfq = (await c3("GET", "/api/state")).body.rfqs.find(r => r.id === rfq.id);
         assert.strictEqual(pubRfq.invites[0].quote.unit, 37.5);
         assert.ok(!("token" in pubRfq.invites[0]), "tokens stay secret");
+        // link clicks are counted on the lead, unknown events refused
+        assert.strictEqual((await c3("POST", "/api/track", { ev: "join_view", ref: leads[1].id })).status, 200);
+        assert.strictEqual((await c3("POST", "/api/track", { ev: "spy" })).status, 400);
+        const clicked = (await c3("GET", "/api/admin/leads", null, "k3y-123")).body.leads.find(l => l.id === leads[1].id);
+        assert.deepStrictEqual([clicked.views, !!clicked.lastViewed], [1, true]);
+        // backup and restore round-trip
+        const bk = await fetch(b3 + "/api/admin/backup", { headers: { "x-admin-key": "k3y-123" } });
+        assert.match(bk.headers.get("content-disposition"), /vyaparboss-backup/);
+        const backup = await bk.json();
+        await c3("DELETE", "/api/admin/leads/" + leads[0].id, null, "k3y-123");
+        assert.strictEqual((await c3("POST", "/api/admin/restore", { app: "other" }, "k3y-123")).status, 400);
+        const rs = (await c3("POST", "/api/admin/restore", backup, "k3y-123")).body;
+        assert.strictEqual(rs.leads, 3);
+        assert.ok((await c3("GET", "/api/admin/leads", null, "k3y-123")).body.leads.some(l => l.id === leads[0].id), "deleted lead is back");
         // CORS for the GitHub Pages copy
         const pre = await fetch(b3 + "/api/join", { method: "OPTIONS", headers: { origin: "https://yashrajsurgo0.github.io" } });
         assert.strictEqual(pre.headers.get("access-control-allow-origin"), "https://yashrajsurgo0.github.io");
+        // wrong admin keys get throttled
+        let last; for (let i = 0; i < 12; i++) last = (await c3("GET", "/api/admin/leads", null, "guess-" + i)).status;
+        assert.strictEqual(last, 429);
       } finally { s3.close(); }
     });
     await test("unknown API path is a JSON 404", async () => {

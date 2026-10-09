@@ -74,7 +74,7 @@ The app checks for `api/health` on load and picks the mode by itself.
 
 Categories live: packaging (incl. export pallets and container desiccants), industrial consumables, agri inputs (16 products). 55 cities, including tier-2/3 export clusters (Moradabad, Kanpur, Karur, Panipat, Tiruppur, Morbi, Silvassa…).
 
-Team tools need `ADMIN_KEY` on the server. Outreach setup and rules: [docs/OUTREACH.md](docs/OUTREACH.md).
+Team tools need `ADMIN_KEY` on the server. In Global mode, prices also show an indicative US$ figure (rate and date in `USD_RATE`, `src/js/i18n.js`). The site has link-preview tags (`og.png`) and a web app manifest, so it can be added to a phone's home screen. Outreach setup and rules: [docs/OUTREACH.md](docs/OUTREACH.md).
 
 ## Code map
 

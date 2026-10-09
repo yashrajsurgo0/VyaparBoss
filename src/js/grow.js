@@ -12,7 +12,11 @@ function route(){
   if(!m){if(pub.view){pub.view=null;$("#v-public").hidden=true;showTab("buy");}return;}
   document.querySelectorAll(".view").forEach(v=>v.hidden=v.id!=="v-public");
   if(m[1]==="join"){
-    if(pub.view!=="join")pub={view:"join",role:m[2]==="s"?"supplier":m[2]==="b"?"buyer":null,ref:m[3]||"",cats:[],sent:null,err:[],busy:false};
+    if(pub.view!=="join"){
+      pub={view:"join",role:m[2]==="s"?"supplier":m[2]==="b"?"buyer":null,ref:m[3]||"",cats:[],sent:null,err:[],busy:false};
+      // Count the click on a personal outreach link once per browser session.
+      if(pub.ref){let seen=false;try{seen=sessionStorage.getItem("vb.seen."+pub.ref);sessionStorage.setItem("vb.seen."+pub.ref,"1");}catch(e){}if(!seen)Repo.track("join_view",pub.ref);}
+    }
     renderJoin();
   }else{
     pub={view:"quote",token:m[2]||"",q:null,err:[],sent:null,busy:true};renderQuotePage();
@@ -192,7 +196,7 @@ async function renderOutreachView(){
   const {leads,outreach:o}=out.data;const st=o.settings||{};
   const reachOk=l=>out.reach==="any"||(out.reach==="email"?!!l.email:out.reach==="whatsapp"?!!mobileOf(l.phone)&&!/indiamart/i.test(l.source)&&!/\bPNS\b/.test(l.notes):!!l.phone&&!l.email);
   const due=leads.filter(callDue);
-  const statusOk=l=>out.status==="all"||(out.status==="due"?callDue(l):l.status===out.status);
+  const statusOk=l=>out.status==="all"||(out.status==="due"?callDue(l):out.status==="clicked"?!!l.lastViewed&&l.status!=="joined":l.status===out.status);
   const shown=leads.filter(l=>(out.filter==="all"||l.segment===out.filter)&&statusOk(l)&&(out.status==="due"||reachOk(l))
     &&(!out.q||(l.business+" "+l.city+" "+l.product).toLowerCase().includes(out.q)));
   for(const id of [...out.sel])if(!leads.some(l=>l.id===id))out.sel.delete(id);
@@ -201,6 +205,8 @@ async function renderOutreachView(){
   const preview=first?renderOutreach(out.tpl,first,{senderName:st.senderName,senderAddress:st.senderAddress||"[your business address]",joinBase:base,unsubLink:()=>"[unsubscribe link]"}):null;
   const canSend=Repo.mode==="server"&&o.email;
   const counts=s=>leads.filter(l=>l.status===s).length;
+  if(out.status==="due"||out.status==="clicked")shown.sort((a,b)=>(b.lastViewed||0)-(a.lastViewed||0));
+  const reachedN=leads.filter(l=>l.lastEmailed||l.lastContacted||l.status!=="new").length,clickedN=leads.filter(l=>l.lastViewed).length,joinedN=counts("joined");
   const vctx={senderName:st.senderName||"[your name]",senderAddress:st.senderAddress,joinBase:base};
   const statusSel=l=>`<select data-lead-status="${esc(l.id)}" aria-label="Status of ${esc(l.business)}">${LEAD_STATUSES.map(s=>`<option value="${s}" ${l.status===s?"selected":""}>${s.replace("_"," ")}</option>`).join("")}</select>`;
   // IndiaMART shows relay (PNS) numbers that forward calls but aren't WhatsApp accounts.
@@ -221,22 +227,22 @@ async function renderOutreachView(){
     <div class="actions"><button class="btn sm" data-action="o-settings">Save</button></div>
   </div>
   <div class="panel pad">
-    <h3>2. Leads <span class="muted" style="font-weight:400">${leads.length} total · ${counts("new")} new · ${counts("contacted")+counts("emailed")} reached · ${counts("replied")} replied · ${counts("joined")} joined</span></h3>
+    <h3>2. Leads <span class="muted" style="font-weight:400">${leads.length} total · ${counts("new")} new · ${reachedN} reached · ${clickedN} opened their link · ${counts("replied")} replied · ${joinedN} joined</span></h3>
     <p class="hint"><b>Email first, then call.</b> Email a batch today. Four days later, the ones who haven't replied show up under "Call next": WhatsApp or call them with the script (tap a business name), and note what they said.</p>
-    ${due.length?`<div class="callnext"><b>${due.length} lead${due.length>1?"s":""} to call next</b><span>Emailed 4+ days ago, no reply yet.</span><button class="btn sm marigold" data-action="o-due">Show them</button></div>`:""}
+    ${due.length?`<div class="callnext"><b>${due.length} lead${due.length>1?"s":""} to call next</b><span>Emailed 4+ days ago, no reply yet. People who opened their link come first: they're the warmest.</span><button class="btn sm marigold" data-action="o-due">Show them</button></div>`:""}
     <div class="toolbar"><label class="btn sm">${ico("i-plus")}Import CSV<input type="file" id="leadFile" accept=".csv,text/csv" hidden></label>
       <span class="hint">Columns like business_name, city, email, phone, products, segment. Duplicates are skipped.</span></div>
     ${leads.length?`<div class="toolbar">
       <div class="chips">${[["all","All"],["supplier","Suppliers"],["exporter","Exporters"]].map(([k,l])=>`<button class="chip" data-action="o-filter" data-v="${k}" aria-pressed="${out.filter===k}">${l}</button>`).join("")}</div>
       <select id="oReach" aria-label="How to reach">${[["any","Any contact"],["whatsapp","Has WhatsApp-able mobile"],["email","Has email"],["phone","Phone only"]].map(([k,t])=>`<option value="${k}" ${out.reach===k?"selected":""}>${t}</option>`).join("")}</select>
-      <select id="oStatus" aria-label="Status">${["all","due",...LEAD_STATUSES].map(s=>`<option value="${s}" ${out.status===s?"selected":""}>${s==="all"?"Any status":s==="due"?`Call next (${due.length})`:s.replace("_"," ")}</option>`).join("")}</select>
+      <select id="oStatus" aria-label="Status">${["all","due","clicked",...LEAD_STATUSES].map(s=>`<option value="${s}" ${out.status===s?"selected":""}>${s==="all"?"Any status":s==="due"?`Call next (${due.length})`:s==="clicked"?`Opened link, not joined (${leads.filter(l=>l.lastViewed&&l.status!=="joined").length})`:s.replace("_"," ")}</option>`).join("")}</select>
       <input id="oSearch" type="search" placeholder="Search" value="${esc(out.q)}" aria-label="Search leads">
     </div>
     <div class="tablewrap"><table class="cmp leads"><thead><tr><th><input type="checkbox" id="oAll" aria-label="Select all shown with email" ${shown.length&&shown.filter(l=>l.email).every(l=>out.sel.has(l.id))?"checked":""}></th><th>Business</th><th>City</th><th>Product</th><th>Reach</th><th>Status</th></tr></thead><tbody>
     ${shown.slice(0,300).map(l=>`<tr><td><input type="checkbox" data-lead="${esc(l.id)}" ${out.sel.has(l.id)?"checked":""} ${l.email?"":"disabled"} aria-label="Select ${esc(l.business)}"></td>
       <td><button class="linkish" data-action="o-open" data-id="${esc(l.id)}" aria-expanded="${out.open===l.id}"><b>${esc(l.business)}</b></button>${l.website?`<br><a href="${esc(/^https?:/.test(l.website)?l.website:"https://"+l.website)}" target="_blank" rel="noopener" class="muted">${esc(l.website.replace(/^https?:\/\//,"").slice(0,32))}</a>`:""}</td>
       <td>${esc(l.city)}</td><td>${esc(l.product.slice(0,40))}</td><td><div class="reach">${reach(l)}</div>${l.email?`<small class="muted">${esc(l.email)}</small>`:""}${!l.email&&!l.phone?`<span class="muted">none yet</span>`:""}</td>
-      <td>${statusSel(l)}</td></tr>${out.open===l.id?detail(l):""}`).join("")}
+      <td>${statusSel(l)}${l.lastViewed?`<br><span class="pill good" title="Opened their sign-up link ${l.views>1?l.views+" times":""}">Opened link ${dstr(l.lastViewed)}</span>`:""}</td></tr>${out.open===l.id?detail(l):""}`).join("")}
     </tbody></table></div>${shown.length>300?`<p class="hint">Showing 300 of ${shown.length}. Narrow with search or filters.</p>`:""}`
     :`<p class="muted">No leads yet. Import a CSV, for example the supplier and exporter lists Bhai researched.</p>`}
   </div>
@@ -253,8 +259,16 @@ async function renderOutreachView(){
       :Repo.mode==="server"?"Sending isn't switched on yet: add EMAIL_PROVIDER, EMAIL_API_KEY and OUTREACH_FROM_EMAIL on the server. Meanwhile, download the CSV and use a Gmail mail-merge add-on."
       :"This copy can't send email. Download the CSV and use a Gmail mail-merge add-on, or use the live app."} Start with 20–30 a day from a new domain, and reply to every answer within a day.</p>
     ${out.result?`<div class="negres">${out.result}</div>`:""}
-  </div>`;
+  </div>
+  ${Repo.mode==="server"?`<div class="panel pad">
+    <h3>4. Back up your data</h3>
+    <p class="hint">On Render's free plan, every redeploy wipes sign-ups, leads and orders. Download a backup first, and restore it after. (On a paid plan with a disk, this is just a safety copy.)</p>
+    <div class="actions"><button class="btn" data-action="backup">Download backup</button>
+      <label class="btn ghost">Restore from backup<input type="file" id="restoreFile" accept=".json,application/json" hidden></label></div>
+  </div>`:""}`;
 }
+/* Restoring replaces everything on the server, so ask in plain words first. */
+function confirmRestore(name,n){try{return window.confirm(`Replace ALL data on the server with ${name}${n?` (${n} leads and sign-ups)`:""}? Anything added since that backup will be lost.`);}catch(e){return false;}}
 /* Emailed 4+ days ago and no reply yet: time to call or WhatsApp. */
 const callDue=l=>l.status==="emailed"&&l.lastEmailed&&Date.now()-l.lastEmailed>=4*864e5&&(!l.lastContacted||l.lastContacted<l.lastEmailed);
 /* Opening WhatsApp or the dialer counts as contact; the status moves new → contacted. The message itself is sent by you. */
@@ -334,6 +348,7 @@ Object.assign(ACTIONS,{
   "o-call":a=>{location.href=a.href;markContacted(a.dataset.id);},
   "o-settings":()=>Repo.saveOutreachSettings({senderName:$("#oName").value,senderAddress:$("#oAddr").value}).then(()=>{toast("Saved");renderOutreachView();}).catch(fail),
   "o-export":()=>exportMailMerge(),
+  backup:()=>Repo.backup().then(b=>{const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=`vyaparboss-backup-${new Date().toISOString().slice(0,10)}.json`;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},500);toast("Backup downloaded");}).catch(fail),
   "o-due":()=>{out.status="due";out.filter="all";renderOutreachView();},
   "o-mark-emailed":()=>{const ids=out.exported||[];Promise.all(ids.map(id=>Repo.updateLead(id,{emailed:true,template:out.exportedTpl})))
     .then(()=>{toast(`Marked ${ids.length} as emailed. They'll show under "Call next" in 4 days if they don't reply.`);out.exported=null;out.sel.clear();renderOutreachView();}).catch(fail);},
@@ -352,6 +367,9 @@ document.addEventListener("submit",e=>{
 document.addEventListener("change",e=>{
   const t=e.target;
   if(t.id==="leadFile"){importLeadFile(t.files[0]);t.value="";return;}
+  if(t.id==="restoreFile"){const f=t.files[0];t.value="";if(!f)return;
+    f.text().then(txt=>{let n=0;try{const b=JSON.parse(txt);n=(b.data?.leads?.length||0)+(b.data?.applications?.length||0);}catch(e){}
+      if(!confirmRestore(f.name,n))return;return Repo.restore(txt).then(r=>{toast(`Restored: ${r.suppliers} suppliers, ${r.applications} sign-ups, ${r.leads} leads, ${r.orders} orders`);appsCache=null;return Repo.refresh();}).then(()=>{renderAll();renderOutreachView();});}).catch(fail);return;}
   if(t.dataset?.lead){t.checked?out.sel.add(t.dataset.lead):out.sel.delete(t.dataset.lead);out.armed=false;renderOutreachView();return;}
   if(t.id==="oAll"){const shown=[...document.querySelectorAll("[data-lead]")].filter(x=>!x.disabled).map(x=>x.dataset.lead);shown.forEach(id=>t.checked?out.sel.add(id):out.sel.delete(id));renderOutreachView();return;}
   if(t.dataset?.leadStatus){Repo.updateLead(t.dataset.leadStatus,{status:t.value}).then(()=>toast("Updated")).catch(fail);return;}

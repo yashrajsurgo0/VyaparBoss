@@ -1,0 +1,15 @@
+{
+  "name": "VyaparBoss",
+  "short_name": "VyaparBoss",
+  "description": "Tell Bhai what your business needs. Verified suppliers, one full delivered price, nothing ordered until you approve.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#F2F6F5",
+  "theme_color": "#16171B",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

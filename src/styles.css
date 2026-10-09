@@ -455,3 +455,5 @@ tr.leaddetail td{background:var(--sunk)}
 .rp-note{margin:6px 8px 2px;font-size:13px;color:var(--muted);max-width:240px}
 .callnext{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin:8px 0 4px;padding:10px 14px;border-radius:var(--r);background:var(--accent-tint)}
 .callnext span{color:var(--muted);font-size:14.5px;flex:1;min-width:160px}
+.usd{font-size:.42em;font-weight:600;color:var(--muted);letter-spacing:0;white-space:nowrap}
+.amt small.usd{font-size:12.5px;display:block}

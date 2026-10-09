@@ -13,7 +13,7 @@ const crypto = require("crypto");
 
 const ROOT = path.join(__dirname, "..");
 const STATIC_DIR = path.join(ROOT, "src");
-const TYPES = { ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".json": "application/json", ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon" };
+const TYPES = { ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".json": "application/json", ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon", ".webmanifest": "application/manifest+json" };
 
 function loadEnv(file = path.join(ROOT, ".env")) {
   if (!fs.existsSync(file)) return;
@@ -40,15 +40,24 @@ function createApp(opts = {}) {
   const secret = env.OUTREACH_SECRET || env.ADMIN_KEY || "";
   const unsubUrl = email => `${PUBLIC_URL}/unsubscribe?e=${encodeURIComponent(email)}&t=${unsubSig(secret, email)}`;
   const joinHits = new Map();
+  // Simple per-IP limits for public endpoints and wrong admin keys.
+  const hits = new Map();
+  const clientIp = req => String(req.headers["x-forwarded-for"] || req.socket.remoteAddress || "").split(",")[0].trim();
+  const limit = (req, key, max, windowMs, msg) => {
+    const k = key + "|" + clientIp(req), since = Date.now() - windowMs, list = (hits.get(k) || []).filter(t => t > since);
+    if (list.length >= max) throw Object.assign(new Error(msg || "Too many tries. Please wait a little and try again."), { status: 429 });
+    list.push(Date.now()); hits.set(k, list);
+    if (hits.size > 5000) for (const [kk, v] of hits) if (!v.some(t => t > since)) hits.delete(kk);
+  };
   const whatsapp = createWhatsApp(ctx, { verifyToken: env.WHATSAPP_VERIFY_TOKEN, accessToken: env.WHATSAPP_TOKEN, phoneNumberId: env.WHATSAPP_PHONE_NUMBER_ID, appSecret: env.WHATSAPP_APP_SECRET, apiVersion: env.WHATSAPP_API_VERSION, send: opts.waSend });
 
   const send = (res, code, body, headers = {}) => {
     res.writeHead(code, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...headers });
     res.end(JSON.stringify(body));
   };
-  const readBody = req => new Promise((resolve, reject) => {
+  const readBody = (req, max = 1e6) => new Promise((resolve, reject) => {
     let size = 0; const chunks = [];
-    req.on("data", c => { size += c.length; if (size > 1e6) { reject(Object.assign(new Error("Request too large"), { status: 413 })); req.destroy(); } else chunks.push(c); });
+    req.on("data", c => { size += c.length; if (size > max) { reject(Object.assign(new Error("Request too large"), { status: 413 })); req.destroy(); } else chunks.push(c); });
     req.on("end", () => resolve(Buffer.concat(chunks)));
     req.on("error", reject);
   });
@@ -58,7 +67,10 @@ function createApp(opts = {}) {
   const admin = req => {
     if (!env.ADMIN_KEY) throw Object.assign(new Error("Set ADMIN_KEY on the server to use ops tools"), { status: 503 });
     const got = Buffer.from(String(req.headers["x-admin-key"] || "")), want = Buffer.from(String(env.ADMIN_KEY));
-    if (got.length !== want.length || !crypto.timingSafeEqual(got, want)) throw Object.assign(new Error("Admin key needed"), { status: 401 });
+    if (got.length !== want.length || !crypto.timingSafeEqual(got, want)) {
+      limit(req, "adminfail", 10, 15 * 6e4, "Too many wrong admin keys. Wait 15 minutes.");
+      throw Object.assign(new Error("Admin key needed"), { status: 401 });
+    }
   };
   const findInvite = token => { for (const r of store.data.rfqs) { const i = (r.invites || []).find(x => x.token === token); if (i) return { r, i }; } return {}; };
   const unsubscribed = email => store.data.outreach.unsub.includes(String(email).toLowerCase());
@@ -92,6 +104,7 @@ function createApp(opts = {}) {
         supplier: { name: s?.name || i.sname, city: s?.city || "" }, rateCard: o ? core.tierPrice(o, r.qty) : null, quote: i.quote || null };
     }],
     ["POST", /^\/api\/quote\/([\w-]{16,})$/, async (req, m) => {
+      limit(req, "quote", 30, 36e5);
       const { r, i } = findInvite(m[1]); if (!r) throw notFound("Quote request");
       if (r.status === "ordered") throw Object.assign(new Error("This request is already closed. Thank you!"), { status: 409 });
       const s = core.getSMAP()[i.sid], o = s?.offers.find(x => x.p === r.productId);
@@ -99,11 +112,41 @@ function createApp(opts = {}) {
       if (!ok) throw bad(errors.join(". "));
       i.quote = q; store.save(); return { ok: true, quote: q };
     }],
+    // Someone opened their personal sign-up link from an outreach email or WhatsApp. Counts only; no personal data.
+    ["POST", /^\/api\/track$/, async req => {
+      limit(req, "track", 60, 36e5);
+      const { ev, ref } = await jsonBody(req);
+      if (ev !== "join_view") throw bad("Unknown event");
+      const lead = ref && store.data.leads.find(l => l.id === String(ref));
+      if (lead) { lead.views = (lead.views || 0) + 1; lead.lastViewed = Date.now(); store.save(); }
+      return { ok: true };
+    }],
     ["GET", /^\/unsubscribe$/, (req, m, url, res) => unsubscribePage(url, res)],
     ["POST", /^\/unsubscribe$/, (req, m, url, res) => unsubscribePage(url, res)],
 
     // ---------- Ops (admin key) ----------
     ["GET", /^\/api\/admin\/check$/, req => { admin(req); return { ok: true, email: mailer.configured, from: mailer.from, cap: DAILY_CAP, publicUrl: PUBLIC_URL }; }],
+    // Backups: the free Render plan wipes data on every redeploy. Download before, restore after.
+    ["GET", /^\/api\/admin\/backup$/, (req, m, url, res) => {
+      admin(req);
+      res.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store",
+        "content-disposition": `attachment; filename="vyaparboss-backup-${new Date().toISOString().slice(0, 10)}.json"` });
+      res.end(JSON.stringify({ app: "vyaparboss", version: 1, at: Date.now(), data: store.data }));
+    }],
+    ["POST", /^\/api\/admin\/restore$/, async req => {
+      admin(req);
+      const raw = await readBody(req, 2e7);
+      let b; try { b = JSON.parse(raw); } catch { throw bad("That isn't a VyaparBoss backup file"); }
+      const d = b && b.app === "vyaparboss" && b.data;
+      const lists = ["orders", "rfqs", "suppliers", "applications", "leads"];
+      if (!d || !d.seq || lists.some(k => k in d && !Array.isArray(d[k]))) throw bad("That isn't a VyaparBoss backup file");
+      store.data = d;
+      store.data.suppliers ||= []; store.data.applications ||= []; store.data.leads ||= [];
+      store.data.outreach ||= { settings: {}, log: [], unsub: [] }; store.data.whatsapp ||= { sessions: {}, log: [] };
+      store.data.seq.lead ??= store.data.leads.length; store.data.seq.app ??= store.data.applications.length;
+      store.save(); syncSuppliers();
+      return { ok: true, orders: d.orders?.length || 0, suppliers: d.suppliers.length, applications: d.applications.length, leads: d.leads.length };
+    }],
     ["GET", /^\/api\/admin\/applications$/, req => { admin(req); return { applications: store.data.applications }; }],
     ["PATCH", /^\/api\/admin\/applications\/(.+)$/, async (req, m) => {
       admin(req); const a = store.data.applications.find(x => x.id === m[1]); if (!a) throw notFound("Sign-up");
@@ -302,7 +345,7 @@ function createApp(opts = {}) {
     const url = new URL(req.url, "http://localhost");
     // The static copy on GitHub Pages posts sign-ups and supplier quotes here.
     const origin = req.headers.origin;
-    if (origin && ORIGINS.includes(origin) && /^\/api\/(join|quote\/|health)/.test(url.pathname)) {
+    if (origin && ORIGINS.includes(origin) && /^\/api\/(join|quote\/|health|track)/.test(url.pathname)) {
       res.setHeader("access-control-allow-origin", origin); res.setHeader("vary", "origin");
       if (req.method === "OPTIONS") { res.writeHead(204, { "access-control-allow-methods": "GET, POST", "access-control-allow-headers": "content-type", "access-control-max-age": "86400" }).end(); return; }
     }

@@ -7,6 +7,8 @@
 - **Supplier quote links**: on a request's quotes, "Team: get real quotes from suppliers" makes one link per onboarded supplier, with a WhatsApp button. Their own price replaces the rate-card estimate.
 
 - **Email first, then call**: email a batch (send from the app, or download for mail merge and press "I've sent them"). Leads emailed 4+ days ago with no reply show up under **Call next**, with a call script and WhatsApp opener that mention the earlier email.
+- **Who opened their link**: each email and WhatsApp carries a personal sign-up link. When someone opens it, their lead shows "Opened link" (a count only, nothing else is recorded), and they go to the top of Call next. Filter: "Opened link, not joined".
+- **Backups**: Outreach → Back up your data. Download before a Render redeploy on the free plan, restore after.
 - **Phone and WhatsApp**: in Outreach, each lead has WhatsApp (pre-written Hinglish opener with their personal sign-up link) and Call buttons. Tap a business name for a call script and notes. Opening WhatsApp or the dialer marks the lead "contacted"; you press Send in WhatsApp yourself. IndiaMART relay numbers get Call only.
 - **Suppliers can add their own rates at sign-up** (optional). "Add as supplier" then pre-fills those rates; the team only adds the GSTIN and checks.
 

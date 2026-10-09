@@ -77,10 +77,14 @@ const STR={
     try:["5000 export cartons to Nhava Sheva in 7 days","50 ISPM-15 pallets to Mundra","300 boxes of nitrile gloves to Chennai"],
     joinQ:"Are you an Indian supplier?",
     "ask.city":"Deliver to which city or port in India?",
-    globalNote:"Prices are in Indian rupees (₹), delivered to a city or port in India, with GST. Export freight and customs aren't included yet.",
+    globalNote:"Prices are in Indian rupees (₹), delivered to a city or port in India, with GST. Dollar figures are indicative at ₹{{rate}} = US$1 ({{asOf}}); you pay in rupees. Export freight and customs aren't included yet.",
     buyerLede:"Tell Bhai what you need from India. Compare verified Indian suppliers on the full delivered price. Nothing is ordered until you approve."
   }
 };
+/* Indicative only. Update with the day's rate when it moves a lot (source: RBI reference rate or any market quote). */
+const USD_RATE={inrPerUsd:96.5,asOf:"9 Oct 2026"};
+/* "≈ US$879" in Global mode, empty elsewhere. */
+const usd=n=>isGlobal()?`≈ US$${Math.round(n/USD_RATE.inrPerUsd).toLocaleString("en-US")}`:"";
 const TOP_CITIES_GLOBAL=["Nhava Sheva","Mundra","Chennai","Tuticorin","Kolkata","Kochi","Visakhapatnam","Delhi"];
 const LOCALE_KEY="vyaparboss.v1.locale";
 

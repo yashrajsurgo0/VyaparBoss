@@ -83,6 +83,7 @@ const buy=()=>els["v-buy"].innerHTML;
   T.setLocale("gl_en");check(buy().includes("What do you need from India?")&&!/chahiye|Namaste|jugaad/.test(buy()),"Global hero is plain English");
   await T.say("5000 export cartons to Nhava Sheva in 7 days");
   check(T.flow.stage==="quotes"&&T.flow.r.city==="Nhava Sheva"&&buy().includes("Found")&&buy().includes("Indian rupees"),"Global: port delivery, English Bhai, rupee note");
+  check(/≈ US\$[\d,]+/.test(buy())&&buy().includes("₹96.5 = US$1"),"Global shows indicative dollars with the rate and date");
   check(!/chahiye|Mil gaye|Pakka|karwao/.test(buy()),"no Hinglish in Global quotes");
   T.setLocale("in_en");check(!buy().includes("Indian rupees")&&!/karwao/.test(buy()),"India · English drops the Hinglish and the global note");
   T.setLocale("in_hi");check(buy().includes("thoda kam karwao"),"back to Hinglish");

@@ -205,7 +205,7 @@ function quotesCard(){
       <span class="tag">${ico("bhai","")}Bhai's pick</span>
       <div class="who"><div class="mono">${esc(initials(best.s.name))}</div><div><h3>${esc(best.s.name)}</h3><div class="where">${ico("i-pin","")}${esc(best.s.area?best.s.area+", ":"")}${best.s.city}, ${qfmt(best.d)} km away</div></div></div>
       <div class="trust">${best.live?`<span class="pill good">${ico("i-check","")}Supplier's own quote</span>`:""}${trustPills(best.s)}${flow.neg[best.s.id]&&best.unit<best.list?`<span class="pill gold">${((1-best.unit/best.list)*100).toFixed(1)}% off after asking</span>`:""}</div>
-      <div class="price"><div><div class="total num">${inr(best.landed)}</div><div class="sub">Delivered to ${r.city}, with GST and freight. ${inr(best.per,2)} per ${unitOne(p.unit)}.</div></div>
+      <div class="price"><div><div class="total num">${inr(best.landed)}${isGlobal()?` <span class="usd">${usd(best.landed)}</span>`:""}</div><div class="sub">Delivered to ${r.city}, with GST and freight. ${inr(best.per,2)} per ${unitOne(p.unit)}.</div></div>
         <div class="eta${best.meets?"":" late"}">${ico("i-clock","")}${best.meets?`Arrives in about ${best.eta} days`:`Takes ${best.eta} days, after your date`}</div></div>
       ${why}
       <div class="actions"><button class="btn primary big" data-action="choose" data-sid="${esc(best.s.id)}">Choose ${esc(best.s.name.split(" ")[0])}</button></div>
@@ -214,7 +214,7 @@ function quotesCard(){
   const rest=ranked.slice(1,3);
   if(rest.length)html+=`<div class="others"><p class="q-title" style="font-size:17px">Other options</p>${rest.map(q=>`<div class="orow">
       <div><b>${esc(q.s.name)}</b><small>${q.live?"Own quote · ":""}${q.s.city} · ${q.meets?`${q.eta} days`:`${q.eta} days, late`}${q.s.onTime!=null?` · ${q.s.onTime}% on time`:" · new supplier"}</small></div>
-      <div class="amt">${inr(q.landed)}<small>${q.landed>best.landed?"+"+inr(q.landed-best.landed):inr(q.landed-best.landed)}</small></div>
+      <div class="amt">${inr(q.landed)}${isGlobal()?`<small class="usd">${usd(q.landed)}</small>`:""}<small>${q.landed>best.landed?"+"+inr(q.landed-best.landed):inr(q.landed-best.landed)}</small></div>
       <button class="btn sm" data-action="choose" data-sid="${esc(q.s.id)}">Choose</button></div>`).join("")}</div>`;
   html+=`<details class="more"><summary>Compare all ${res.eligible.length} quotes${res.excluded.length?` and ${res.excluded.length} that couldn't quote`:""} ${ico("i-chev","")}</summary><div>
       <div class="tablewrap"><table class="cmp"><thead><tr><th>Supplier</th><th>Rate</th><th>Goods</th><th>GST</th><th>Freight</th><th>Delivered</th><th>Days</th></tr></thead><tbody>
@@ -226,7 +226,7 @@ function quotesCard(){
       <p class="hint">Bhai asks every supplier. Each one only goes as low as their own limit, and nothing is ordered.</p>
       ${flow.negLast?`<div class="negres">${flow.negLast.map(x=>`<span>${esc(x.name)}: ${x.ok?`<b style="color:var(--good)">agreed ${inr(x.price,2)}</b>`:`best ${inr(x.price,2)}`}</span>`).join("")}</div>`:""}`
     :`<p><button class="link" data-action="show-neg">${esc(t("askBetter"))}</button></p>`;
-  if(isGlobal())html+=`<p class="hint">${esc(t("globalNote"))}</p>`;
+  if(isGlobal())html+=`<p class="hint">${esc(t("globalNote",{rate:USD_RATE.inrPerUsd,asOf:USD_RATE.asOf}))}</p>`;
   html+=typeof liveQuotesHTML==="function"?liveQuotesHTML(res):"";
   return html+`</div>`;
 }
@@ -241,7 +241,7 @@ function confirmCard(){
       <dt>Quantity</dt><dd>${qfmt(r.qty)} ${p.unit}</dd>
       <dt>Supplier</dt><dd>${esc(q.s.name)}, ${q.s.city}</dd>
       <dt>Deliver to</dt><dd>${r.city}, by about ${by.toLocaleDateString("en-IN",{day:"numeric",month:"long"})}</dd>
-      <dt>Total</dt><dd class="num">${inr(q.landed)} <span class="muted" style="font-weight:400">with GST and freight</span></dd>
+      <dt>Total</dt><dd class="num">${inr(q.landed)} <span class="muted" style="font-weight:400">with GST and freight${isGlobal()?`, ${usd(q.landed)}`:""}</span></dd>
     </dl>
     <details class="more"><summary>Cost breakdown ${ico("i-chev","")}</summary><div>${breakdownTable(q,p,r)}</div></details>
     <label class="approve"><input type="checkbox" id="okBox"><span>I approve this purchase of ${qfmt(r.qty)} ${p.unit} for ${inr(q.landed)}.</span></label>
