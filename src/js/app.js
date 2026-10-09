@@ -507,7 +507,7 @@ function renderAll(){renderOrders();renderSuppliers();if(!$("#s-desk").hidden)re
 function showTab(t){
   if(document.body.classList.contains("public")){document.body.classList.remove("public");if(location.hash)history.replaceState(null,"",location.pathname+location.search);pub.view=null;}
   document.querySelectorAll("#tabs [data-tab],#bottomnav [data-tab]").forEach(b=>{if(b.dataset.tab===t)b.setAttribute("aria-current","page");else b.removeAttribute("aria-current");});
-  document.querySelectorAll(".view").forEach(v=>v.hidden=v.id!=="v-"+t);
+  document.querySelectorAll(".view").forEach(v=>{const on=v.id==="v-"+t;if(on&&v.hidden){v.classList.remove("enter");void v.offsetWidth;v.classList.add("enter");}v.hidden=!on;});
   try{localStorage.setItem(KEY+".tab",t);}catch(e){}
   if(t==="buy")renderBuy();else renderAll();
   window.scrollTo({top:0});
@@ -589,6 +589,9 @@ document.addEventListener("change",e=>{
   if(id==="sfCity"){updateGstHint();return;}
   if(/^sfP\d+$/.test(id)){const cur=readSupplierForm();renderSupplierForm(cur);}
 });
+
+/* Header gets a soft shadow once the page scrolls under it. */
+try{const hd=document.querySelector("header.top");if(hd)addEventListener("scroll",()=>hd.classList.toggle("scrolled",scrollY>4),{passive:true});}catch(e){}
 
 /* ===================== BOOT ===================== */
 (async function boot(){
