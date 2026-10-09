@@ -1,52 +1,62 @@
 /* VyaparBoss UI
    Layout: one calm centered column. The Buy screen is a conversation with Bhai where each answer reveals the next
-   question, then quotes, then approval. Palette from Indian goods-truck art: peacock teal, marigold, kraft-box brown. */
+   question, then quotes, then approval. */
+/* Kraft-paper beige with soft-orange headings: the colour of a corrugated box and its printed mark.
+   Body text is a deep cocoa (readable); soft orange carries headings, the brand and highlights.
+   Teal (--art) survives only inside the illustrations, as truck-art contrast. */
 :root{
-  --bg:#F2F6F5; --surface:#FFFFFF; --sunk:#E6EEEC; --ink:#13232A; --muted:#566A6F; --line:#D7E2DF;
-  --brand:#0B5D5E; --brand-deep:#084445; --brand-tint:#DCEFEC; --on-brand:#FFFFFF; --brand-text:#0B5D5E;
-  --accent:#F6A21C; --accent-lite:#FFC965; --accent-deep:#C77A00; --accent-tint:#FFF1D6; --on-accent:#2B1C00;
+  --bg:#F1E4CC; --surface:#FBF5EA; --sunk:#EADBC0; --ink:#3E2615; --muted:#7A5132; --line:#E0CBA6;
+  --head:#C25E1A; --brand:#B4501A; --brand-deep:#8F3F12; --brand-tint:#F8DFC4; --on-brand:#FFF8EE; --brand-text:#A54A10;
+  --accent:#F2A33A; --accent-lite:#FFC965; --accent-deep:#9A5A06; --accent-tint:#FCE9C6; --on-accent:#3E2615;
+  --art:#2C6E6A; --art-deep:#1F524F; --art-tint:#D9E8E2;
   --kraft:#DDBF8E; --kraft-dark:#B8925D; --glass:#CFE6EC;
-  --good:#16865A; --good-lite:#5CC08F; --good-tint:#DDF3E8; --warn:#A85A00; --warn-tint:#FFEBD0; --bad:#B93A2E; --bad-tint:#FBE3E0;
+  --good:#2E7A4C; --good-lite:#5CC08F; --good-tint:#E1F0DF; --warn:#9A5A06; --warn-tint:#FCE9C6; --bad:#B23A2B; --bad-tint:#F9DDD5;
   --skin:#C98B5E; --skin-shade:#A8704A; --hair:#2A2233; --blush:#E58E73; --white:#FFFFFF;
+  --paper:.07;
+  --lift:0 1px 2px rgba(98,52,16,.07),0 8px 22px rgba(98,52,16,.09);
   --f-display:"Baloo 2","Trebuchet MS",system-ui,sans-serif;
   --f-body:"Mukta","Segoe UI",system-ui,-apple-system,sans-serif;
   --r-lg:22px; --r:14px; --r-sm:10px;
-  --lift:0 1px 2px rgba(11,93,94,.06),0 6px 20px rgba(11,93,94,.07);
+  --ease:cubic-bezier(.2,.7,.2,1);
   color-scheme:light;
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
-  --bg:#0C1719; --surface:#132226; --sunk:#1A2D31; --ink:#E7F1EF; --muted:#9BB2B1; --line:#25393D;
-  --brand:#2FA3A0; --brand-deep:#7AD3CF; --brand-tint:#173C3D; --on-brand:#06201F; --brand-text:#6FD0CB;
+  --bg:#1C140E; --surface:#271C14; --sunk:#33251A; --ink:#F3E3CC; --muted:#C2A283; --line:#433122;
+  --head:#F2A65A; --brand:#E8823A; --brand-deep:#F5A160; --brand-tint:#3D2616; --on-brand:#1C140E; --brand-text:#F2A65A;
   --accent:#FFB23A; --accent-lite:#FFCF7A; --accent-deep:#E08F12; --accent-tint:#3A2A0E; --on-accent:#2B1C00;
+  --art:#4FA39D; --art-deep:#7AD3CF; --art-tint:#1E3533;
   --kraft:#C9A774; --kraft-dark:#9E7A48; --glass:#2D5560;
-  --good:#4CC98F; --good-lite:#7FDCAE; --good-tint:#123528; --warn:#FFAE55; --warn-tint:#3A260F; --bad:#FF8577; --bad-tint:#3E1C1A;
+  --good:#6FCF97; --good-lite:#7FDCAE; --good-tint:#16301F; --warn:#FFAE55; --warn-tint:#3A260F; --bad:#FF8C7A; --bad-tint:#3E1C1A;
   --hair:#1B1622; --white:#FFFFFF;
-  --lift:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.25);
+  --paper:.05;
+  --lift:0 1px 2px rgba(0,0,0,.35),0 8px 24px rgba(0,0,0,.3);
   color-scheme:dark}}
 :root[data-theme="dark"]{
-  --bg:#0C1719; --surface:#132226; --sunk:#1A2D31; --ink:#E7F1EF; --muted:#9BB2B1; --line:#25393D;
-  --brand:#2FA3A0; --brand-deep:#7AD3CF; --brand-tint:#173C3D; --on-brand:#06201F; --brand-text:#6FD0CB;
+  --bg:#1C140E; --surface:#271C14; --sunk:#33251A; --ink:#F3E3CC; --muted:#C2A283; --line:#433122;
+  --head:#F2A65A; --brand:#E8823A; --brand-deep:#F5A160; --brand-tint:#3D2616; --on-brand:#1C140E; --brand-text:#F2A65A;
   --accent:#FFB23A; --accent-lite:#FFCF7A; --accent-deep:#E08F12; --accent-tint:#3A2A0E; --on-accent:#2B1C00;
+  --art:#4FA39D; --art-deep:#7AD3CF; --art-tint:#1E3533;
   --kraft:#C9A774; --kraft-dark:#9E7A48; --glass:#2D5560;
-  --good:#4CC98F; --good-lite:#7FDCAE; --good-tint:#123528; --warn:#FFAE55; --warn-tint:#3A260F; --bad:#FF8577; --bad-tint:#3E1C1A;
+  --good:#6FCF97; --good-lite:#7FDCAE; --good-tint:#16301F; --warn:#FFAE55; --warn-tint:#3A260F; --bad:#FF8C7A; --bad-tint:#3E1C1A;
   --hair:#1B1622; --white:#FFFFFF;
-  --lift:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.25);
+  --paper:.05;
+  --lift:0 1px 2px rgba(0,0,0,.35),0 8px 24px rgba(0,0,0,.3);
   color-scheme:dark}
 
 /* drawing fills */
-.f-brand{fill:var(--brand)}.f-brand-deep{fill:var(--brand-deep)}.f-brand-tint{fill:var(--brand-tint)}
+.f-brand{fill:var(--art)}.f-brand-deep{fill:var(--art-deep)}.f-brand-tint{fill:var(--art-tint)}
 .f-accent{fill:var(--accent)}.f-accent-lite{fill:var(--accent-lite)}.f-accent-deep{fill:var(--accent-deep)}.f-accent-tint{fill:var(--accent-tint)}
 .f-kraft{fill:var(--kraft)}.f-kraft-dark{fill:var(--kraft-dark)}.f-glass{fill:var(--glass)}
 .f-good{fill:var(--good)}.f-good-lite{fill:var(--good-lite)}
 .f-skin{fill:var(--skin)}.f-sun{fill:#FFE7A6}.f-sun-core{fill:#FFC93F;opacity:.55}.f-shirt{fill:#1E1F25}.f-shirt-lite{fill:#34363F}.f-tee{fill:#2A2B33}
 .f-gold{fill:#F2B33D}.s-gold{stroke:#F2B33D}.s-gold-deep{stroke:#B97E0E}.f-lens{fill:#D92E46;opacity:.92}.f-stubble{fill:#2A2233;opacity:.2}.s-skin-shade{stroke:var(--skin-shade)}.f-skin-shade{fill:var(--skin-shade)}.f-hair{fill:var(--hair)}.f-blush{fill:var(--blush);opacity:.55}
 .f-ink{fill:#13232A}.f-white{fill:var(--white)}.f-surface{fill:var(--surface)}.f-sunk{fill:var(--sunk)}
-.s-brand-deep{stroke:var(--brand-deep)}.s-hair{stroke:var(--hair)}.s-ink{stroke:#13232A}.s-good{stroke:var(--good)}.s-muted{stroke:var(--muted)}
+.s-brand-deep{stroke:var(--art-deep)}.s-hair{stroke:var(--hair)}.s-ink{stroke:#13232A}.s-good{stroke:var(--good)}.s-muted{stroke:var(--muted)}
 .s-line{stroke:var(--line)}.s-accent{stroke:var(--accent)}.s-accent-deep{stroke:var(--accent-deep)}.s-white{stroke:var(--white)}.s-on-brand{stroke:var(--on-brand)}
-:root[data-theme="dark"] .s-brand-deep{stroke:#084445}
 
 *{box-sizing:border-box}
-html,body{background:var(--bg)}
+html{background:var(--bg)}
+body{background:transparent}
 body{margin:0;color:var(--ink);font-family:var(--f-body);font-size:17px;line-height:1.55;-webkit-font-smoothing:antialiased;padding-bottom:calc(76px + env(safe-area-inset-bottom,0px))}
 @media(min-width:760px){body{padding-bottom:0}}
 button,input,select,textarea{font:inherit;color:inherit}
@@ -457,3 +467,66 @@ tr.leaddetail td{background:var(--sunk)}
 .callnext span{color:var(--muted);font-size:14.5px;flex:1;min-width:160px}
 .usd{font-size:.42em;font-weight:600;color:var(--muted);letter-spacing:0;white-space:nowrap}
 .amt small.usd{font-size:12.5px;display:block}
+
+/* ===================== THEME: kraft paper, soft orange, smooth ===================== */
+/* Faint paper fibre behind everything, like the face of a carton. */
+body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;opacity:var(--paper);
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .35 0 0 0 0 .2 0 0 0 0 .08 0 0 0 1 0'/%3E%3C/filter%3E%3Crect width='220' height='220' filter='url(%23n)'/%3E%3C/svg%3E")}
+::selection{background:var(--accent-lite);color:var(--ink)}
+h1,h2,h3,.q-title,.price .total,.ohead .amt,.kpi b{color:var(--head)}
+.hello,.msg .by{color:var(--brand-text)}
+:root[data-theme="dark"] .hello,:root[data-theme="dark"] .msg .by{color:var(--brand-text)}
+.wordmark{color:var(--ink)}
+header.top{transition:box-shadow .25s var(--ease),background-color .25s}
+header.top.scrolled{box-shadow:0 6px 18px rgba(98,52,16,.08)}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+
+/* Every control answers a touch: colour eases, presses sink a little. */
+.btn,.chip,.cat,.ptile,.req,.try button,.tabs button,.bottomnav button,.seg button,.iconbtn,.rolecard,.link,.orow,.regionpick summary,.rp-menu button{
+  transition:background-color .18s var(--ease),border-color .18s var(--ease),color .18s var(--ease),box-shadow .18s var(--ease),transform .14s var(--ease)}
+.btn:active:not(:disabled),.chip:active,.cat:active,.ptile:active,.iconbtn:active,.rolecard:active,.try button:active,.bottomnav button:active{transform:scale(.97)}
+.btn.primary{box-shadow:0 2px 0 var(--brand-deep)}
+.btn.primary:active:not(:disabled){box-shadow:0 0 0 var(--brand-deep)}
+.btn{min-height:44px}.btn.sm{min-height:36px}.chip{min-height:40px}
+.iconbtn:hover{background:var(--brand-deep)}
+.cat:hover,.rolecard:hover{box-shadow:var(--lift)}
+.orow:hover{border-color:var(--brand)}
+.field input,.field select,.field textarea,.toolbar input,.qtyin{transition:border-color .18s var(--ease),box-shadow .18s var(--ease)}
+.askbox{transition:box-shadow .2s var(--ease)}
+
+/* Expanders open and close smoothly where the browser supports it; elsewhere they simply snap. */
+:root{interpolate-size:allow-keywords}
+details.more::details-content{block-size:0;overflow-y:clip;transition:block-size .28s var(--ease),content-visibility .28s allow-discrete}
+details.more[open]::details-content{block-size:auto}
+
+@media(prefers-reduced-motion:no-preference){
+  html{scroll-behavior:smooth}
+  .view.enter{animation:viewIn .24s var(--ease) both}
+  @keyframes viewIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .toast:not([hidden]){animation:toastIn .25s var(--ease) both}
+  @keyframes toastIn{from{opacity:0;transform:translate(-50%,10px)}to{opacity:1;transform:translateX(-50%)}}
+  .rp-menu{animation:viewIn .16s var(--ease) both}
+}
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{transition-duration:.01ms!important;animation-duration:.01ms!important}
+  details.more::details-content{transition:none}
+}
+/* Phone header: logo, region and Bhai must fit in one row without pushing the page sideways. */
+.topbar{min-width:0}.brand,.lockup{min-width:0}
+.tagline{overflow:hidden;text-overflow:ellipsis}
+@media(max-width:560px){
+  .topbar{gap:10px}
+  .bhai-status{padding:3px}.bhai-status span,.bhai-status i{display:none}
+  .wordmark{font-size:21px}.logo{width:34px;height:34px}
+}
+/* The scrolling "Try" row must not widen the hero column on phones. */
+.hero{grid-template-columns:minmax(0,1fr)}.hero>div{min-width:0}
+@media(min-width:860px){.hero{grid-template-columns:minmax(0,1.25fr) minmax(0,.75fr)}}
+/* Tablet: tabs and the header extras share one row, so the extras go compact. */
+@media(max-width:1020px){.regionpick .rp-long{display:none}.regionpick .rp-short{display:inline}.bhai-status span{display:none}.bhai-status{padding:3px 8px 3px 3px}}
+@media(min-width:760px) and (max-width:900px){.tagline{display:none}.tabs button{padding:8px 10px}}
+.seg{max-width:100%;overflow-x:auto;scrollbar-width:none}.seg::-webkit-scrollbar{display:none}
+.seg button{white-space:nowrap}
+@media(max-width:480px){.seg button{padding:7px 12px;font-size:15px}}
+@media(max-width:430px){.tagline{font-size:11.5px;overflow:visible;text-overflow:clip}}
+@media(max-width:350px){.tagline{display:none}}
