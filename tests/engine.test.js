@@ -132,6 +132,8 @@ test("outreach email: placeholders filled, opt-out and sender always present", (
   assert.match(m.text, /https:\/\/x\.test\/unsub/);
   assert.ok(!/\{\{/.test(m.subject + m.text));
   for (const t of C.OUTREACH_TEMPLATES) assert.match(t.body, /\{\{unsub_link\}\}/);
+  assert.strictEqual(C.outreachVars({ business: "Mh Exports", city: "Moradabad", product: "Moradabad (brassware/metal decor): metal", segment: "exporter" }, {}).product, "brassware");
+  assert.strictEqual(C.outreachVars({ business: "X", city: "Rudrapur", product: "3/5/7 ply corrugated boxes, printed", segment: "supplier" }, {}).product, "3/5/7 ply corrugated boxes");
 });
 test("sign-up validation", () => {
   const ok = C.normalizeJoin({ role: "supplier", business: "Rudrapur Cartons", name: "Amit", phone: "+91 98765 43210", city: "Rudrapur", cats: ["pack"], consent: true });
