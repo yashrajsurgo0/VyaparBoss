@@ -54,7 +54,7 @@ function applyParsed(p,base){
 function missing(r){const m=[];if(!r?.productId)m.push("product");if(!r?.qty)m.push("quantity");if(!r?.city)m.push("city");return m;}
 
 /* Prompts are shared by the browser (claude.ai artifact runtime) and the server (Anthropic API). */
-function buildParsePrompt(text,partial){
+function buildParsePrompt(text,partial,lang){
   const catalog=PRODUCTS.map(p=>`${p.id}: ${p.name} (${p.spec}; sold per ${p.unit}${p.unit!=="kg"?`, ~${p.kgPer} kg each`:""})`).join("\n");
   return `You are Bhai, the friendly buying assistant of VyaparBoss, an Indian B2B procurement platform for small businesses. You talk like a helpful elder brother at a trusted wholesale shop: warm, short, practical. Read the buyer's message (English, Hindi or Hinglish) and extract a structured purchase requirement.
 
@@ -69,7 +69,7 @@ Buyer message: """${String(text).slice(0,2000)}"""
 
 Reply with only this JSON object:
 {"product_id": string|null, "quantity": number|null, "unit": string|null, "city": string|null, "deadline_days": number|null, "notes": string, "reply": string}
-Rules: quantity is the number the buyer said and unit is the unit they used (kg, tonne, pcs, rolls, bags...). Keep the earlier values when the new message doesn't change them. deadline_days is days from today (a week = 7, kal = 1). If the city isn't in the list, use the nearest listed city and say so in notes. If no catalog product fits, product_id is null. notes: one short line of any spec details the buyer mentioned. reply: one short friendly sentence to the buyer, in the same language style they wrote in, that only restates what you understood or asks for what's missing (product, quantity or delivery city). Never promise availability, price, delivery time or that we "can arrange" anything: suppliers have not quoted yet.`;
+Rules: quantity is the number the buyer said and unit is the unit they used (kg, tonne, pcs, rolls, bags...). Keep the earlier values when the new message doesn't change them. deadline_days is days from today (a week = 7, kal = 1). If the city isn't in the list, use the nearest listed city and say so in notes. If no catalog product fits, product_id is null. notes: one short line of any spec details the buyer mentioned. reply: one short friendly sentence to the buyer, ${lang==="en"?"in plain English with no Hindi words":"in the same language style they wrote in"}, that only restates what you understood or asks for what's missing (product, quantity or delivery city). Never promise availability, price, delivery time or that we "can arrange" anything: suppliers have not quoted yet.`;
 }
 function buildReplyPrompt(r,s,mine){
   const p=PMAP[r.productId];

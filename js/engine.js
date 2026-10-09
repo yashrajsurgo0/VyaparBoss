@@ -161,17 +161,27 @@ function renderOutreach(tplId,lead,ctx){
   const v=outreachVars(lead,ctx);return {to:lead.email,subject:fillTemplate(t.subject,v),text:fillTemplate(t.body,v)};
 }
 /* WhatsApp opener and call script for a lead, in the same honest voice as the emails. */
-function renderWhatsAppPitch(lead,ctx){return fillTemplate(WA_TEMPLATES[lead.segment==="supplier"?"supplier":"exporter"],outreachVars(lead,ctx));}
-function renderCallScript(lead,ctx){const v=outreachVars(lead,ctx);return CALL_SCRIPTS[lead.segment==="supplier"?"supplier":"exporter"].map(l=>fillTemplate(l,v));}
+function renderWhatsAppPitch(lead,ctx){
+  const msg=fillTemplate(WA_TEMPLATES[lead.segment==="supplier"?"supplier":"exporter"],outreachVars(lead,ctx));
+  return lead.lastEmailed?msg.replace(/^(Namaste [^,]+,)/,`$1 maine ${dstr(lead.lastEmailed)} ko email bhi bheja tha.`):msg;
+}
+function renderCallScript(lead,ctx){
+  const v=outreachVars(lead,ctx);const lines=CALL_SCRIPTS[lead.segment==="supplier"?"supplier":"exporter"].map(l=>fillTemplate(l,v));
+  if(lead.lastEmailed)lines.splice(1,0,`Maine ${dstr(lead.lastEmailed)} ko aapko VyaparBoss ke baare mein email bheja tha. Kya aapne dekha? Ek minute mein bata deta hoon.`);
+  return lines;
+}
 /* Self-serve sign-up from the public "Join" page. role: supplier | buyer. */
 function normalizeJoin(x){
   x=x||{};const str=(v,n)=>String(v??"").trim().slice(0,n);const errors=[];
-  const a={role:x.role==="buyer"?"buyer":"supplier",business:str(x.business,100),name:str(x.name,80),phone:phoneDigits(x.phone),email:str(x.email,120).toLowerCase(),
+  // Global buyers give an international number with country code; Indian numbers are stored as 10 digits.
+  const intl=x.region==="global"&&/^\s*(\+|00)/.test(String(x.phone||""))&&!/^\s*(\+|00)\s*91/.test(String(x.phone||""));
+  const a={role:x.role==="buyer"?"buyer":"supplier",region:x.region==="global"?"global":"in",business:str(x.business,100),name:str(x.name,80),
+    phone:intl?"+"+String(x.phone).replace(/\D/g,"").replace(/^00/,""):phoneDigits(x.phone),email:str(x.email,120).toLowerCase(),
     city:str(x.city,60),cats:(Array.isArray(x.cats)?x.cats:[]).filter(c=>CATS[c]).slice(0,3),what:str(x.what,300),gstin:str(x.gstin,15).toUpperCase(),
     monthly:MONTHLY_BANDS.includes(x.monthly)?x.monthly:"",exports:EXPORT_STAGES.includes(x.exports)?x.exports:"",ref:str(x.ref,40)};
   if(a.business.length<2)errors.push("Enter your business name");
   if(a.name.length<2)errors.push("Enter your name");
-  if(!/^[6-9]\d{9}$/.test(a.phone))errors.push("Enter a 10-digit mobile number");
+  if(intl?!/^\+\d{8,15}$/.test(a.phone):!/^[6-9]\d{9}$/.test(a.phone))errors.push(intl?"Enter your number with country code, e.g. +1 555 123 4567":a.region==="global"?"Enter a 10-digit Indian mobile, or your number with country code (+…)":"Enter a 10-digit mobile number");
   if(a.email&&!isEmail(a.email))errors.push("That email doesn't look right");
   if(a.city.length<2)errors.push("Enter your city");
   if(!a.cats.length&&a.what.length<3)errors.push(a.role==="supplier"?"Tell us what you make or sell":"Tell us what you buy");

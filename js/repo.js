@@ -89,7 +89,7 @@ const Repo={
     if(this.mode==="server")await this.api("PUT","api/settings",{useSamples:!!v});else this.saveLocal();
   },
   /* Server-side Claude (Anthropic API). Only call when info.ai is true. */
-  async parse(text,partial){return this.api("POST","api/parse",{text,partial});},
+  async parse(text,partial,lang){return this.api("POST","api/parse",{text,partial,lang});},
   async draft(rfqId,sid){return this.api("POST","api/draft",{rfqId,sid});},
   /* WhatsApp intake (server only) */
   async waLog(){return this.api("GET","api/whatsapp/log");},
@@ -122,7 +122,9 @@ const Repo={
   async updateLead(id,patch){
     if(this.ops)return this.api("PATCH","api/admin/leads/"+encodeURIComponent(id),patch);
     const o=await this.leads();const l=o.leads.find(x=>x.id===id);
-    if(l){const {contacted,...rest}=patch;Object.assign(l,rest);if(contacted){l.lastContacted=Date.now();if(l.status==="new")l.status="contacted";}}
+    if(l){const {contacted,emailed,template,...rest}=patch;Object.assign(l,rest);
+      if(contacted){l.lastContacted=Date.now();if(l.status==="new")l.status="contacted";}
+      if(emailed){l.lastEmailed=Date.now();if(["new","contacted"].includes(l.status))l.status="emailed";l.sends=(l.sends||[]).concat({t:template||"manual",at:Date.now()}).slice(-10);}}
     this.saveLocalLeads(o);return l;
   },
   async deleteLead(id){

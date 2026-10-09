@@ -26,7 +26,7 @@ const pubShell=(inner)=>`<div class="pubwrap">${inner}<p class="pubfoot">VyaparB
 function renderJoin(){
   const el=$("#v-public");el.hidden=false;
   if(pub.sent){
-    el.innerHTML=pubShell(`<div class="card done">${ico("art-done","art")}<h2>Shukriya! You're on the list.</h2>
+    el.innerHTML=pubShell(`<div class="card done">${ico("art-done","art")}<h2>${esc(t("thanks"))}</h2>
       <p>${pub.role==="supplier"?"We'll call or WhatsApp you to add your rates and products. After that, you'll get buyer requests that match what you make, where you deliver."
         :"We'll call or WhatsApp you to understand what you buy. Meanwhile, you can try Bhai right now."}</p>
       <p class="hint">Sign-up number <b class="num">${esc(pub.sent)}</b></p>
@@ -40,9 +40,9 @@ function renderJoin(){
     form=`<form class="card joinform" data-form="join" novalidate>
       <p class="q-title">${sup?"Tell us about your business":"Tell us about your buying"}</p>
       <div class="fields">
-        <div class="field wide"><label for="jBiz">Business name</label><input id="jBiz" autocomplete="organization" placeholder="${sup?"e.g. Shree Ganesh Corrugators":"e.g. Moradabad Brass Exports"}"></div>
+        <div class="field wide"><label for="jBiz">Business name</label><input id="jBiz" autocomplete="organization" placeholder="${sup?"e.g. Shree Ganesh Corrugators":isGlobal()?"e.g. Lyon Home Decor":"e.g. Moradabad Brass Exports"}"></div>
         <div class="field"><label for="jName">Your name</label><input id="jName" autocomplete="name"></div>
-        <div class="field"><label for="jPhone">WhatsApp number</label><input id="jPhone" inputmode="tel" autocomplete="tel" placeholder="98xxxxxxxx"></div>
+        <div class="field"><label for="jPhone">WhatsApp number</label><input id="jPhone" inputmode="tel" autocomplete="tel" placeholder="${isGlobal()&&!sup?"+1 555 123 4567, with country code":"98xxxxxxxx"}"></div>
         <div class="field"><label for="jCity">City</label><input id="jCity" list="jCities" autocomplete="address-level2"><datalist id="jCities">${Object.keys(CITIES).sort().map(c=>`<option value="${c}">`).join("")}</datalist></div>
       </div>
       <p class="q-sub">${sup?"What do you make or sell?":"What do you buy regularly?"}</p>
@@ -70,10 +70,10 @@ function renderJoin(){
     </form>`;
   }
   el.innerHTML=pubShell(`<section class="pubhero">
-      <div><p class="hello">Namaste! Main Bhai hoon.</p><h1>${pub.role==="supplier"?"Buyers, without the lead packages.":pub.role==="buyer"?"Buy smarter, delivered.":"Join VyaparBoss, free."}</h1>
+      <div><p class="hello">${esc(t("hello"))}</p><h1>${pub.role==="supplier"?"Buyers, without the lead packages.":pub.role==="buyer"?"Buy smarter, delivered.":"Join VyaparBoss, free."}</h1>
       <p class="lede">${pub.role==="supplier"?"List free. Get only requests you can actually serve. Pay a small fee only when an order closes."
-        :pub.role==="buyer"?"Tell Bhai what you need. Compare verified suppliers on the full delivered price. Nothing is ordered until you approve."
-        :"Vyapar bada, jhanjhat chhota! Pick one to start."}</p></div>
+        :pub.role==="buyer"?(isGlobal()?t("buyerLede"):"Tell Bhai what you need. Compare verified suppliers on the full delivered price. Nothing is ordered until you approve.")
+        :t("tagline")+" Pick one to start."}</p></div>
       <svg class="bhai-l" role="img" aria-label="Bhai"><use href="#bhai"/></svg></section>
     <div class="roles">${roleBtn("supplier","I make or sell","Manufacturers, traders, distributors","art-shop")}${roleBtn("buyer","I buy for my business","Factories, exporters, traders","art-truck")}</div>
     ${form}`);
@@ -82,7 +82,7 @@ function readJoin(){
   const g=id=>document.getElementById(id)?.value??"";
   pub.ratesOpen=!!document.querySelector("[data-rates]")?.open;
   return {offers:[0,1].map(i=>({p:g("jP"+i),tiersText:g("jT"+i),cap:g("jC"+i)})),coverage:g("jCov"),lead:g("jLead"),role:pub.role,business:g("jBiz"),name:g("jName"),phone:g("jPhone"),city:g("jCity").trim(),what:g("jWhat"),email:g("jEmail"),gstin:g("jGst"),
-    cats:pub.cats,exports:pub.exports||"",monthly:pub.monthly||"",ref:pub.ref,consent:!!document.getElementById("jOk")?.checked,company_site:g("jHp")};
+    region:LOCALE.region,cats:pub.cats,exports:pub.exports||"",monthly:pub.monthly||"",ref:pub.ref,consent:!!document.getElementById("jOk")?.checked,company_site:g("jHp")};
 }
 let joinDraft=null;
 function keepJoin(){joinDraft=readJoin();}
@@ -104,7 +104,7 @@ function renderQuotePage(){
   if(pub.busy&&!pub.q){el.innerHTML=pubShell(`<div class="card"><p>Loading the request…</p>${Repo.mode!=="server"?`<p class="hint">The server may take up to a minute to wake up.</p>`:""}</div>`);return;}
   if(!pub.q){el.innerHTML=pubShell(`<div class="card"><h2>Hmm.</h2><p>${esc(pub.err[0]||"")}</p></div>`);return;}
   const {rfq,supplier,rateCard,quote}=pub.q;const one=unitOne(rfq.unit);
-  const head=`<section class="pubhero"><div><p class="hello">Namaste, ${esc(supplier.name)}!</p><h1>A buyer needs a quote.</h1>
+  const head=`<section class="pubhero"><div><p class="hello">${esc(t("helloName",{name:supplier.name}))}</p><h1>A buyer needs a quote.</h1>
     <p class="lede">Send your own price. The buyer sees your delivered price (your rate + GST + freight) next to other suppliers. Nothing is final until the buyer approves and you confirm the order.</p></div>
     <svg class="bhai-l" role="img" aria-label="Bhai"><use href="#bhai"/></svg></section>`;
   const req=`<div class="card"><p class="q-title">Request ${esc(rfq.id)}</p><dl class="summary">
@@ -168,7 +168,7 @@ async function renderApps(){
     <div class="ohead"><div><h3>${esc(a.business)}</h3><p class="meta">${a.role==="supplier"?"Supplier":"Buyer"} · ${esc(a.city)} · ${dstr(a.at)}${a.ref?` · from outreach`:""}</p></div><span class="pill ${statusPill[a.status]}">${esc(a.status)}</span></div>
     <p>${a.cats.map(c=>`<span class="tag">${esc(CATS[c])}</span>`).join(" ")} ${esc(a.what)}</p>
     ${a.offers?.length?`<ul class="plist">${a.offers.map(o=>`<li><span>${esc(PMAP[o.p]?.name||o.p)}</span><span>${esc(tiersText(o.tiers))}, up to ${qfmt(o.cap)}</span></li>`).join("")}</ul><p class="hint">${a.coverage?`Delivers up to ${qfmt(a.coverage)} km. `:""}${a.lead?`Ready in ${a.lead} days.`:""}</p>`:""}
-    <p class="hint">${esc(a.name)} · <a href="https://wa.me/91${esc(a.phone)}" target="_blank" rel="noopener">WhatsApp +91 ${esc(a.phone)}</a>${a.email?` · <a href="mailto:${esc(a.email)}">${esc(a.email)}</a>`:""}${a.gstin?` · GSTIN <span class="num">${esc(a.gstin)}</span>`:""}${a.exports?` · ${esc(a.exports)}`:""}${a.monthly?` · ${esc(a.monthly)}/month`:""}</p>
+    <p class="hint">${esc(a.name)} · <a href="https://wa.me/${a.phone.startsWith("+")?esc(a.phone.slice(1)):"91"+esc(a.phone)}" target="_blank" rel="noopener">WhatsApp ${a.phone.startsWith("+")?esc(a.phone):"+91 "+esc(a.phone)}</a>${a.region==="global"?` <span class="pill">Global</span>`:""}${a.email?` · <a href="mailto:${esc(a.email)}">${esc(a.email)}</a>`:""}${a.gstin?` · GSTIN <span class="num">${esc(a.gstin)}</span>`:""}${a.exports?` · ${esc(a.exports)}`:""}${a.monthly?` · ${esc(a.monthly)}/month`:""}</p>
     <div class="actions">${a.role==="supplier"&&a.status!=="onboarded"?`<button class="btn sm primary" data-action="app-onboard" data-id="${esc(a.id)}">Add as supplier</button>`:""}
       ${a.status==="new"?`<button class="btn sm" data-action="app-status" data-id="${esc(a.id)}" data-v="contacted">Mark called</button>`:""}
       ${a.role==="buyer"&&a.status!=="onboarded"?`<button class="btn sm" data-action="app-status" data-id="${esc(a.id)}" data-v="onboarded">Active buyer</button>`:""}
@@ -179,19 +179,21 @@ function onboardFromApp(id){
   const a=appsCache?.find(x=>x.id===id);if(!a)return;
   showSupplierView("network");openSupplierForm(null);sf.appId=a.id;
   if(a.offers?.length)sf.offers=a.offers.map(o=>({p:o.p,tiersText:tiersText(o.tiers),cap:o.cap}));
-  renderSupplierForm({name:a.business,city:CITIES[a.city]?a.city:"",gstin:a.gstin,contact:"+91 "+a.phone,terms:"",coverage:a.coverage??500,lead:a.lead??2});
+  renderSupplierForm({name:a.business,city:CITIES[a.city]?a.city:"",gstin:a.gstin,contact:a.phone.startsWith("+")?a.phone:"+91 "+a.phone,terms:"",coverage:a.coverage??500,lead:a.lead??2});
   toast(a.offers?.length?"Their rates are filled in. Check them, then save.":"Fill in their rates and delivery range, then save.");
 }
 
 /* ===================== OUTREACH (Insights tab) ===================== */
-let out={data:null,filter:"all",status:"new",reach:"any",open:null,q:"",sel:new Set(),tpl:"supplier_free",result:null,armed:false,busy:false};
+let out={data:null,filter:"all",status:"new",reach:"email",open:null,q:"",sel:new Set(),tpl:"supplier_free",result:null,armed:false,busy:false};
 async function renderOutreachView(){
   const el=$("#outreachBox");
   const gate=opsGate("Outreach uses your lead lists and sends email in your name.");if(gate){el.innerHTML=gate;return;}
   try{out.data=await Repo.leads();}catch(e){return opsError(e,el,renderOutreachView);}
   const {leads,outreach:o}=out.data;const st=o.settings||{};
   const reachOk=l=>out.reach==="any"||(out.reach==="email"?!!l.email:out.reach==="whatsapp"?!!mobileOf(l.phone)&&!/indiamart/i.test(l.source)&&!/\bPNS\b/.test(l.notes):!!l.phone&&!l.email);
-  const shown=leads.filter(l=>(out.filter==="all"||l.segment===out.filter)&&(out.status==="all"||l.status===out.status)&&reachOk(l)
+  const due=leads.filter(callDue);
+  const statusOk=l=>out.status==="all"||(out.status==="due"?callDue(l):l.status===out.status);
+  const shown=leads.filter(l=>(out.filter==="all"||l.segment===out.filter)&&statusOk(l)&&(out.status==="due"||reachOk(l))
     &&(!out.q||(l.business+" "+l.city+" "+l.product).toLowerCase().includes(out.q)));
   for(const id of [...out.sel])if(!leads.some(l=>l.id===id))out.sel.delete(id);
   const n=out.sel.size,first=leads.find(l=>out.sel.has(l.id))||shown[0];
@@ -220,13 +222,14 @@ async function renderOutreachView(){
   </div>
   <div class="panel pad">
     <h3>2. Leads <span class="muted" style="font-weight:400">${leads.length} total · ${counts("new")} new · ${counts("contacted")+counts("emailed")} reached · ${counts("replied")} replied · ${counts("joined")} joined</span></h3>
-    <p class="hint">Phone first: WhatsApp or call the best 20 in a cluster, then email the rest. Tap a business name for the call script and notes.</p>
+    <p class="hint"><b>Email first, then call.</b> Email a batch today. Four days later, the ones who haven't replied show up under "Call next": WhatsApp or call them with the script (tap a business name), and note what they said.</p>
+    ${due.length?`<div class="callnext"><b>${due.length} lead${due.length>1?"s":""} to call next</b><span>Emailed 4+ days ago, no reply yet.</span><button class="btn sm marigold" data-action="o-due">Show them</button></div>`:""}
     <div class="toolbar"><label class="btn sm">${ico("i-plus")}Import CSV<input type="file" id="leadFile" accept=".csv,text/csv" hidden></label>
       <span class="hint">Columns like business_name, city, email, phone, products, segment. Duplicates are skipped.</span></div>
     ${leads.length?`<div class="toolbar">
       <div class="chips">${[["all","All"],["supplier","Suppliers"],["exporter","Exporters"]].map(([k,l])=>`<button class="chip" data-action="o-filter" data-v="${k}" aria-pressed="${out.filter===k}">${l}</button>`).join("")}</div>
       <select id="oReach" aria-label="How to reach">${[["any","Any contact"],["whatsapp","Has WhatsApp-able mobile"],["email","Has email"],["phone","Phone only"]].map(([k,t])=>`<option value="${k}" ${out.reach===k?"selected":""}>${t}</option>`).join("")}</select>
-      <select id="oStatus" aria-label="Status">${["all",...LEAD_STATUSES].map(s=>`<option value="${s}" ${out.status===s?"selected":""}>${s==="all"?"Any status":s.replace("_"," ")}</option>`).join("")}</select>
+      <select id="oStatus" aria-label="Status">${["all","due",...LEAD_STATUSES].map(s=>`<option value="${s}" ${out.status===s?"selected":""}>${s==="all"?"Any status":s==="due"?`Call next (${due.length})`:s.replace("_"," ")}</option>`).join("")}</select>
       <input id="oSearch" type="search" placeholder="Search" value="${esc(out.q)}" aria-label="Search leads">
     </div>
     <div class="tablewrap"><table class="cmp leads"><thead><tr><th><input type="checkbox" id="oAll" aria-label="Select all shown with email" ${shown.length&&shown.filter(l=>l.email).every(l=>out.sel.has(l.id))?"checked":""}></th><th>Business</th><th>City</th><th>Product</th><th>Reach</th><th>Status</th></tr></thead><tbody>
@@ -244,6 +247,7 @@ async function renderOutreachView(){
     <div class="actions">
       ${canSend?`<button class="btn ${out.armed?"danger":"primary"}" data-action="o-send" ${n&&!out.busy?"":"disabled"}>${out.busy?"Sending…":out.armed?`Yes, send ${n} email${n>1?"s":""}`:`Send to ${n||"selected"}`}</button>`:""}
       <button class="btn" data-action="o-export" ${n?"":"disabled"}>Download for mail merge</button>
+      ${out.exported?`<button class="btn marigold" data-action="o-mark-emailed">I've sent them: mark ${out.exported.length} as emailed</button>`:""}
     </div>
     <p class="hint">${canSend?`Sends from ${esc(o.from)}. Daily limit ${o.cap}; ${Math.max(0,o.cap-o.sentToday)} left today. Skips unsubscribed leads, people who already got this email, and anyone emailed in the last 3 days.`
       :Repo.mode==="server"?"Sending isn't switched on yet: add EMAIL_PROVIDER, EMAIL_API_KEY and OUTREACH_FROM_EMAIL on the server. Meanwhile, download the CSV and use a Gmail mail-merge add-on."
@@ -251,6 +255,8 @@ async function renderOutreachView(){
     ${out.result?`<div class="negres">${out.result}</div>`:""}
   </div>`;
 }
+/* Emailed 4+ days ago and no reply yet: time to call or WhatsApp. */
+const callDue=l=>l.status==="emailed"&&l.lastEmailed&&Date.now()-l.lastEmailed>=4*864e5&&(!l.lastContacted||l.lastContacted<l.lastEmailed);
 /* Opening WhatsApp or the dialer counts as contact; the status moves new → contacted. The message itself is sent by you. */
 function markContacted(id){Repo.updateLead(id,{contacted:true}).then(()=>{const l=out.data?.leads.find(x=>x.id===id);if(l){l.lastContacted=Date.now();if(l.status==="new")l.status="contacted";}setTimeout(renderOutreachView,400);}).catch(fail);}
 async function importLeadFile(file){
@@ -266,6 +272,7 @@ function exportMailMerge(){
   const rows=leads.filter(l=>out.sel.has(l.id)&&l.email).map(l=>{const m=renderOutreach(out.tpl,l,{senderName:st.senderName,senderAddress:st.senderAddress,joinBase:base,
     unsubLink:()=>"Reply \"unsubscribe\" and we won't write again."});return {email:l.email,business:l.business,city:l.city,subject:m.subject,body:m.text};});
   download(`vyaparboss-outreach-${out.tpl}.csv`,toCSV(rows,["email","business","city","subject","body"]));
+  out.exported=leads.filter(l=>out.sel.has(l.id)&&l.email).map(l=>l.id);out.exportedTpl=out.tpl;renderOutreachView();
   toast(`${rows.length} emails ready. Mark them "emailed" after you send.`);
 }
 function download(name,text){
@@ -327,6 +334,9 @@ Object.assign(ACTIONS,{
   "o-call":a=>{location.href=a.href;markContacted(a.dataset.id);},
   "o-settings":()=>Repo.saveOutreachSettings({senderName:$("#oName").value,senderAddress:$("#oAddr").value}).then(()=>{toast("Saved");renderOutreachView();}).catch(fail),
   "o-export":()=>exportMailMerge(),
+  "o-due":()=>{out.status="due";out.filter="all";renderOutreachView();},
+  "o-mark-emailed":()=>{const ids=out.exported||[];Promise.all(ids.map(id=>Repo.updateLead(id,{emailed:true,template:out.exportedTpl})))
+    .then(()=>{toast(`Marked ${ids.length} as emailed. They'll show under "Call next" in 4 days if they don't reply.`);out.exported=null;out.sel.clear();renderOutreachView();}).catch(fail);},
   "o-send":a=>sendOutreach(a),
   "inv-send":()=>createInvites(),
   "inv-refresh":()=>{Repo.refresh().then(()=>Repo.invites(flow.r.id)).then(l=>{inv.list=l;renderBuy();toast(l.some(i=>i.quote)?"Quotes updated":"No new quotes yet");}).catch(fail);},

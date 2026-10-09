@@ -3,7 +3,7 @@
 const CATS={pack:"Packaging",ind:"Industrial consumables",agri:"Agri inputs"};
 const PRODUCTS=[
  {id:"box3",cat:"pack",name:"Corrugated box, 3-ply",spec:"Brown kraft, 12×10×8 in, 150 GSM",unit:"pcs",kgPer:0.28,hsn:"4819",gst:5,keys:["3 ply","3-ply","3ply","corrugated","carton","cartons","box","boxes","dabba","dabbe","gatta"]},
- {id:"box5",cat:"pack",name:"Corrugated box, 5-ply export",spec:"18×12×12 in, bursting strength 12 kg/cm²",unit:"pcs",kgPer:0.6,hsn:"4819",gst:5,keys:["5 ply","5-ply","5ply","export box","export boxes","heavy box","heavy boxes"]},
+ {id:"box5",cat:"pack",name:"Corrugated box, 5-ply export",spec:"18×12×12 in, bursting strength 12 kg/cm²",unit:"pcs",kgPer:0.6,hsn:"4819",gst:5,keys:["5 ply","5-ply","5ply","export box","export boxes","export carton","export cartons","export packaging","heavy box","heavy boxes"]},
  {id:"ldpe",cat:"pack",name:"Food-grade LDPE film",spec:"50 micron virgin LDPE, food-contact grade",unit:"kg",kgPer:1,hsn:"3920",gst:18,keys:["food grade","food-grade","ldpe","packaging film","food packaging","packaging material","plastic film","poly film","pouch"]},
  {id:"tape",cat:"pack",name:"BOPP tape 48 mm × 65 m",spec:"Transparent, 40 micron",unit:"rolls",kgPer:0.2,hsn:"3919",gst:18,keys:["tape","bopp","cello tape","packing tape"]},
  {id:"stretch",cat:"pack",name:"Stretch wrap film",spec:"23 micron, 500 mm cast LLDPE",unit:"kg",kgPer:1,hsn:"3920",gst:18,keys:["stretch","stretch film","wrap film","pallet wrap"]},
@@ -30,9 +30,10 @@ const CITIES={
  "Moradabad":[28.84,78.77,"UP"],"Kanpur":[26.45,80.33,"UP"],"Agra":[27.18,78.01,"UP"],"Firozabad":[27.15,78.40,"UP"],"Saharanpur":[29.96,77.55,"UP"],"Meerut":[28.98,77.71,"UP"],"Bhadohi":[25.40,82.57,"UP"],"Varanasi":[25.32,82.97,"UP"],
  "Panipat":[29.39,76.97,"HR"],"Jalandhar":[31.33,75.58,"PB"],"Jodhpur":[26.24,73.02,"RJ"],"Udaipur":[24.59,73.71,"RJ"],"Rudrapur":[28.98,79.40,"UK"],"Haridwar":[29.95,78.16,"UK"],"Baddi":[30.96,76.79,"HP"],
  "Tiruppur":[11.11,77.34,"TN"],"Karur":[10.96,78.08,"TN"],"Erode":[11.34,77.72,"TN"],"Salem":[11.66,78.15,"TN"],"Hosur":[12.74,77.83,"TN"],"Vaniyambadi":[12.68,78.62,"TN"],"Guntur":[16.31,80.44,"AP"],
+ "Nhava Sheva":[18.95,72.95,"MH"],"Mundra":[22.84,69.72,"GJ"],"Tuticorin":[8.76,78.13,"TN"],"Visakhapatnam":[17.69,83.22,"AP"],
  "Bengaluru":[12.97,77.59,"KA"],"Chennai":[13.08,80.27,"TN"],"Coimbatore":[11.02,76.96,"TN"],"Hyderabad":[17.39,78.49,"TS"],"Kolkata":[22.57,88.36,"WB"],"Kochi":[9.93,76.27,"KL"]
 };
-const ALIASES={bangalore:"Bengaluru",bengaluru:"Bengaluru",gurgaon:"Gurugram","new delhi":"Delhi",ncr:"Delhi",dilli:"Delhi",bombay:"Mumbai",calcutta:"Kolkata",madras:"Chennai",cochin:"Kochi",ambattur:"Chennai",vatva:"Ahmedabad",peenya:"Bengaluru",narela:"Delhi",pimpri:"Pune","chhatrapati sambhajinagar":"Aurangabad",baroda:"Vadodara",morvi:"Morbi",tirupur:"Tiruppur",benares:"Varanasi",banaras:"Varanasi",kashi:"Varanasi","sant ravidas nagar":"Bhadohi",dadra:"Silvassa"};
+const ALIASES={bangalore:"Bengaluru",bengaluru:"Bengaluru",gurgaon:"Gurugram","new delhi":"Delhi",ncr:"Delhi",dilli:"Delhi",bombay:"Mumbai",calcutta:"Kolkata",madras:"Chennai",cochin:"Kochi",ambattur:"Chennai",vatva:"Ahmedabad",peenya:"Bengaluru",narela:"Delhi",pimpri:"Pune","chhatrapati sambhajinagar":"Aurangabad",baroda:"Vadodara",morvi:"Morbi",tirupur:"Tiruppur",benares:"Varanasi",banaras:"Varanasi",kashi:"Varanasi","sant ravidas nagar":"Bhadohi",dadra:"Silvassa",jnpt:"Nhava Sheva","jawaharlal nehru port":"Nhava Sheva","nhava sheva port":"Nhava Sheva",thoothukudi:"Tuticorin",vizag:"Visakhapatnam"};
 
 const S=(id,name,city,area,gstin,o)=>({id,name,city,area,gstin,...o});
 const SAMPLE_SUPPLIERS=[
