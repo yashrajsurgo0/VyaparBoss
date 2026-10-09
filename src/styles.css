@@ -138,8 +138,8 @@ main{padding-block:24px 40px}
 .bhai-says{position:relative;background:var(--surface);border:1.5px solid var(--line);border-radius:18px;padding:10px 16px;font-family:var(--f-display);font-weight:700;font-size:18px;line-height:1.2;box-shadow:var(--lift);max-width:220px}
 .bhai-says::after{content:"";position:absolute;width:14px;height:14px;background:var(--surface);border:1.5px solid var(--line);border-top:0;border-right:0;left:-8px;top:50%;transform:translateY(-50%) rotate(45deg)}
 @media(min-width:860px){.bhai-says{font-size:21px;max-width:260px;text-align:center}.bhai-says::after{left:50%;top:auto;bottom:-8px;transform:translateX(-50%) rotate(-45deg)}}
-.bhai-xl{width:clamp(110px,26vw,320px);height:auto;aspect-ratio:200/180}
-@media(max-width:859px){.bhai-xl{width:118px}.hero{gap:14px}}
+.bhai-xl{width:clamp(104px,24vw,290px);height:auto;aspect-ratio:1}
+@media(max-width:859px){.bhai-xl{width:104px}.hero{gap:14px}}
 .hello{font-family:var(--f-display);font-weight:700;font-size:20px;color:var(--accent-deep);margin-bottom:6px}
 :root[data-theme="dark"] .hello{color:var(--accent)}
 .hero h1{font-size:clamp(34px,6vw,58px);font-weight:800;line-height:1.02;letter-spacing:-.02em}
