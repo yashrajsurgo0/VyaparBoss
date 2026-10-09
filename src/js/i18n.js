@@ -99,11 +99,13 @@ function detectLocale(){
   return "in_hi";
 }
 let LOCALE=LOCALES[detectLocale()];
-/* Appearance: beige (light) is the house look for everyone; dark only when someone picks it. */
+/* Appearance: beige (light) is the house look for everyone; dark only when someone picks it.
+   Uses data-look, not data-theme or prefers-color-scheme, so neither the device's dark mode
+   nor a host page (e.g. claude.ai) can switch the site to dark. */
 const THEME_KEY="vyaparboss.v1.theme";
 let THEME=(()=>{try{return localStorage.getItem(THEME_KEY)==="dark"?"dark":"light";}catch(e){return "light";}})();
 function applyTheme(){
-  try{document.documentElement.dataset.theme=THEME;const m=document.querySelector('meta[name="theme-color"]');if(m)m.content=THEME==="dark"?"#1C140E":"#F1E4CC";}catch(e){}
+  try{document.documentElement.dataset.look=THEME;const m=document.querySelector('meta[name="theme-color"]');if(m)m.content=THEME==="dark"?"#1C140E":"#F1E4CC";}catch(e){}
 }
 function setTheme(v){THEME=v==="dark"?"dark":"light";try{localStorage.setItem(THEME_KEY,THEME);}catch(e){}applyTheme();renderRegionPicker();}
 applyTheme();
