@@ -2,6 +2,8 @@
    "server": the VyaparBoss backend (npm start) is reachable at api/* → shared data, Claude via the Anthropic API, WhatsApp.
    "local":  opened as a static page (GitHub Pages, file://, claude.ai) → data stays in this browser's localStorage. */
 const KEY="vyaparboss.v1";
+/* The always-on server. The static copy (GitHub Pages) sends sign-ups and supplier quotes here. */
+const LIVE_API="https://vyaparboss.onrender.com/";
 const Repo={
   mode:"local",
   info:{ai:false,whatsapp:false,model:null},
@@ -25,10 +27,14 @@ const Repo={
     setSuppliers(this.data.suppliers,this.data.useSamples);
   },
   saveLocal(){try{localStorage.setItem(KEY,JSON.stringify(this.data));}catch(e){}},
-  async api(method,path,body){
-    const r=await fetch(path,{method,headers:body?{"content-type":"application/json"}:{},body:body?JSON.stringify(body):undefined});
+  adminKey:(()=>{try{return sessionStorage.getItem(KEY+".admin")||"";}catch(e){return "";}})(),
+  setAdminKey(k){this.adminKey=k||"";try{k?sessionStorage.setItem(KEY+".admin",k):sessionStorage.removeItem(KEY+".admin");}catch(e){}},
+  async api(method,path,body,base=""){
+    const headers=body?{"content-type":"application/json"}:{};
+    if(this.adminKey&&path.startsWith("api/admin"))headers["x-admin-key"]=this.adminKey;
+    const r=await fetch(base+path,{method,headers,body:body?JSON.stringify(body):undefined});
     const j=await r.json().catch(()=>({}));
-    if(!r.ok)throw new Error(j.error||`Server error ${r.status}`);
+    if(!r.ok)throw Object.assign(new Error(j.error||`Server error ${r.status}`),{status:r.status});
     return j;
   },
   async refresh(){
@@ -87,5 +93,43 @@ const Repo={
   async draft(rfqId,sid){return this.api("POST","api/draft",{rfqId,sid});},
   /* WhatsApp intake (server only) */
   async waLog(){return this.api("GET","api/whatsapp/log");},
-  async waSimulate(from,text){return this.api("POST","api/whatsapp/simulate",{from,text});}
+  async waSimulate(from,text){return this.api("POST","api/whatsapp/simulate",{from,text});},
+
+  /* Public pages: sign-up and supplier quote links. In the static copy these go to the live server. */
+  get publicBase(){return this.mode==="server"?"":LIVE_API;},
+  async join(form){return this.api("POST","api/join",form,this.publicBase);},
+  async getQuote(token){return this.api("GET","api/quote/"+encodeURIComponent(token),null,this.publicBase);},
+  async sendQuote(token,q){return this.api("POST","api/quote/"+encodeURIComponent(token),q,this.publicBase);},
+
+  /* Ops tools (server + admin key). Leads also work in the static copy, kept in this browser. */
+  get ops(){return this.mode==="server";},
+  async adminCheck(){return this.api("GET","api/admin/check");},
+  async applications(){return (await this.api("GET","api/admin/applications")).applications;},
+  async updateApplication(id,patch){return this.api("PATCH","api/admin/applications/"+encodeURIComponent(id),patch);},
+  async invites(rfqId,sids){return (await this.api(sids?"POST":"GET","api/admin/rfqs/"+encodeURIComponent(rfqId)+"/invites",sids?{sids}:undefined)).invites;},
+  async leads(){
+    if(this.ops)return this.api("GET","api/admin/leads");
+    let l=null;try{l=JSON.parse(localStorage.getItem(KEY+".leads")||"null");}catch(e){}
+    return l||{leads:[],outreach:{settings:{},sentToday:0,cap:30,email:false}};
+  },
+  saveLocalLeads(o){try{localStorage.setItem(KEY+".leads",JSON.stringify(o));}catch(e){}},
+  async importLeads(rows){
+    if(this.ops)return this.api("POST","api/admin/leads",{leads:rows});
+    const o=await this.leads();const {added,skipped}=mergeLeads(o.leads,rows);
+    let n=o.leads.reduce((m,l)=>Math.max(m,+String(l.id).slice(1)||0),0);added.forEach(l=>l.id="L"+String(++n).padStart(4,"0"));
+    o.leads=o.leads.concat(added);this.saveLocalLeads(o);return {added:added.length,skipped:skipped.length,total:o.leads.length};
+  },
+  async updateLead(id,patch){
+    if(this.ops)return this.api("PATCH","api/admin/leads/"+encodeURIComponent(id),patch);
+    const o=await this.leads();const l=o.leads.find(x=>x.id===id);if(l)Object.assign(l,patch);this.saveLocalLeads(o);return l;
+  },
+  async deleteLead(id){
+    if(this.ops)return this.api("DELETE","api/admin/leads/"+encodeURIComponent(id));
+    const o=await this.leads();o.leads=o.leads.filter(x=>x.id!==id);this.saveLocalLeads(o);
+  },
+  async saveOutreachSettings(st){
+    if(this.ops)return this.api("PUT","api/admin/outreach/settings",st);
+    const o=await this.leads();o.outreach.settings={...o.outreach.settings,...st};this.saveLocalLeads(o);return o.outreach.settings;
+  },
+  async outreach(leadIds,templateId,send){return this.api("POST","api/admin/outreach",{leadIds,templateId,send:!!send});}
 };

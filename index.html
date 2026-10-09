@@ -183,6 +183,7 @@
       <div><h1>Suppliers</h1><p id="snetIntro" class="muted"></p></div>
       <div class="seg" role="tablist" aria-label="Supplier pages">
         <button data-sview="network" aria-selected="true">Network</button>
+        <button data-sview="apps" aria-selected="false">Sign-ups</button>
         <button data-sview="desk" aria-selected="false">Supplier view</button>
       </div>
     </div>
@@ -201,6 +202,7 @@
       <div class="sgrid" id="sgrid"></div>
       <label class="toggle"><input type="checkbox" id="useSamples" checked> Show the 15 sample suppliers</label>
     </div>
+    <div id="s-apps" hidden><div id="appsList"></div></div>
     <div id="s-desk" hidden>
       <p class="muted lede-sm">See VyaparBoss as a supplier does: the requests you qualified for, your automatic quote, and a reply Bhai drafts for you.</p>
       <div class="field narrow"><label for="deskSel">Viewing as</label><select id="deskSel"></select></div>
@@ -208,7 +210,10 @@
     </div>
   </section>
   <section class="view" id="v-insights" aria-label="Insights" hidden>
-    <div class="pagehead"><div><h1>Insights</h1><p class="muted">How the pilot is doing, from the requests and orders so far.</p></div></div>
+    <div class="pagehead"><div><h1>Insights</h1><p class="muted">How the pilot is doing, and who to invite next.</p></div>
+      <div class="seg" role="tablist" aria-label="Insights pages"><button data-iview="numbers" aria-selected="true">Numbers</button><button data-iview="outreach" aria-selected="false">Outreach</button></div></div>
+    <div id="i-outreach" hidden><div id="outreachBox" class="outbox"></div></div>
+    <div id="i-numbers">
     <div class="kpis" id="kpis"></div>
     <div class="two">
       <div class="panel pad"><h3>Spend by category</h3><div class="bars" id="catBars"></div></div>
@@ -225,7 +230,9 @@
         <li>Platform revenue assumes a 1.5% fee on goods value until the pilot sets real pricing.</li>
       </ul>
     </details>
+    </div>
   </section>
+  <section class="view" id="v-public" aria-label="VyaparBoss" hidden></section>
 </main>
 
 <nav class="bottomnav" id="bottomnav" aria-label="Main">
@@ -235,7 +242,7 @@
   <button data-tab="insights"><svg><use href="#i-chart"/></svg>Insights</button>
 </nav>
 
-<footer class="wrap foot"><b>VyaparBoss. Vyapar bada, jhanjhat chhota!</b><br>By House of 24 Pvt. Ltd. The 15 sample suppliers, their GSTINs and prices, and the GST rates are illustrative. No real requests or orders are sent to suppliers.</footer>
+<footer class="wrap foot"><b>VyaparBoss. Vyapar bada, jhanjhat chhota!</b> <a href="#join/s">List your business free</a> · <a href="#join/b">Join as a buyer</a><br>By House of 24 Pvt. Ltd. The 15 sample suppliers, their GSTINs and prices, and the GST rates are illustrative. No real requests or orders are sent to suppliers.</footer>
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="js/data.js"></script>
@@ -244,5 +251,6 @@
 <script src="js/parser.js"></script>
 <script src="js/repo.js"></script>
 <script src="js/app.js"></script>
+<script src="js/grow.js"></script>
 </body>
 </html>

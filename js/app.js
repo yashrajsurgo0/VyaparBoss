@@ -28,6 +28,9 @@ async function understand(text,base){
   }
   return{parsed:ruleParse(text),via:"Rules"};
 }
+/* Quotes for the current request, with any real quotes suppliers sent through their quote links. */
+const liveFor=r=>liveMap(store().rfqs.find(x=>x.id===r.id));
+const discoverNow=(neg=flow.neg)=>discover(flow.r,neg,liveFor(flow.r));
 const nextField=r=>!r.productId?"product":!r.qty?"qty":!r.city?"city":r.deadline===undefined?"deadline":null;
 function askLine(f){
   const p=PMAP[flow.r.productId];
@@ -73,7 +76,7 @@ async function advance(lead){
 }
 async function showQuotes(lead){
   const r=flow.r,p=PMAP[r.productId];
-  const res=discover(r,flow.neg);
+  const res=discoverNow();
   try{
     if(!r.id){const rec=await Repo.createRfq(rfqRecord(r,res));r.id=rec.id;}
     else await Repo.updateRfq(r.id,{productId:r.productId,qty:r.qty,city:r.city,deadline:r.deadline||null,quotes:quoteSummary(res)});
@@ -87,9 +90,9 @@ async function showQuotes(lead){
   bhai((lead?lead+"\n":"")+line);
   renderBuy();
 }
-function choose(sid){flow.sel=sid;flow.stage="confirm";flow.newCard=true;const q=discover(flow.r,flow.neg).eligible.find(x=>x.s.id===sid);me(`${q.s.name} chahiye`);bhai("Pakka? Check the order once, then approve.");renderBuy();}
+function choose(sid){flow.sel=sid;flow.stage="confirm";flow.newCard=true;const q=discoverNow().eligible.find(x=>x.s.id===sid);me(`${q.s.name} chahiye`);bhai("Pakka? Check the order once, then approve.");renderBuy();}
 async function approve(btn){
-  const r=flow.r,res=discover(r,flow.neg),q=res.eligible.find(x=>x.s.id===flow.sel);if(!q)return;
+  const r=flow.r,res=discoverNow(),q=res.eligible.find(x=>x.s.id===flow.sel);if(!q)return;
   btn.disabled=true;
   try{
     const o=await Repo.createOrder(orderRecord(r,res,q),{status:"ordered",wonBy:q.s.id,quotes:quoteSummary(res)});
@@ -100,7 +103,7 @@ async function approve(btn){
 }
 function negotiateNow(){
   const target=parseFloat($("#negTarget")?.value);if(!(target>0)){toast("Enter the price you'd like to pay per unit.");return;}
-  const r=negotiate(discover(flow.r),target);flow.neg=r.neg;flow.negLast=r.out;
+  const r=negotiate(discoverNow({}),target);flow.neg=r.neg;flow.negLast=r.out;
   const acc=r.out.filter(x=>x.ok).length;
   bhai(acc?`Baat ho gayi! ${acc} supplier${acc>1?"s":""} agreed to ${inr(target,2)}. Updated prices below.`:`Itna kam nahi hua. I got everyone's best counter-offer; prices below are updated.`);
   flow.newCard=true;renderBuy();
@@ -127,7 +130,8 @@ function heroHTML(){
     <div><span class="n">1</span><p><b>Tell Bhai what you need</b><span>Type it the way you'd say it, in English, Hindi or Hinglish.</span></p></div>
     <div><span class="n">2</span><p><b>Compare delivered prices</b><span>Price, GST and freight in one number, from verified suppliers.</span></p></div>
     <div><span class="n">3</span><p><b>Approve and track</b><span>Nothing is ordered until you say yes.</span></p></div>
-  </section>`;
+  </section>
+  <section class="joinband"><div><b>Supplier ho?</b> List your business free. Get only orders you can serve, and pay only when one closes.</div><a class="btn marigold" href="#join/s">List free</a></section>`;
 }
 function stepperHTML(){
   const idx={ask:0,quotes:1,confirm:2,done:3}[flow.stage]??0;
@@ -183,10 +187,10 @@ function breakdownTable(q,p,r){
     <tr><td>GST ${q.gstRate}% (${q.gstType})</td><td>${inr(q.gst)}</td></tr>
     <tr><td>Freight: ${q.freightMode.toLowerCase()}, ${qfmt(Math.round(q.weight))} kg over ${qfmt(q.d)} km</td><td>${inr(q.freight)}</td></tr>
     <tr class="tot"><td>Delivered to ${r.city}</td><td>${inr(q.landed)}</td></tr>
-  </tbody></table><p class="hint">Ready in ${q.s.lead} day${q.s.lead>1?"s":""}, then ${q.transit} day${q.transit>1?"s":""} on the road. Payment: ${esc(q.s.terms||"to be agreed")}. GST you pay is usually claimable as input credit.</p>`;
+  </tbody></table><p class="hint">${q.live?"Price and timing from the supplier's own quote. ":""}Ready in ${q.ready} day${q.ready>1?"s":""}, then ${q.transit} day${q.transit>1?"s":""} on the road. Payment: ${esc(q.s.terms||"to be agreed")}. GST you pay is usually claimable as input credit.</p>`;
 }
 function quotesCard(){
-  const r=flow.r,p=PMAP[r.productId],res=discover(r,flow.neg);
+  const r=flow.r,p=PMAP[r.productId],res=discoverNow();
   const ok=res.eligible.filter(q=>q.meets),late=res.eligible.filter(q=>!q.meets);
   const ranked=ok.concat(late),best=ranked[0];
   let html=`<div class="card${flow.newCard?" fresh":""}">${reqPills(null)}`;
@@ -202,7 +206,7 @@ function quotesCard(){
   html+=`<div class="best">
       <span class="tag">${ico("bhai","")}Bhai's pick</span>
       <div class="who"><div class="mono">${esc(initials(best.s.name))}</div><div><h3>${esc(best.s.name)}</h3><div class="where">${ico("i-pin","")}${esc(best.s.area?best.s.area+", ":"")}${best.s.city}, ${qfmt(best.d)} km away</div></div></div>
-      <div class="trust">${trustPills(best.s)}${flow.neg[best.s.id]&&best.unit<best.list?`<span class="pill gold">${((1-best.unit/best.list)*100).toFixed(1)}% off after asking</span>`:""}</div>
+      <div class="trust">${best.live?`<span class="pill good">${ico("i-check","")}Supplier's own quote</span>`:""}${trustPills(best.s)}${flow.neg[best.s.id]&&best.unit<best.list?`<span class="pill gold">${((1-best.unit/best.list)*100).toFixed(1)}% off after asking</span>`:""}</div>
       <div class="price"><div><div class="total num">${inr(best.landed)}</div><div class="sub">Delivered to ${r.city}, with GST and freight. ${inr(best.per,2)} per ${unitOne(p.unit)}.</div></div>
         <div class="eta${best.meets?"":" late"}">${ico("i-clock","")}${best.meets?`Arrives in about ${best.eta} days`:`Takes ${best.eta} days, after your date`}</div></div>
       ${why}
@@ -211,7 +215,7 @@ function quotesCard(){
     </div>`;
   const rest=ranked.slice(1,3);
   if(rest.length)html+=`<div class="others"><p class="q-title" style="font-size:17px">Other options</p>${rest.map(q=>`<div class="orow">
-      <div><b>${esc(q.s.name)}</b><small>${q.s.city} · ${q.meets?`${q.eta} days`:`${q.eta} days, late`}${q.s.onTime!=null?` · ${q.s.onTime}% on time`:" · new supplier"}</small></div>
+      <div><b>${esc(q.s.name)}</b><small>${q.live?"Own quote · ":""}${q.s.city} · ${q.meets?`${q.eta} days`:`${q.eta} days, late`}${q.s.onTime!=null?` · ${q.s.onTime}% on time`:" · new supplier"}</small></div>
       <div class="amt">${inr(q.landed)}<small>${q.landed>best.landed?"+"+inr(q.landed-best.landed):inr(q.landed-best.landed)}</small></div>
       <button class="btn sm" data-action="choose" data-sid="${esc(q.s.id)}">Choose</button></div>`).join("")}</div>`;
   html+=`<details class="more"><summary>Compare all ${res.eligible.length} quotes${res.excluded.length?` and ${res.excluded.length} that couldn't quote`:""} ${ico("i-chev","")}</summary><div>
@@ -224,10 +228,11 @@ function quotesCard(){
       <p class="hint">Bhai asks every supplier. Each one only goes as low as their own limit, and nothing is ordered.</p>
       ${flow.negLast?`<div class="negres">${flow.negLast.map(x=>`<span>${esc(x.name)}: ${x.ok?`<b style="color:var(--good)">agreed ${inr(x.price,2)}</b>`:`best ${inr(x.price,2)}`}</span>`).join("")}</div>`:""}`
     :`<p><button class="link" data-action="show-neg">Bhai, thoda kam karwao? Ask for a better price</button></p>`;
+  html+=typeof liveQuotesHTML==="function"?liveQuotesHTML(res):"";
   return html+`</div>`;
 }
 function confirmCard(){
-  const r=flow.r,p=PMAP[r.productId],q=discover(r,flow.neg).eligible.find(x=>x.s.id===flow.sel);
+  const r=flow.r,p=PMAP[r.productId],q=discoverNow().eligible.find(x=>x.s.id===flow.sel);
   if(!q){flow.stage="quotes";return quotesCard();}
   const by=new Date(Date.now()+q.eta*864e5);
   return `<div class="card${flow.newCard?" fresh":""}">
@@ -302,7 +307,7 @@ function renderOrders(){
         <p class="hint">Purchase order <b class="num">${esc(o.po)}</b>, placed ${dstr(o.date)}</p>
         <table class="breakdown"><tbody><tr><td>Goods</td><td>${inr(o.subtotal)}</td></tr><tr><td>GST</td><td>${inr(o.gst)}</td></tr><tr><td>Freight</td><td>${inr(o.freight)}</td></tr><tr class="tot"><td>Total</td><td>${inr(o.landed)}</td></tr></tbody></table>
         <div class="steps">${STAGES.map((st,i)=>`<div class="${i<=o.stage?"on":""}">${st}${o.history[i]?`<br><span class="muted">${dstr(o.history[i])}</span>`:""}</div>`).join("")}</div>
-        <div class="actions">${o.stage<4?`<button class="btn sm" data-action="advance" data-po="${esc(o.po)}">Mark as ${STAGES[o.stage+1].toLowerCase()}</button>`:""}
+        <div class="actions"><button class="btn sm" data-action="reorder" data-po="${esc(o.po)}">Order again</button>${o.stage<4?`<button class="btn sm" data-action="advance" data-po="${esc(o.po)}">Mark as ${STAGES[o.stage+1].toLowerCase()}</button>`:""}
           ${o.issue?`<button class="btn sm ghost" data-action="resolve" data-po="${esc(o.po)}">Problem solved</button>`:`<button class="btn sm ghost" data-action="issue" data-po="${esc(o.po)}">Report a problem</button>`}</div>
       </div></details>
     </div>`;}).join("")}</div>`;
@@ -337,8 +342,8 @@ function renderSuppliers(){
 }
 function showSupplierView(v){
   document.querySelectorAll("[data-sview]").forEach(b=>b.setAttribute("aria-selected",b.dataset.sview===v));
-  $("#s-network").hidden=v!=="network";$("#s-desk").hidden=v!=="desk";
-  if(v==="desk")renderDesk();
+  $("#s-network").hidden=v!=="network";$("#s-desk").hidden=v!=="desk";$("#s-apps").hidden=v!=="apps";
+  if(v==="desk")renderDesk();if(v==="apps")renderApps();
 }
 
 /* ===================== SUPPLIER ONBOARDING ===================== */
@@ -409,8 +414,10 @@ async function saveSupplier(btn){
   if(!ok){sf.errors=errors;renderSupplierForm(input);return;}
   btn.disabled=true;
   try{
+    const appId=sf.appId;
     const saved=await Repo.upsertSupplier(s);
     toast(`${saved.name} ${input.id?"updated":"added"}`);
+    if(appId)Repo.updateApplication(appId,{status:"onboarded",supplierId:saved.id}).then(()=>{appsCache=null;}).catch(()=>{});
     closeSupplierForm();renderSuppliers();if(flow.stage==="quotes")renderBuy();
   }catch(e){sf.errors=[e.message];renderSupplierForm(input);}
 }
@@ -456,6 +463,12 @@ function renderInsights(){
     :`<div class="empty" style="padding:6px">${ico("art-chart","")}<p>Spend shows up here after the first order.</p></div>`;
 }
 
+function showInsightsView(v){
+  document.querySelectorAll("[data-iview]").forEach(b=>b.setAttribute("aria-selected",b.dataset.iview===v));
+  $("#i-numbers").hidden=v!=="numbers";$("#i-outreach").hidden=v!=="outreach";
+  if(v==="outreach")renderOutreachView();
+}
+
 /* ===================== WHATSAPP ===================== */
 let waChat=[];const WA_TEST_FROM="919800000001";
 async function renderWhatsApp(){
@@ -493,6 +506,7 @@ function renderAiChip(){
 /* ===================== NAVIGATION ===================== */
 function renderAll(){renderOrders();renderSuppliers();if(!$("#s-desk").hidden)renderDesk();renderInsights();renderWhatsApp();}
 function showTab(t){
+  if(document.body.classList.contains("public")){document.body.classList.remove("public");if(location.hash)history.replaceState(null,"",location.pathname+location.search);pub.view=null;}
   document.querySelectorAll("#tabs [data-tab],#bottomnav [data-tab]").forEach(b=>{if(b.dataset.tab===t)b.setAttribute("aria-current","page");else b.removeAttribute("aria-current");});
   document.querySelectorAll(".view").forEach(v=>v.hidden=v.id!=="v-"+t);
   try{localStorage.setItem(KEY+".tab",t);}catch(e){}
@@ -520,6 +534,10 @@ const ACTIONS={
   "show-neg":()=>{flow.showNeg=true;renderBuy();setTimeout(()=>$("#negTarget")?.focus(),30);},
   negotiate:()=>negotiateNow(),
   "new-req":()=>{flow=freshFlow();renderBuy();setTimeout(()=>$("#heroAsk")?.focus(),30);},
+  reorder:a=>{const o=store().orders.find(x=>x.po===a.dataset.po);if(!o||!PMAP[o.productId])return;
+    flow=freshFlow();flow.stage="ask";flow.cat=PMAP[o.productId].cat;flow.r={productId:o.productId,qty:o.qty,city:o.city};
+    me(`Same as last time: ${qfmt(o.qty)} ${PMAP[o.productId].unit} ${PMAP[o.productId].name} to ${o.city}`);
+    bhai("Haan ji, same order again. I'll get fresh prices, since rates change. Kab tak chahiye?");flow.newCard=true;showTab("buy");},
   advance:a=>{const o=store().orders.find(x=>x.po===a.dataset.po);if(o&&o.stage<4){const history=o.history.slice();history[o.stage+1]=Date.now();Repo.updateOrder(o.po,{stage:o.stage+1,history}).catch(fail);renderOrders();}},
   issue:a=>{const o=store().orders.find(x=>x.po===a.dataset.po);if(o){Repo.updateOrder(o.po,{issue:o.stage>=3?"Short quantity received":"Dispatch delayed"}).catch(fail);renderOrders();}},
   resolve:a=>{Repo.updateOrder(a.dataset.po,{issue:null}).catch(fail);renderOrders();},
@@ -541,6 +559,7 @@ const ACTIONS={
 document.addEventListener("click",e=>{
   const nav=e.target.closest("#tabs [data-tab],#bottomnav [data-tab]");if(nav){showTab(nav.dataset.tab);return;}
   const sv=e.target.closest("[data-sview]");if(sv){showSupplierView(sv.dataset.sview);return;}
+  const iv=e.target.closest("[data-iview]");if(iv){showInsightsView(iv.dataset.iview);return;}
   const chip=e.target.closest("#scat [data-cat]");if(chip){scat=chip.dataset.cat;document.querySelectorAll("#scat [data-cat]").forEach(x=>x.setAttribute("aria-pressed",x===chip));renderSuppliers();return;}
   const a=e.target.closest("[data-action]");if(!a||!ACTIONS[a.dataset.action])return;
   if(a.tagName==="A")e.preventDefault();
@@ -570,7 +589,8 @@ document.addEventListener("change",e=>{
   await Repo.init();
   if(Repo.mode==="server"){aiState=Repo.info.ai?"server":"off";setInterval(()=>{if(!document.hidden)Repo.refresh().then(ch=>ch&&renderAll()).catch(()=>{});},20000);}
   renderAiChip();renderAll();
-  try{const t=localStorage.getItem(KEY+".tab");if(t&&t!=="buy"&&$(`#v-${t}`))showTab(t);}catch(e){}
+  if(/^#(join|quote)/.test(location.hash))growBoot();
+  else try{const t=localStorage.getItem(KEY+".tab");if(t&&t!=="buy"&&$(`#v-${t}`))showTab(t);}catch(e){}
   if(aiState==="pending"){
     if(window.claude?.use){claude.use("sample").then(s=>{ai=s;aiState=s?"live":"off";renderAiChip();}).catch(()=>{aiState="off";renderAiChip();});}
     else{aiState="off";renderAiChip();}
