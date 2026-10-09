@@ -524,7 +524,8 @@ details.more[open]::details-content{block-size:auto}
 @media(min-width:860px){.hero{grid-template-columns:minmax(0,1.25fr) minmax(0,.75fr)}}
 /* Tablet: tabs and the header extras share one row, so the extras go compact. */
 @media(max-width:1020px){.regionpick .rp-long{display:none}.regionpick .rp-short{display:inline}.bhai-status span{display:none}.bhai-status{padding:3px 8px 3px 3px}}
-@media(min-width:760px) and (max-width:900px){.tagline{display:none}.tabs button{padding:8px 10px}}
+@media(min-width:760px) and (max-width:1100px){.tagline{display:none}}
+@media(min-width:760px) and (max-width:900px){.tabs button{padding:8px 10px}}
 .seg{max-width:100%;overflow-x:auto;scrollbar-width:none}.seg::-webkit-scrollbar{display:none}
 .seg button{white-space:nowrap}
 @media(max-width:480px){.seg button{padding:7px 12px;font-size:15px}}
