@@ -361,7 +361,7 @@ document.addEventListener("submit",e=>{
   if(f.dataset.form==="join"){e.preventDefault();submitJoin();}
   if(f.dataset.form==="quote"){e.preventDefault();submitQuote();}
   if(f.dataset.form==="admin-key"){e.preventDefault();const k=$("#adminKey").value.trim();if(!k)return;Repo.setAdminKey(k);
-    Repo.adminCheck().then(()=>{toast("Unlocked for this browser session");appsCache=null;renderApps();renderOutreachView();if(flow.stage==="quotes")renderBuy();})
+    Repo.adminCheck().then(()=>{toast("Unlocked for this browser session");appsCache=null;if(typeof onTeamUnlocked==="function")onTeamUnlocked();if(flow.stage==="quotes")renderBuy();})
       .catch(err=>{Repo.setAdminKey("");toast(err.status===401?"That admin key didn't work.":err.message);});}
 });
 document.addEventListener("change",e=>{

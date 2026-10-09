@@ -171,34 +171,71 @@
 
 <header class="top">
   <div class="wrap topbar">
-    <a class="brand" href="#" data-action="go" data-tab="buy" aria-label="VyaparBoss home">
+    <a class="brand" href="#" data-action="home" aria-label="VyaparBoss home">
       <svg class="logo"><use href="#logo"/></svg>
       <span class="lockup"><span class="wordmark">Vyapar<span class="boss">Boss</span></span><span class="tagline" data-i18n="tagline">Vyapar bada, jhanjhat chhota!</span></span>
     </a>
-    <nav class="tabs" id="tabs" aria-label="Main">
-      <button data-tab="buy" aria-current="page"><svg><use href="#i-buy"/></svg>Buy</button>
-      <button data-tab="orders"><svg><use href="#i-orders"/></svg>Orders<span class="count" id="ordCount" hidden></span></button>
-      <button data-tab="suppliers"><svg><use href="#i-store"/></svg>Suppliers</button>
-      <button data-tab="insights"><svg><use href="#i-chart"/></svg>Insights</button>
-    </nav>
+    <!-- Tabs are drawn by roles.js: one set for buyers, another for suppliers, plus Team when unlocked. -->
+    <nav class="tabs" id="tabs" aria-label="Main"></nav>
     <details class="regionpick" id="regionPick"></details>
+    <details class="regionpick acctpick" id="acctPick"></details>
     <span class="bhai-status" id="aichip" title="Bhai's status"><svg class="avatar-xs"><use href="#bhai"/></svg><i></i><span>Bhai</span></span>
   </div>
 </header>
 
 <main class="wrap">
+  <!-- Welcome: choose buying or supplying, then sign up or log in -->
+  <section class="view" id="v-auth" aria-label="Welcome" hidden></section>
+
+  <!-- ===== Buyer side ===== -->
   <section class="view" id="v-buy" aria-label="Buy"></section>
   <section class="view" id="v-orders" aria-label="Orders" hidden></section>
   <section class="view" id="v-suppliers" aria-label="Suppliers" hidden>
+    <div class="pagehead"><div><h1>Suppliers</h1><p id="dirIntro" class="muted">Find suppliers by what they sell, where they ship from and where they deliver.</p></div></div>
+    <div id="dirTools"></div>
+    <div class="sgrid" id="dirGrid"></div>
+    <div id="dirInvite"></div>
+  </section>
+  <section class="view" id="v-insights" aria-label="Insights" hidden>
+    <div class="pagehead"><div><h1>Insights</h1><p class="muted">What you've bought through VyaparBoss, and what you saved.</p></div></div>
+    <div class="kpis" id="kpis"></div>
+    <div class="panel pad"><h3>Spend by category</h3><div class="bars" id="catBars"></div></div>
+    <details class="howcalc">
+      <summary>How these numbers are worked out</summary>
+      <ul>
+        <li>Delivered cost is the supplier's price for your quantity, plus GST, plus estimated road freight.</li>
+        <li>Freight: part load ₹2.50/kg plus ₹0.006/kg per km, or ₹9,000 + ₹38/km per 9-tonne truck when that's cheaper. Minimum ₹1,200.</li>
+        <li>Road distance is straight-line distance × 1.3, and trucks cover about 450 km a day.</li>
+        <li>Bhai's pick weighs delivered cost 60%, on-time record 25% and buyer rating 15%. Suppliers who can't meet your date are shown separately.</li>
+        <li>Savings compare the chosen quote with the average of all quotes for that request.</li>
+      </ul>
+    </details>
+  </section>
+
+  <!-- ===== Supplier side ===== -->
+  <section class="view" id="v-requests" aria-label="Requests" hidden></section>
+  <section class="view" id="v-sorders" aria-label="Orders" hidden></section>
+  <section class="view" id="v-listing" aria-label="My listing" hidden></section>
+  <section class="view" id="v-sinsights" aria-label="Insights" hidden></section>
+
+  <!-- ===== Everyone ===== -->
+  <section class="view" id="v-account" aria-label="Account" hidden></section>
+
+  <!-- ===== Team (admin key) ===== -->
+  <section class="view" id="v-team" aria-label="Team" hidden>
     <div class="pagehead">
-      <div><h1>Suppliers</h1><p id="snetIntro" class="muted"></p></div>
-      <div class="seg" role="tablist" aria-label="Supplier pages">
-        <button data-sview="network" aria-selected="true">Network</button>
-        <button data-sview="apps" aria-selected="false">Sign-ups</button>
-        <button data-sview="desk" aria-selected="false">Supplier view</button>
+      <div><h1>Team</h1><p class="muted">Run the network: suppliers, sign-ups, outreach and the WhatsApp practice chat.</p></div>
+      <div class="seg" role="tablist" aria-label="Team pages">
+        <button data-tview="network" aria-selected="true">Network</button>
+        <button data-tview="apps" aria-selected="false">Sign-ups</button>
+        <button data-tview="outreach" aria-selected="false">Outreach</button>
+        <button data-tview="desk" aria-selected="false">Supplier view</button>
+        <button data-tview="wa" aria-selected="false">WhatsApp</button>
       </div>
     </div>
+    <div id="teamGate"></div>
     <div id="s-network">
+      <p id="snetIntro" class="muted lede-sm"></p>
       <div class="toolbar">
         <input id="sq" type="search" placeholder="Search supplier, city or product" aria-label="Search suppliers">
         <div class="chips" id="scat">
@@ -214,46 +251,21 @@
       <label class="toggle"><input type="checkbox" id="useSamples" checked> Show the 15 sample suppliers</label>
     </div>
     <div id="s-apps" hidden><div id="appsList"></div></div>
+    <div id="i-outreach" hidden><div id="outreachBox" class="outbox"></div></div>
     <div id="s-desk" hidden>
-      <p class="muted lede-sm">See VyaparBoss as a supplier does: the requests you qualified for, your automatic quote, and a reply Bhai drafts for you.</p>
+      <p class="muted lede-sm">See VyaparBoss as a supplier does: the requests they qualified for, their automatic quote, and a reply Bhai drafts.</p>
       <div class="field narrow"><label for="deskSel">Viewing as</label><select id="deskSel"></select></div>
       <div class="desklist" id="deskList"></div>
     </div>
+    <div id="t-wa" hidden><div class="panel pad" id="waPanel"></div></div>
   </section>
-  <section class="view" id="v-insights" aria-label="Insights" hidden>
-    <div class="pagehead"><div><h1>Insights</h1><p class="muted">How the pilot is doing, and who to invite next.</p></div>
-      <div class="seg" role="tablist" aria-label="Insights pages"><button data-iview="numbers" aria-selected="true">Numbers</button><button data-iview="outreach" aria-selected="false">Outreach</button></div></div>
-    <div id="i-outreach" hidden><div id="outreachBox" class="outbox"></div></div>
-    <div id="i-numbers">
-    <div class="kpis" id="kpis"></div>
-    <div class="two">
-      <div class="panel pad"><h3>Spend by category</h3><div class="bars" id="catBars"></div></div>
-      <div class="panel pad" id="waPanel"></div>
-    </div>
-    <details class="howcalc">
-      <summary>How these numbers are worked out</summary>
-      <ul>
-        <li>Delivered cost is the supplier's price for your quantity, plus GST, plus estimated road freight.</li>
-        <li>Freight: part load ₹2.50/kg plus ₹0.006/kg per km, or ₹9,000 + ₹38/km per 9-tonne truck when that's cheaper. Minimum ₹1,200.</li>
-        <li>Road distance is straight-line distance × 1.3, and trucks cover about 450 km a day.</li>
-        <li>Bhai's pick weighs delivered cost 60%, on-time record 25% and buyer rating 15%. Suppliers who can't meet your date are shown separately.</li>
-        <li>Savings compare the chosen quote with the average of all quotes for that request.</li>
-        <li>Platform revenue assumes a 1.5% fee on goods value until the pilot sets real pricing.</li>
-      </ul>
-    </details>
-    </div>
-  </section>
+
   <section class="view" id="v-public" aria-label="VyaparBoss" hidden></section>
 </main>
 
-<nav class="bottomnav" id="bottomnav" aria-label="Main">
-  <button data-tab="buy" aria-current="page"><svg><use href="#i-buy"/></svg>Buy</button>
-  <button data-tab="orders"><svg><use href="#i-orders"/></svg>Orders</button>
-  <button data-tab="suppliers"><svg><use href="#i-store"/></svg>Suppliers</button>
-  <button data-tab="insights"><svg><use href="#i-chart"/></svg>Insights</button>
-</nav>
+<nav class="bottomnav" id="bottomnav" aria-label="Main"></nav>
 
-<footer class="wrap foot"><b>VyaparBoss. <span data-i18n="tagline">Vyapar bada, jhanjhat chhota!</span></b> <a href="#join/s">List your business free</a> · <a href="#join/b">Join as a buyer</a><br>By House of 24 Pvt. Ltd. The 15 sample suppliers, their GSTINs and prices, and the GST rates are illustrative. No real requests or orders are sent to suppliers.</footer>
+<footer class="wrap foot"><b>VyaparBoss. <span data-i18n="tagline">Vyapar bada, jhanjhat chhota!</span></b> <a href="#join/s">List your business free</a> · <a href="#join/b">Join as a buyer</a> · <a href="#" data-action="team-open">Team</a><br>By House of 24 Pvt. Ltd. The 15 sample suppliers, their GSTINs and prices, and the GST rates are illustrative.</footer>
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="js/data.js"></script>
@@ -264,5 +276,6 @@
 <script src="js/i18n.js"></script>
 <script src="js/app.js"></script>
 <script src="js/grow.js"></script>
+<script src="js/roles.js"></script>
 </body>
 </html>

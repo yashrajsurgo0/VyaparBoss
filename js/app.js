@@ -173,7 +173,7 @@ function askCard(){
 }
 function trustPills(s){
   const t=[];
-  t.push(s.sample?`<span class="pill good">${ico("i-shield","")}GST verified</span>`:s.gstOk?`<span class="pill good">${ico("i-shield","")}GSTIN checked</span>`:`<span class="pill warn">GSTIN not checked</span>`);
+  t.push(s.sample?`<span class="pill good">${ico("i-shield","")}GST verified</span>`:s.selfListed&&!s.verified?`<span class="pill warn">Not yet verified</span>`:s.verified?`<span class="pill good">${ico("i-shield","")}Verified by VyaparBoss</span>`:s.gstOk?`<span class="pill good">${ico("i-shield","")}GSTIN checked</span>`:`<span class="pill warn">GSTIN not checked</span>`);
   if(s.onTime!=null)t.push(`<span class="pill">${s.onTime}% on time</span>`,`<span class="pill gold">${ico("i-star","")}${s.rating}</span>`);
   else t.push(`<span class="pill brand">New supplier</span>`);
   if(s.audit)t.push(`<span class="pill warn">${esc(s.audit)}</span>`);
@@ -194,7 +194,7 @@ function quotesCard(){
   let html=`<div class="card${flow.newCard?" fresh":""}">${reqPills(null)}`;
   if(!best){
     html+=`<div class="empty" style="padding:10px">${ico("art-shop","")}<p>${res.offering?"No supplier can take this order as it stands.":"Nobody in the network sells this yet."}</p>
-      <div class="actions">${res.offering?`<button class="btn" data-action="edit" data-f="qty">Change quantity</button><button class="btn" data-action="edit" data-f="city">Change city</button>`:""}<button class="btn ghost" data-action="go" data-tab="suppliers">Add a supplier</button></div></div>
+      <div class="actions">${res.offering?`<button class="btn" data-action="edit" data-f="qty">Change quantity</button><button class="btn" data-action="edit" data-f="city">Change city</button>`:""}<a class="btn ghost" href="#join/s">Invite your supplier</a></div></div>
       ${res.excluded.length?`<details class="more"><summary>Why each supplier said no ${ico("i-chev","")}</summary><div><ul class="excl">${res.excluded.map(x=>`<li><b>${esc(x.s.name)}</b>: ${esc(x.why)}</li>`).join("")}</ul></div></details>`:""}</div>`;
     return html;
   }
@@ -216,9 +216,12 @@ function quotesCard(){
       <div><b>${esc(q.s.name)}</b><small>${q.live?"Own quote · ":""}${q.s.city} · ${q.meets?`${q.eta} days`:`${q.eta} days, late`}${q.s.onTime!=null?` · ${q.s.onTime}% on time`:" · new supplier"}</small></div>
       <div class="amt">${inr(q.landed)}${isGlobal()?`<small class="usd">${usd(q.landed)}</small>`:""}<small>${q.landed>best.landed?"+"+inr(q.landed-best.landed):inr(q.landed-best.landed)}</small></div>
       <button class="btn sm" data-action="choose" data-sid="${esc(q.s.id)}">Choose</button></div>`).join("")}</div>`;
-  html+=`<details class="more"><summary>Compare all ${res.eligible.length} quotes${res.excluded.length?` and ${res.excluded.length} that couldn't quote`:""} ${ico("i-chev","")}</summary><div>
+  const sorters={pick:null,price:(a,b)=>a.landed-b.landed,fast:(a,b)=>a.eta-b.eta||a.landed-b.landed,rated:(a,b)=>(b.s.rating??0)-(a.s.rating??0)||a.landed-b.landed};
+  const cmp=sorters[flow.cmpSort||"pick"]?ranked.slice().sort(sorters[flow.cmpSort]):ranked;
+  html+=`<details class="more" ${flow.cmpOpen?"open":""} data-cmp><summary>Compare all ${res.eligible.length} quotes${res.excluded.length?` and ${res.excluded.length} that couldn't quote`:""} ${ico("i-chev","")}</summary><div>
+      <div class="chips sortchips" role="group" aria-label="Sort quotes">${[["pick","Bhai's order"],["price","Cheapest"],["fast","Fastest"],["rated","Top rated"]].map(([k,l])=>`<button class="chip" data-action="cmp-sort" data-v="${k}" aria-pressed="${(flow.cmpSort||"pick")===k}">${l}</button>`).join("")}</div>
       <div class="tablewrap"><table class="cmp"><thead><tr><th>Supplier</th><th>Rate</th><th>Goods</th><th>GST</th><th>Freight</th><th>Delivered</th><th>Days</th></tr></thead><tbody>
-      ${ranked.map(q=>`<tr><td>${esc(q.s.name)}</td><td>${inr(q.unit,2)}</td><td>${inr(q.subtotal)}</td><td>${inr(q.gst)}</td><td>${inr(q.freight)}</td><td><b>${inr(q.landed)}</b></td><td>${q.eta}${q.meets?"":" (late)"}</td></tr>`).join("")}
+      ${cmp.map(q=>`<tr><td>${esc(q.s.name)}</td><td>${inr(q.unit,2)}</td><td>${inr(q.subtotal)}</td><td>${inr(q.gst)}</td><td>${inr(q.freight)}</td><td><b>${inr(q.landed)}</b></td><td>${q.eta}${q.meets?"":" (late)"}</td></tr>`).join("")}
       </tbody></table></div>
       ${res.excluded.length?`<ul class="excl">${res.excluded.map(x=>`<li><b>${esc(x.s.name)}</b>: ${esc(x.why)}</li>`).join("")}</ul>`:""}
     </div></details>`;
@@ -287,12 +290,12 @@ function setField(f,v,said){
 
 /* ===================== ORDERS ===================== */
 function renderOrders(){
-  const orders=store().orders,cnt=$("#ordCount");
-  cnt.textContent=orders.length;cnt.hidden=!orders.length;
+  const orders=store().orders,cnt=document.getElementById("ordCount");
+  if(cnt){cnt.textContent=orders.length;cnt.hidden=!orders.length;}
   const el=$("#v-orders");
   if(!orders.length){el.innerHTML=`<div class="pagehead"><div><h1>Orders</h1></div></div><div class="panel empty">${ico("art-truck","")}<h2>No orders yet</h2><p>When you approve a quote, the order shows up here so you can follow it to your door.</p><button class="btn primary" data-action="go" data-tab="buy">Start buying</button></div>`;return;}
   const samples=orders.some(o=>o.sample);
-  el.innerHTML=`<div class="pagehead"><div><h1>Orders</h1><p class="muted">${orders.length} order${orders.length>1?"s":""}. Tap one for its full details.</p></div>${samples?`<button class="btn sm ghost" data-action="clear-samples">Remove example orders</button>`:""}</div>
+  el.innerHTML=`<div class="pagehead"><div><h1>Orders</h1><p class="muted">${orders.length} order${orders.length>1?"s":""}. Tap one for its full details.</p></div>${samples?`<button class="btn sm ghost" data-action="clear-samples">Hide example orders</button>`:""}</div>
   <div class="olist">${orders.map(o=>{
     const p=PMAP[o.productId],s=SMAP[o.sid],sname=s?.name||o.sname||"Supplier",scity=s?.city||o.scity||"";
     const due=new Date(o.date+o.eta*864e5),saved=Math.max(0,o.avg-o.landed),deliv=o.stage===4;
@@ -306,7 +309,7 @@ function renderOrders(){
         <p class="hint">Purchase order <b class="num">${esc(o.po)}</b>, placed ${dstr(o.date)}</p>
         <table class="breakdown"><tbody><tr><td>Goods</td><td>${inr(o.subtotal)}</td></tr><tr><td>GST</td><td>${inr(o.gst)}</td></tr><tr><td>Freight</td><td>${inr(o.freight)}</td></tr><tr class="tot"><td>Total</td><td>${inr(o.landed)}</td></tr></tbody></table>
         <div class="steps">${STAGES.map((st,i)=>`<div class="${i<=o.stage?"on":""}">${st}${o.history[i]?`<br><span class="muted">${dstr(o.history[i])}</span>`:""}</div>`).join("")}</div>
-        <div class="actions"><button class="btn sm" data-action="reorder" data-po="${esc(o.po)}">Order again</button>${o.stage<4?`<button class="btn sm" data-action="advance" data-po="${esc(o.po)}">Mark as ${STAGES[o.stage+1].toLowerCase()}</button>`:""}
+        <div class="actions"><button class="btn sm" data-action="reorder" data-po="${esc(o.po)}">Order again</button>${o.stage>=2&&o.stage<4?`<button class="btn sm" data-action="received" data-po="${esc(o.po)}">I received it</button>`:""}
           ${o.issue?`<button class="btn sm ghost" data-action="resolve" data-po="${esc(o.po)}">Problem solved</button>`:`<button class="btn sm ghost" data-action="issue" data-po="${esc(o.po)}">Report a problem</button>`}</div>
       </div></details>
     </div>`;}).join("")}</div>`;
@@ -325,7 +328,7 @@ function supplierCard(s){
       <ul class="plist">${offers.map(o=>`<li><span>${esc(PMAP[o.p].name)}</span><span>from ${inr(o.tiers[o.tiers.length-1][1],2)}/${unitOne(PMAP[o.p].unit)}, min ${qfmt(o.tiers[0][0])}</span></li>`).join("")}</ul>
       <p class="hint">GSTIN <span class="num">${esc(s.gstin||"not given")}</span>${s.sample?" (sample)":""}. Ready in ${s.lead} day${s.lead>1?"s":""}. ${s.terms?`Payment: ${esc(s.terms)}.`:""}${s.certs?.length?` Certified: ${s.certs.map(esc).join(", ")}.`:""}</p>
     </div></details>
-    ${s.sample?"":`<div class="actions"><button class="btn sm" data-action="sf-edit" data-sid="${esc(s.id)}">Edit</button><button class="btn sm ghost" data-action="sf-remove" data-sid="${esc(s.id)}">Remove</button></div>`}
+    ${s.sample||s._own?"":`<div class="actions"><button class="btn sm" data-action="sf-edit" data-sid="${esc(s.id)}">Edit</button>${s.selfListed&&Repo.mode==="server"?`<button class="btn sm" data-action="sf-verify" data-sid="${esc(s.id)}" data-v="${s.verified?"0":"1"}">${s.verified?"Remove verified":"Mark verified"}</button>`:""}<button class="btn sm ghost" data-action="sf-remove" data-sid="${esc(s.id)}">Remove</button></div>`}
   </div>`;
 }
 function renderSuppliers(){
@@ -339,23 +342,19 @@ function renderSuppliers(){
     :SUPPLIERS.length?`<div class="panel empty" style="grid-column:1/-1"><h2>No supplier matches</h2><p>Try another word, or clear the category filter.</p></div>`
     :`<div class="panel empty" style="grid-column:1/-1">${ico("art-shop","")}<h2>No suppliers yet</h2><p>Add the suppliers you already buy from. Bhai will start quoting from their rates straight away.</p><button class="btn primary" data-action="sf-open">${ico("i-plus")}Add supplier</button></div>`;
 }
-function showSupplierView(v){
-  document.querySelectorAll("[data-sview]").forEach(b=>b.setAttribute("aria-selected",b.dataset.sview===v));
-  $("#s-network").hidden=v!=="network";$("#s-desk").hidden=v!=="desk";$("#s-apps").hidden=v!=="apps";
-  if(v==="desk")renderDesk();if(v==="apps")renderApps();
-}
+function showSupplierView(v){if(typeof showTeamView==="function")showTeamView(v);}
 
 /* ===================== SUPPLIER ONBOARDING ===================== */
 let sf=null; // form state: {id, offers:[{p,tiersText,cap}], errors}
-function openSupplierForm(s){
-  sf=s?{id:s.id,createdAt:s.createdAt,offers:s.offers.map(o=>({p:o.p,tiersText:tiersText(o.tiers),cap:o.cap})),errors:[]}
-      :{id:null,offers:[{p:"",tiersText:"",cap:""}],errors:[]};
+function openSupplierForm(s,box="sform"){
+  sf=s?{id:s.id,createdAt:s.createdAt,offers:s.offers.map(o=>({p:o.p,tiersText:tiersText(o.tiers),cap:o.cap})),errors:[],box}
+      :{id:null,offers:[{p:"",tiersText:"",cap:""}],errors:[],box};
   renderSupplierForm(s||{});
-  const box=$("#sform");box.hidden=false;
-  try{box.scrollIntoView({behavior:"smooth",block:"start"});}catch(e){}
+  const boxEl=document.getElementById(box);boxEl.hidden=false;const box2=boxEl;
+  if(box==="sform")try{box2.scrollIntoView({behavior:"smooth",block:"start"});}catch(e){}
   setTimeout(()=>document.getElementById("sfName")?.focus(),50);
 }
-function closeSupplierForm(){sf=null;const box=$("#sform");box.hidden=true;box.innerHTML="";}
+function closeSupplierForm(){const id=sf?.box||"sform";sf=null;const box=document.getElementById(id);if(id==="sform"){box.hidden=true;box.innerHTML="";}else if(typeof renderListing==="function")renderListing();}
 function offerRow(o,i){
   const opts=Object.entries(CATS).map(([c,l])=>`<optgroup label="${l}">${PRODUCTS.filter(x=>x.cat===c).map(x=>`<option value="${x.id}" ${x.id===o.p?"selected":""}>${esc(x.name)}</option>`).join("")}</optgroup>`).join("");
   const unit=PMAP[o.p]?unitOne(PMAP[o.p].unit):"unit";
@@ -369,27 +368,28 @@ function offerRow(o,i){
 function renderSupplierForm(s){
   const cityOpts=Object.keys(CITIES).sort().map(c=>`<option ${c===s.city?"selected":""}>${c}</option>`).join("");
   const v=(k,d="")=>esc(s[k]??d);
-  $("#sform").innerHTML=`<div class="panel sform">
-    <div><h2>${sf.id?"Edit supplier":"Add a supplier"}</h2><p class="hint">Bhai quotes only from what you enter here: their rates, minimum order and how far they deliver.</p></div>
+  const own=sf.box==="listingForm";
+  document.getElementById(sf.box||"sform").innerHTML=`<div class="panel sform">
+    <div><h2>${own?(sf.id?"Edit your listing":"Create your listing"):sf.id?"Edit supplier":"Add a supplier"}</h2><p class="hint">${own?"Buyers get quotes from exactly what you enter here: your rates, minimum order and how far you deliver. Keep it current.":"Bhai quotes only from what you enter here: their rates, minimum order and how far they deliver."}</p></div>
     <div class="fields">
       <div class="field wide"><label for="sfName">Business name</label><input id="sfName" value="${v("name")}" placeholder="e.g. Hadapsar Cartons Pvt. Ltd."></div>
-      <div class="field"><label for="sfCity">Ships from</label><select id="sfCity"><option value="">Choose…</option>${cityOpts}</select></div>
+      <div class="field"><label for="sfCity">${own?"You ship from":"Ships from"}</label><select id="sfCity"><option value="">Choose…</option>${cityOpts}</select></div>
       <div class="field"><label for="sfArea">Area or industrial estate</label><input id="sfArea" value="${v("area")}" placeholder="e.g. Hadapsar MIDC"></div>
       <div class="field wide"><label for="sfGst">GSTIN</label><input id="sfGst" value="${v("gstin")}" maxlength="15" autocapitalize="characters" placeholder="27AAPFU0939F1ZV" class="num"><span class="hint" id="sfGstHint">15 characters. Bhai checks it with the official checksum.</span></div>
-      <div class="field"><label for="sfContact">WhatsApp number (optional)</label><input id="sfContact" value="${v("contact")}" inputmode="tel" placeholder="+91 98xxxxxxxx"></div>
+      <div class="field"><label for="sfContact">${own?"Your WhatsApp number (for the VyaparBoss team)":"WhatsApp number (optional)"}</label><input id="sfContact" value="${v("contact")}" inputmode="tel" placeholder="+91 98xxxxxxxx"></div>
       <div class="field"><label for="sfLead">Days to get an order ready</label><input id="sfLead" type="number" min="1" max="60" value="${v("lead",2)}"></div>
       <div class="field"><label for="sfCov">Delivers up to (km)</label><input id="sfCov" type="number" min="25" max="3500" value="${v("coverage",500)}"></div>
-      <div class="field"><label for="sfDisc">Most discount they'll give (%)</label><input id="sfDisc" type="number" min="0" max="15" step="0.5" value="${esc(s.maxDiscPct??(s.maxDisc!=null?+(s.maxDisc*100).toFixed(1):3))}"></div>
+      <div class="field"><label for="sfDisc">${own?"Most discount you'll give when a buyer asks (%)":"Most discount they'll give (%)"}</label><input id="sfDisc" type="number" min="0" max="15" step="0.5" value="${esc(s.maxDiscPct??(s.maxDisc!=null?+(s.maxDisc*100).toFixed(1):3))}"></div>
       <div class="field wide"><label for="sfTerms">Payment terms</label><input id="sfTerms" value="${v("terms")}" placeholder="e.g. 30% advance, balance on delivery"></div>
       <div class="field wide"><label for="sfCerts">Certificates (separate with commas)</label><input id="sfCerts" value="${esc(Array.isArray(s.certs)?s.certs.join(", "):(s.certs||""))}" placeholder="ISO 9001, BIS licence"></div>
     </div>
-    <div><h3 style="margin-bottom:8px">What they sell</h3>
+    <div><h3 style="margin-bottom:8px">${own?"What you sell":"What they sell"}</h3>
       <div class="offers" id="sfOffers">${sf.offers.map(offerRow).join("")}</div>
-      <p class="hint" style="margin-top:6px">Write each rate as "from quantity:price". The first quantity is their minimum order, and the price shouldn't go up as quantity goes up.</p>
+      <p class="hint" style="margin-top:6px">Write each rate as "from quantity:price". The first quantity is ${own?"your":"their"} minimum order, and the price shouldn't go up as quantity goes up.</p>
       <button class="btn sm" data-action="sf-add-offer" style="margin-top:8px">${ico("i-plus")}Add another product</button>
     </div>
     ${sf.errors.length?`<ul class="errors" role="alert">${sf.errors.map(e=>`<li>${esc(e)}</li>`).join("")}</ul>`:""}
-    <div class="actions"><button class="btn primary" data-action="sf-save">${sf.id?"Save changes":"Add supplier"}</button><button class="btn ghost" data-action="sf-cancel">Cancel</button></div>
+    <div class="actions"><button class="btn primary" data-action="sf-save">${own?(sf.id?"Save listing":"Go live"):sf.id?"Save changes":"Add supplier"}</button><button class="btn ghost" data-action="sf-cancel">Cancel</button></div>
   </div>`;
   updateGstHint();
 }
@@ -413,11 +413,11 @@ async function saveSupplier(btn){
   if(!ok){sf.errors=errors;renderSupplierForm(input);return;}
   btn.disabled=true;
   try{
-    const appId=sf.appId;
-    const saved=await Repo.upsertSupplier(s);
-    toast(`${saved.name} ${input.id?"updated":"added"}`);
+    const appId=sf.appId,own=sf.box==="listingForm";
+    const saved=own?await Repo.saveListing(s):await Repo.upsertSupplier(s);
+    toast(own?(input.id?"Listing saved":"You're live. Buyer requests that fit will show up under Requests."):`${saved.name} ${input.id?"updated":"added"}`);
     if(appId)Repo.updateApplication(appId,{status:"onboarded",supplierId:saved.id}).then(()=>{appsCache=null;}).catch(()=>{});
-    closeSupplierForm();renderSuppliers();if(flow.stage==="quotes")renderBuy();
+    closeSupplierForm();if(!own)renderSuppliers();if(flow.stage==="quotes")renderBuy();
   }catch(e){sf.errors=[e.message];renderSupplierForm(input);}
 }
 
@@ -455,24 +455,20 @@ async function draftReply(id,btn){
 function renderInsights(){
   const o=store().orders,gmv=o.reduce((a,x)=>a+x.landed,0),goods=o.reduce((a,x)=>a+x.subtotal,0),saved=o.reduce((a,x)=>a+Math.max(0,x.avg-x.landed),0);
   const rfqs=store().rfqs.length,conv=rfqs?store().rfqs.filter(r=>r.status==="ordered").length/rfqs:0;
-  const k=[["Bought through VyaparBoss",lakh(gmv),`${o.length} order${o.length===1?"":"s"}, delivered value`],["Buyers saved",lakh(saved),"versus the average quote"],["Requests that became orders",(conv*100).toFixed(0)+"%",`${rfqs} request${rfqs===1?"":"s"} so far`],["Platform revenue",inr(goods*TAKE),`at a ${TAKE*100}% fee on goods`]];
+  const k=[["Bought through VyaparBoss",lakh(gmv),`${o.length} order${o.length===1?"":"s"}, delivered value`],["Buyers saved",lakh(saved),"versus the average quote"],["Requests that became orders",(conv*100).toFixed(0)+"%",`${rfqs} request${rfqs===1?"":"s"} so far`],["Delivered",String(o.filter(x=>x.stage===4).length),`of ${o.length} order${o.length===1?"":"s"}`]];
   $("#kpis").innerHTML=k.map(([a,b,c])=>`<div class="panel kpi"><span>${a}</span><b>${b}</b><small>${c}</small></div>`).join("");
   const by={};o.forEach(x=>{const c=PMAP[x.productId].cat;by[c]=(by[c]||0)+x.landed;});const max=Math.max(1,...Object.values(by));
   $("#catBars").innerHTML=o.length?Object.keys(CATS).map(c=>`<div class="bar"><span>${CAT_INFO[c].name}</span><div class="trackb"><div class="fill" style="width:${((by[c]||0)/max*100).toFixed(1)}%"></div></div><span>${lakh(by[c]||0)}</span></div>`).join("")
     :`<div class="empty" style="padding:6px">${ico("art-chart","")}<p>Spend shows up here after the first order.</p></div>`;
 }
 
-function showInsightsView(v){
-  document.querySelectorAll("[data-iview]").forEach(b=>b.setAttribute("aria-selected",b.dataset.iview===v));
-  $("#i-numbers").hidden=v!=="numbers";$("#i-outreach").hidden=v!=="outreach";
-  if(v==="outreach")renderOutreachView();
-}
+function showInsightsView(v){if(typeof showTeamView==="function")showTeamView(v==="outreach"?"outreach":"network");}
 
 /* ===================== WHATSAPP ===================== */
 let waChat=[];const WA_TEST_FROM="919800000001";
 async function renderWhatsApp(){
   const el=$("#waPanel");
-  if($("#v-insights").hidden&&el.innerHTML)return;
+  if($("#t-wa").hidden&&el.innerHTML)return;
   const typed=$("#waInput")?.value||"",hadFocus=document.activeElement?.id==="waInput";
   if(Repo.mode!=="server"){
     el.innerHTML=`<div class="wahead"><h3>Bhai on WhatsApp</h3><span class="pill">Coming soon</span></div>
@@ -503,12 +499,15 @@ function renderAiChip(){
 }
 
 /* ===================== NAVIGATION ===================== */
-function renderAll(){renderOrders();renderSuppliers();if(!$("#s-desk").hidden)renderDesk();renderInsights();renderWhatsApp();}
+function renderAll(){renderOrders();renderInsights();if(typeof renderRoleViews==="function")renderRoleViews();}
 function showTab(t){
   if(document.body.classList.contains("public")){document.body.classList.remove("public");if(location.hash)history.replaceState(null,"",location.pathname+location.search);pub.view=null;}
   document.querySelectorAll("#tabs [data-tab],#bottomnav [data-tab]").forEach(b=>{if(b.dataset.tab===t)b.setAttribute("aria-current","page");else b.removeAttribute("aria-current");});
+  if(typeof allowedTab==="function"){t=allowedTab(t);if(t==="auth"){showAuth();return;}}
+  document.body.classList.remove("welcome");
   document.querySelectorAll(".view").forEach(v=>{const on=v.id==="v-"+t;if(on&&v.hidden){v.classList.remove("enter");void v.offsetWidth;v.classList.add("enter");}v.hidden=!on;});
   try{localStorage.setItem(KEY+".tab",t);}catch(e){}
+  if(typeof pub!=="undefined")pub.view=null;
   if(t==="buy")renderBuy();else renderAll();
   window.scrollTo({top:0});
   if(Repo.mode==="server")Repo.refresh().then(ch=>ch&&renderAll()).catch(()=>{});
@@ -541,19 +540,22 @@ const ACTIONS={
   approve:a=>{if($("#okBox")?.checked)approve(a);},
   "show-neg":()=>{flow.showNeg=true;renderBuy();setTimeout(()=>$("#negTarget")?.focus(),30);},
   negotiate:()=>negotiateNow(),
+  "cmp-sort":a=>{flow.cmpSort=a.dataset.v;flow.cmpOpen=true;renderBuy();},
   "new-req":()=>{flow=freshFlow();renderBuy();setTimeout(()=>$("#heroAsk")?.focus(),30);},
   reorder:a=>{const o=store().orders.find(x=>x.po===a.dataset.po);if(!o||!PMAP[o.productId])return;
     flow=freshFlow();flow.stage="ask";flow.cat=PMAP[o.productId].cat;flow.r={productId:o.productId,qty:o.qty,city:o.city};
     me(`Same as last time: ${qfmt(o.qty)} ${PMAP[o.productId].unit} ${PMAP[o.productId].name} to ${o.city}`);
     bhai(t("reorder"));flow.newCard=true;showTab("buy");},
+  received:a=>{const o=store().orders.find(x=>x.po===a.dataset.po);if(o&&o.stage<4){const history=o.history.slice();history[4]=Date.now();Repo.updateOrder(o.po,{stage:4,history}).then(()=>toast("Marked as delivered")).catch(fail);renderOrders();}},
   advance:a=>{const o=store().orders.find(x=>x.po===a.dataset.po);if(o&&o.stage<4){const history=o.history.slice();history[o.stage+1]=Date.now();Repo.updateOrder(o.po,{stage:o.stage+1,history}).catch(fail);renderOrders();}},
   issue:a=>{const o=store().orders.find(x=>x.po===a.dataset.po);if(o){Repo.updateOrder(o.po,{issue:o.stage>=3?"Short quantity received":"Dispatch delayed"}).catch(fail);renderOrders();}},
   resolve:a=>{Repo.updateOrder(a.dataset.po,{issue:null}).catch(fail);renderOrders();},
-  "clear-samples":async()=>{try{const n=await Repo.clearSamples();renderAll();toast(n?`Removed ${n} example orders`:"No example orders left");}catch(e){fail(e);}},
+  "clear-samples":async()=>{try{const n=await Repo.clearSamples();renderAll();toast(n?`Hid ${n} example orders`:"No example orders left");}catch(e){fail(e);}},
   draft:a=>draftReply(a.dataset.rfq,a),
   copy:a=>{const ta=document.getElementById("reply-"+a.dataset.rfq);const done=()=>toast("Reply copied");try{navigator.clipboard.writeText(ta.value).then(done,()=>{ta.select();toast("Press Ctrl+C to copy");});}catch(err){ta.select();toast("Press Ctrl+C to copy");}},
   "wa-send":()=>waSend(),
   "sf-open":()=>{showSupplierView("network");openSupplierForm(null);},
+  "sf-verify":a=>Repo.verifySupplier(a.dataset.sid,a.dataset.v==="1").then(()=>{toast(a.dataset.v==="1"?"Marked verified":"Verified mark removed");renderSuppliers();}).catch(fail),
   "sf-edit":a=>openSupplierForm(store().suppliers.find(x=>x.id===a.dataset.sid)),
   "sf-cancel":()=>closeSupplierForm(),
   "sf-save":a=>saveSupplier(a),
@@ -566,8 +568,7 @@ const ACTIONS={
 };
 document.addEventListener("click",e=>{
   const nav=e.target.closest("#tabs [data-tab],#bottomnav [data-tab]");if(nav){showTab(nav.dataset.tab);return;}
-  const sv=e.target.closest("[data-sview]");if(sv){showSupplierView(sv.dataset.sview);return;}
-  const iv=e.target.closest("[data-iview]");if(iv){showInsightsView(iv.dataset.iview);return;}
+  const tv=e.target.closest("[data-tview]");if(tv){showTeamView(tv.dataset.tview);return;}
   const chip=e.target.closest("#scat [data-cat]");if(chip){scat=chip.dataset.cat;document.querySelectorAll("#scat [data-cat]").forEach(x=>x.setAttribute("aria-pressed",x===chip));renderSuppliers();return;}
   const a=e.target.closest("[data-action]");if(!a||!ACTIONS[a.dataset.action])return;
   if(a.tagName==="A")e.preventDefault();
@@ -599,9 +600,8 @@ try{const hd=document.querySelector("header.top");if(hd)addEventListener("scroll
   applyStatic();renderBuy();renderAiChip();
   await Repo.init();
   if(Repo.mode==="server"){aiState=Repo.info.ai?"server":"off";setInterval(()=>{if(!document.hidden)Repo.refresh().then(ch=>ch&&renderAll()).catch(()=>{});},20000);}
-  renderAiChip();renderAll();
-  if(/^#(join|quote)/.test(location.hash))growBoot();
-  else try{const t=localStorage.getItem(KEY+".tab");if(t&&t!=="buy"&&$(`#v-${t}`))showTab(t);}catch(e){}
+  renderAiChip();
+  if(typeof rolesBoot==="function")rolesBoot();else renderAll();
   if(aiState==="pending"){
     if(window.claude?.use){claude.use("sample").then(s=>{ai=s;aiState=s?"live":"off";renderAiChip();}).catch(()=>{aiState="off";renderAiChip();});}
     else{aiState="off";renderAiChip();}
