@@ -99,6 +99,14 @@ function detectLocale(){
   return "in_hi";
 }
 let LOCALE=LOCALES[detectLocale()];
+/* Appearance: beige (light) is the house look for everyone; dark only when someone picks it. */
+const THEME_KEY="vyaparboss.v1.theme";
+let THEME=(()=>{try{return localStorage.getItem(THEME_KEY)==="dark"?"dark":"light";}catch(e){return "light";}})();
+function applyTheme(){
+  try{document.documentElement.dataset.theme=THEME;const m=document.querySelector('meta[name="theme-color"]');if(m)m.content=THEME==="dark"?"#1C140E":"#F1E4CC";}catch(e){}
+}
+function setTheme(v){THEME=v==="dark"?"dark":"light";try{localStorage.setItem(THEME_KEY,THEME);}catch(e){}applyTheme();renderRegionPicker();}
+applyTheme();
 const isGlobal=()=>LOCALE.region==="global";
 /* t("key",{vars}) → text for the current region and language. Arrays come back as-is. */
 function t(k,v={}){
@@ -126,6 +134,9 @@ function renderRegionPicker(){
       <p class="rp-h">Global</p>
       <button role="menuitemradio" aria-checked="${LOCALE.id==="gl_en"}" data-action="locale" data-v="gl_en">English</button>
       <p class="rp-note">Suppliers are in India. Global shows everything in plain English.</p>
+      <p class="rp-h">Look</p>
+      <button role="menuitemradio" aria-checked="${THEME==="light"}" data-action="theme" data-v="light">Beige</button>
+      <button role="menuitemradio" aria-checked="${THEME==="dark"}" data-action="theme" data-v="dark">Dark</button>
     </div>`;
 }
 function setLocale(id){

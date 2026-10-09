@@ -523,6 +523,7 @@ function onLocaleChange(){
 }
 const ACTIONS={
   locale:a=>setLocale(a.dataset.v),
+  theme:a=>{setTheme(a.dataset.v);toast(a.dataset.v==="dark"?"Dark look":"Beige look");},
   go:a=>showTab(a.dataset.tab),
   try:a=>sayToBhai(a.dataset.v),
   cat:a=>{const c=a.dataset.cat||null;
