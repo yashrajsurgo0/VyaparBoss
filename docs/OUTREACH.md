@@ -6,6 +6,9 @@
 - **Insights → Outreach** (team only): import lead CSVs, pick a template, preview, then send (or download a mail-merge CSV). Leads who sign up through their personal link are marked "joined" automatically.
 - **Supplier quote links**: on a request's quotes, "Team: get real quotes from suppliers" makes one link per onboarded supplier, with a WhatsApp button. Their own price replaces the rate-card estimate.
 
+- **Phone-first outreach**: in Outreach, each lead has WhatsApp (pre-written Hinglish opener with their personal sign-up link) and Call buttons. Tap a business name for a call script and notes. Opening WhatsApp or the dialer marks the lead "contacted"; you press Send in WhatsApp yourself. IndiaMART relay numbers get Call only.
+- **Suppliers can add their own rates at sign-up** (optional). "Add as supplier" then pre-fills those rates; the team only adds the GSTIN and checks.
+
 ## Switch it on (Render → vyaparboss → Environment)
 1. `ADMIN_KEY`: a long random password (e.g. from a password manager). Your team enters it once per browser session.
 2. Upgrade to **Starter + disk** (see `render.yaml` notes) *before* sending outreach. On the free plan, sign-ups are wiped on every redeploy and the site sleeps (first visit can take ~50 s).

@@ -59,3 +59,5 @@ function toCSV(rows,cols){
 const fillTemplate=(tpl,vars)=>String(tpl).replace(/\{\{(\w+)\}\}/g,(_,k)=>vars[k]??"");
 const isEmail=e=>/^[^\s@,;<>"]+@[^\s@,;<>"]+\.[a-z]{2,}$/i.test(String(e||"").trim());
 const phoneDigits=p=>{let d=String(p||"").replace(/\D/g,"");if(d.length===12&&d.startsWith("91"))d=d.slice(2);if(d.length===11&&d.startsWith("0"))d=d.slice(1);return d;};
+/* A 10-digit Indian mobile (6–9 start) or null. Landlines and short numbers return null. */
+const mobileOf=p=>{const d=phoneDigits(String(p||"").split(/[\/,;]| or /)[0]);return /^[6-9]\d{9}$/.test(d)?d:null;};

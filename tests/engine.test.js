@@ -136,6 +136,10 @@ test("sign-up validation", () => {
   const ok = C.normalizeJoin({ role: "supplier", business: "Rudrapur Cartons", name: "Amit", phone: "+91 98765 43210", city: "Rudrapur", cats: ["pack"], consent: true });
   assert.ok(ok.ok, ok.errors.join("; "));
   assert.strictEqual(ok.a.phone, "9876543210");
+  const withRates = C.normalizeJoin({ role: "supplier", business: "Rudrapur Cartons", name: "Amit", phone: "9876543210", city: "Rudrapur", cats: ["pack"], consent: true,
+    offers: [{ p: "box5", tiersText: "200:44, 1000:40", cap: "20000" }, { p: "", tiersText: "" }], coverage: "800", lead: "3" });
+  assert.deepStrictEqual(plain([withRates.a.offers, withRates.a.coverage, withRates.a.lead]), [[{ p: "box5", tiers: [[200, 44], [1000, 40]], cap: 20000 }], 800, 3]);
+  assert.match(C.normalizeJoin({ ...withRates.a, consent: true, offers: [{ p: "box5", tiersText: "cheap" }] }).errors.join(), /write rates like/);
   const bad = C.normalizeJoin({ role: "buyer", business: "X", phone: "12345", consent: false });
   assert.ok(bad.errors.length >= 4);
 });
@@ -155,6 +159,15 @@ test("export clusters are deliverable cities", () => {
   for (const c of ["Moradabad", "Karur", "Panipat", "Silvassa", "Kanpur"]) assert.ok(C.CITIES[c], c);
   assert.strictEqual(C.ruleParse("50 ISPM pallets Moradabad 10 din").product_id, "pallet");
   assert.ok(C.checkGstin("26AAACV1234A1Z5").why !== "GSTIN must be 15 characters: state code, PAN, entity code, Z, check character");
+});
+
+test("phone-first outreach: mobiles detected, WhatsApp pitch and call script are honest", () => {
+  assert.deepStrictEqual([C.mobileOf("+91 98765 43210 / 0594-222"), C.mobileOf("0591-2412345"), C.mobileOf("98252 15936"), C.mobileOf("")], ["9876543210", null, "9825215936", null]);
+  const lead = { id: "L0009", business: "Karur Weaves", city: "Karur", segment: "exporter", product: "home textiles" };
+  const wa = C.renderWhatsAppPitch(lead, { senderName: "Yashraj", joinBase: "https://x.test/" });
+  assert.match(wa, /#join\/b\/L0009/); assert.match(wa, /"no"/); assert.ok(!/\{\{/.test(wa));
+  const script = C.renderCallScript({ ...lead, segment: "supplier" }, { senderName: "Yashraj" });
+  assert.ok(script.length >= 5 && /Don't promise/.test(script.at(-1)));
 });
 
 console.log(`\n${passed} engine tests passed`);

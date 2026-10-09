@@ -127,3 +127,26 @@ Unsubscribe: {{unsub_link}}`}
 const MONTHLY_BANDS=["Under ₹50,000","₹50,000 – 2 lakh","₹2 – 10 lakh","Over ₹10 lakh"];
 const EXPORT_STAGES=["Already exporting","Starting exports","Not exporting"];
 
+
+/* Lead pipeline, phone-first outreach. Small Indian firms answer WhatsApp and calls far more than email. */
+const LEAD_STATUSES=["new","contacted","emailed","replied","joined","not_interested","unsubscribed","bounced"];
+const WA_TEMPLATES={
+ supplier:`Namaste {{greeting}}, main {{sender_name}}, VyaparBoss se (House of 24 Pvt. Ltd.). Hum MSME buyers ke liye buying assistant bana rahe hain. {{city}} ke aas-paas ke {{product}} makers ko pilot mein free listing de rahe hain: sirf woh orders milenge jo aap serve kar sakein, aur fee sirf closed order par (pehle se tay). 2 minute ka sign-up: {{join_link}}
+Interest na ho to "no" likh dijiye, dobara message nahi karenge.`,
+ exporter:`Namaste {{greeting}}, main {{sender_name}}, VyaparBoss se (House of 24 Pvt. Ltd.). Export cartons, pallets, stretch film jaise items ke liye hum kai suppliers ka delivered price (rate + GST + freight) ek saath dikhate hain; aapki approval ke bina kuch order nahi hota, aur buyers ke liye free hai. {{product}} exporters ke saath chhota pilot chal raha hai. Dekhna chahenge? {{join_link}}
+Interest na ho to "no" likh dijiye, dobara message nahi karenge.`
+};
+const CALL_SCRIPTS={
+ supplier:["Namaste, main {{sender_name}}, VyaparBoss se bol raha hoon. Kya {{business}} ke owner ya sales head se baat ho sakti hai?",
+  "Hum MSME buyers ke liye buying assistant bana rahe hain. Buyer apni zaroorat batata hai, aur request sirf un suppliers ko jaati hai jo woh product, woh quantity aur woh city serve kar sakte hain.",
+  "Listing free hai. Koi annual package nahi. Fee sirf us order par jo close ho, aur woh pehle aapke saath tay karenge.",
+  "Ask: kaunse products, minimum order kitna, kitne km tak delivery, rough rate kya hai?",
+  "Close: main aapko WhatsApp par 2-minute sign-up link bhejta hoon. Pehli buyer request aate hi call karunga.",
+  "Don't promise orders, volumes or prices. If they say no, thank them and mark 'not interested'."],
+ exporter:["Namaste, main {{sender_name}}, VyaparBoss se. Kya {{business}} mein packaging ya purchase dekhne wale se baat ho sakti hai?",
+  "Export cartons, pallets, stretch film, desiccants: aap abhi kahan se lete hain, aur kitne vendors ko call karna padta hai?",
+  "Hum kai verified suppliers ka delivered price (rate + GST + freight) ek message mein dikhate hain. Aapki approval ke bina kuch order nahi hota. Buyers ke liye free.",
+  "Ask: monthly kitna lagta hai, kaunsa item sabse zyada pareshan karta hai, last price kya tha?",
+  "Close: agli requirement aaye to WhatsApp par bata dijiye, hum quotes laa denge. Sign-up link bhej raha hoon.",
+  "Don't promise savings or delivery dates. If they say no, thank them and mark 'not interested'."]
+};

@@ -50,6 +50,14 @@ function renderJoin(){
       <div class="field wide"><label for="jWhat">${sup?"Products, in your words":"Items and rough quantities"}</label><input id="jWhat" placeholder="${sup?"e.g. 3-ply and 5-ply boxes, up to 20,000 a month":"e.g. 5-ply export cartons, 3,000 a month"}"></div>
       ${sup?"":`<p class="q-sub">Do you export?</p><div class="chips" data-group="exports">${EXPORT_STAGES.map(x=>`<button type="button" class="chip" data-action="join-pick" data-k="exports" data-v="${esc(x)}" aria-pressed="${pub.exports===x}">${x}</button>`).join("")}</div>
         <p class="q-sub">Monthly spend on these items</p><div class="chips">${MONTHLY_BANDS.map(x=>`<button type="button" class="chip" data-action="join-pick" data-k="monthly" data-v="${esc(x)}" aria-pressed="${pub.monthly===x}">${x}</button>`).join("")}</div>`}
+      ${sup?`<details class="more" ${pub.ratesOpen?"open":""} data-rates><summary>Add your rates now (optional, saves a call) ${ico("i-chev","")}</summary><div>
+        <p class="hint">Buyers see your delivered price (your rate + GST + freight). Write rates as "from quantity:₹ price", e.g. 500:17.9, 2000:16.2.</p>
+        ${[0,1].map(i=>`<div class="offer"><div class="field"><label for="jP${i}">Product</label><select id="jP${i}"><option value="">Choose…</option>${Object.entries(CATS).map(([c,l])=>`<optgroup label="${l}">${PRODUCTS.filter(x=>x.cat===c).map(x=>`<option value="${x.id}">${esc(x.name)}</option>`).join("")}</optgroup>`).join("")}</select></div>
+          <div class="field tiers"><label for="jT${i}">Rates</label><input id="jT${i}" placeholder="500:17.9, 2000:16.2"></div>
+          <div class="field"><label for="jC${i}">Most per order</label><input id="jC${i}" type="number" min="1" inputmode="numeric"></div></div>`).join("")}
+        <div class="fields"><div class="field"><label for="jCov">Deliver up to (km)</label><input id="jCov" type="number" min="25" max="3500" inputmode="numeric" placeholder="500"></div>
+          <div class="field"><label for="jLead">Days to get an order ready</label><input id="jLead" type="number" min="1" max="60" inputmode="numeric" placeholder="3"></div></div>
+      </div></details>`:""}
       <details class="more"><summary>Add email${sup?" and GSTIN":""} (optional) ${ico("i-chev","")}</summary><div class="fields">
         <div class="field"><label for="jEmail">Email</label><input id="jEmail" type="email" autocomplete="email"></div>
         ${sup?`<div class="field"><label for="jGst">GSTIN</label><input id="jGst" maxlength="15" class="num" autocapitalize="characters"></div>`:""}
@@ -72,13 +80,15 @@ function renderJoin(){
 }
 function readJoin(){
   const g=id=>document.getElementById(id)?.value??"";
-  return {role:pub.role,business:g("jBiz"),name:g("jName"),phone:g("jPhone"),city:g("jCity").trim(),what:g("jWhat"),email:g("jEmail"),gstin:g("jGst"),
+  pub.ratesOpen=!!document.querySelector("[data-rates]")?.open;
+  return {offers:[0,1].map(i=>({p:g("jP"+i),tiersText:g("jT"+i),cap:g("jC"+i)})),coverage:g("jCov"),lead:g("jLead"),role:pub.role,business:g("jBiz"),name:g("jName"),phone:g("jPhone"),city:g("jCity").trim(),what:g("jWhat"),email:g("jEmail"),gstin:g("jGst"),
     cats:pub.cats,exports:pub.exports||"",monthly:pub.monthly||"",ref:pub.ref,consent:!!document.getElementById("jOk")?.checked,company_site:g("jHp")};
 }
 let joinDraft=null;
 function keepJoin(){joinDraft=readJoin();}
 function restoreJoin(){if(!joinDraft)return;const s=(id,v)=>{const e=document.getElementById(id);if(e&&v!=null)e.value=v;};
-  s("jBiz",joinDraft.business);s("jName",joinDraft.name);s("jPhone",joinDraft.phone);s("jCity",joinDraft.city);s("jWhat",joinDraft.what);s("jEmail",joinDraft.email);s("jGst",joinDraft.gstin);
+  s("jBiz",joinDraft.business);s("jName",joinDraft.name);s("jPhone",joinDraft.phone);s("jCity",joinDraft.city);s("jWhat",joinDraft.what);s("jEmail",joinDraft.email);s("jGst",joinDraft.gstin);s("jCov",joinDraft.coverage);s("jLead",joinDraft.lead);
+  (joinDraft.offers||[]).forEach((o,i)=>{s("jP"+i,o.p);s("jT"+i,o.tiersText);s("jC"+i,o.cap);});
   const ok=document.getElementById("jOk");if(ok)ok.checked=joinDraft.consent;}
 function rerenderJoin(){keepJoin();renderJoin();restoreJoin();}
 async function submitJoin(){
@@ -157,6 +167,7 @@ async function renderApps(){
   el.innerHTML=head+`<div class="applist">${list.map(a=>`<div class="panel ocard">
     <div class="ohead"><div><h3>${esc(a.business)}</h3><p class="meta">${a.role==="supplier"?"Supplier":"Buyer"} · ${esc(a.city)} · ${dstr(a.at)}${a.ref?` · from outreach`:""}</p></div><span class="pill ${statusPill[a.status]}">${esc(a.status)}</span></div>
     <p>${a.cats.map(c=>`<span class="tag">${esc(CATS[c])}</span>`).join(" ")} ${esc(a.what)}</p>
+    ${a.offers?.length?`<ul class="plist">${a.offers.map(o=>`<li><span>${esc(PMAP[o.p]?.name||o.p)}</span><span>${esc(tiersText(o.tiers))}, up to ${qfmt(o.cap)}</span></li>`).join("")}</ul><p class="hint">${a.coverage?`Delivers up to ${qfmt(a.coverage)} km. `:""}${a.lead?`Ready in ${a.lead} days.`:""}</p>`:""}
     <p class="hint">${esc(a.name)} · <a href="https://wa.me/91${esc(a.phone)}" target="_blank" rel="noopener">WhatsApp +91 ${esc(a.phone)}</a>${a.email?` · <a href="mailto:${esc(a.email)}">${esc(a.email)}</a>`:""}${a.gstin?` · GSTIN <span class="num">${esc(a.gstin)}</span>`:""}${a.exports?` · ${esc(a.exports)}`:""}${a.monthly?` · ${esc(a.monthly)}/month`:""}</p>
     <div class="actions">${a.role==="supplier"&&a.status!=="onboarded"?`<button class="btn sm primary" data-action="app-onboard" data-id="${esc(a.id)}">Add as supplier</button>`:""}
       ${a.status==="new"?`<button class="btn sm" data-action="app-status" data-id="${esc(a.id)}" data-v="contacted">Mark called</button>`:""}
@@ -167,18 +178,20 @@ async function renderApps(){
 function onboardFromApp(id){
   const a=appsCache?.find(x=>x.id===id);if(!a)return;
   showSupplierView("network");openSupplierForm(null);sf.appId=a.id;
-  renderSupplierForm({name:a.business,city:CITIES[a.city]?a.city:"",gstin:a.gstin,contact:"+91 "+a.phone,terms:""});
-  toast("Fill in their rates and delivery range, then save.");
+  if(a.offers?.length)sf.offers=a.offers.map(o=>({p:o.p,tiersText:tiersText(o.tiers),cap:o.cap}));
+  renderSupplierForm({name:a.business,city:CITIES[a.city]?a.city:"",gstin:a.gstin,contact:"+91 "+a.phone,terms:"",coverage:a.coverage??500,lead:a.lead??2});
+  toast(a.offers?.length?"Their rates are filled in. Check them, then save.":"Fill in their rates and delivery range, then save.");
 }
 
 /* ===================== OUTREACH (Insights tab) ===================== */
-let out={data:null,filter:"all",status:"new",q:"",sel:new Set(),tpl:"supplier_free",result:null,armed:false,busy:false};
+let out={data:null,filter:"all",status:"new",reach:"any",open:null,q:"",sel:new Set(),tpl:"supplier_free",result:null,armed:false,busy:false};
 async function renderOutreachView(){
   const el=$("#outreachBox");
   const gate=opsGate("Outreach uses your lead lists and sends email in your name.");if(gate){el.innerHTML=gate;return;}
   try{out.data=await Repo.leads();}catch(e){return opsError(e,el,renderOutreachView);}
   const {leads,outreach:o}=out.data;const st=o.settings||{};
-  const shown=leads.filter(l=>(out.filter==="all"||l.segment===out.filter)&&(out.status==="all"||l.status===out.status)
+  const reachOk=l=>out.reach==="any"||(out.reach==="email"?!!l.email:out.reach==="whatsapp"?!!mobileOf(l.phone)&&!/indiamart/i.test(l.source)&&!/\bPNS\b/.test(l.notes):!!l.phone&&!l.email);
+  const shown=leads.filter(l=>(out.filter==="all"||l.segment===out.filter)&&(out.status==="all"||l.status===out.status)&&reachOk(l)
     &&(!out.q||(l.business+" "+l.city+" "+l.product).toLowerCase().includes(out.q)));
   for(const id of [...out.sel])if(!leads.some(l=>l.id===id))out.sel.delete(id);
   const n=out.sel.size,first=leads.find(l=>out.sel.has(l.id))||shown[0];
@@ -186,6 +199,17 @@ async function renderOutreachView(){
   const preview=first?renderOutreach(out.tpl,first,{senderName:st.senderName,senderAddress:st.senderAddress||"[your business address]",joinBase:base,unsubLink:()=>"[unsubscribe link]"}):null;
   const canSend=Repo.mode==="server"&&o.email;
   const counts=s=>leads.filter(l=>l.status===s).length;
+  const vctx={senderName:st.senderName||"[your name]",senderAddress:st.senderAddress,joinBase:base};
+  const statusSel=l=>`<select data-lead-status="${esc(l.id)}" aria-label="Status of ${esc(l.business)}">${LEAD_STATUSES.map(s=>`<option value="${s}" ${l.status===s?"selected":""}>${s.replace("_"," ")}</option>`).join("")}</select>`;
+  // IndiaMART shows relay (PNS) numbers that forward calls but aren't WhatsApp accounts.
+  const reach=l=>{const viaIM=/indiamart/i.test(l.source)||/\bPNS\b/.test(l.notes),m=viaIM?null:mobileOf(l.phone);
+    return `${m?`<a class="btn sm" target="_blank" rel="noopener" data-action="o-wa" data-id="${esc(l.id)}" href="https://wa.me/91${m}?text=${encodeURIComponent(renderWhatsAppPitch(l,vctx))}">WhatsApp</a>`:""}${l.phone?`<a class="btn sm ghost" data-action="o-call" data-id="${esc(l.id)}" href="tel:${esc(String(l.phone).split(/[\/,;]/)[0].replace(/[^\d+]/g,""))}" title="${viaIM?"IndiaMART relay number":""}">Call</a>`:""}`;};
+  const detail=l=>`<tr class="leaddetail"><td></td><td colspan="5">
+      <div class="leadbox">
+        <div><p class="q-sub">Call script</p><ol class="script">${renderCallScript(l,vctx).map(x=>`<li>${esc(x)}</li>`).join("")}</ol></div>
+        <div><p class="q-sub">Details</p><p class="hint">${l.contact?`Contact: ${esc(l.contact)} · `:""}${l.phone?`Phone: ${esc(l.phone)}${/indiamart/i.test(l.source)?" (IndiaMART relay; may not be on WhatsApp)":""} · `:""}${l.lastContacted?`Last contacted ${dstr(l.lastContacted)} · `:""}${l.source?`<a href="${esc(l.source)}" target="_blank" rel="noopener">Source</a>`:""}</p>
+          <label class="q-sub" for="note-${esc(l.id)}">Notes</label><textarea id="note-${esc(l.id)}" data-lead-note="${esc(l.id)}" rows="4" placeholder="What did they say? MOQ, rates, who to call back, when…">${esc(l.notes)}</textarea></div>
+      </div></td></tr>`;
   el.innerHTML=`
   <div class="panel pad steps-out">
     <h3>1. Who's writing</h3>
@@ -195,19 +219,21 @@ async function renderOutreachView(){
     <div class="actions"><button class="btn sm" data-action="o-settings">Save</button></div>
   </div>
   <div class="panel pad">
-    <h3>2. Leads <span class="muted" style="font-weight:400">${leads.length} total · ${counts("new")} new · ${counts("emailed")} emailed · ${counts("joined")} joined</span></h3>
+    <h3>2. Leads <span class="muted" style="font-weight:400">${leads.length} total · ${counts("new")} new · ${counts("contacted")+counts("emailed")} reached · ${counts("replied")} replied · ${counts("joined")} joined</span></h3>
+    <p class="hint">Phone first: WhatsApp or call the best 20 in a cluster, then email the rest. Tap a business name for the call script and notes.</p>
     <div class="toolbar"><label class="btn sm">${ico("i-plus")}Import CSV<input type="file" id="leadFile" accept=".csv,text/csv" hidden></label>
       <span class="hint">Columns like business_name, city, email, phone, products, segment. Duplicates are skipped.</span></div>
     ${leads.length?`<div class="toolbar">
       <div class="chips">${[["all","All"],["supplier","Suppliers"],["exporter","Exporters"]].map(([k,l])=>`<button class="chip" data-action="o-filter" data-v="${k}" aria-pressed="${out.filter===k}">${l}</button>`).join("")}</div>
-      <select id="oStatus" aria-label="Status">${["all","new","emailed","replied","joined","not_interested","unsubscribed","bounced"].map(s=>`<option value="${s}" ${out.status===s?"selected":""}>${s==="all"?"Any status":s.replace("_"," ")}</option>`).join("")}</select>
+      <select id="oReach" aria-label="How to reach">${[["any","Any contact"],["whatsapp","Has WhatsApp-able mobile"],["email","Has email"],["phone","Phone only"]].map(([k,t])=>`<option value="${k}" ${out.reach===k?"selected":""}>${t}</option>`).join("")}</select>
+      <select id="oStatus" aria-label="Status">${["all",...LEAD_STATUSES].map(s=>`<option value="${s}" ${out.status===s?"selected":""}>${s==="all"?"Any status":s.replace("_"," ")}</option>`).join("")}</select>
       <input id="oSearch" type="search" placeholder="Search" value="${esc(out.q)}" aria-label="Search leads">
     </div>
-    <div class="tablewrap"><table class="cmp leads"><thead><tr><th><input type="checkbox" id="oAll" aria-label="Select all shown with email" ${shown.length&&shown.filter(l=>l.email).every(l=>out.sel.has(l.id))?"checked":""}></th><th>Business</th><th>City</th><th>Product</th><th>Email</th><th>Status</th></tr></thead><tbody>
+    <div class="tablewrap"><table class="cmp leads"><thead><tr><th><input type="checkbox" id="oAll" aria-label="Select all shown with email" ${shown.length&&shown.filter(l=>l.email).every(l=>out.sel.has(l.id))?"checked":""}></th><th>Business</th><th>City</th><th>Product</th><th>Reach</th><th>Status</th></tr></thead><tbody>
     ${shown.slice(0,300).map(l=>`<tr><td><input type="checkbox" data-lead="${esc(l.id)}" ${out.sel.has(l.id)?"checked":""} ${l.email?"":"disabled"} aria-label="Select ${esc(l.business)}"></td>
-      <td><b>${esc(l.business)}</b>${l.website?`<br><a href="${esc(/^https?:/.test(l.website)?l.website:"https://"+l.website)}" target="_blank" rel="noopener" class="muted">${esc(l.website.replace(/^https?:\/\//,"").slice(0,32))}</a>`:""}</td>
-      <td>${esc(l.city)}</td><td>${esc(l.product.slice(0,40))}</td><td>${l.email?esc(l.email):`<span class="muted">${l.phone?esc(l.phone):"none"}</span>`}</td>
-      <td><select data-lead-status="${esc(l.id)}" aria-label="Status of ${esc(l.business)}">${["new","emailed","replied","joined","not_interested","unsubscribed","bounced"].map(s=>`<option value="${s}" ${l.status===s?"selected":""}>${s.replace("_"," ")}</option>`).join("")}</select></td></tr>`).join("")}
+      <td><button class="linkish" data-action="o-open" data-id="${esc(l.id)}" aria-expanded="${out.open===l.id}"><b>${esc(l.business)}</b></button>${l.website?`<br><a href="${esc(/^https?:/.test(l.website)?l.website:"https://"+l.website)}" target="_blank" rel="noopener" class="muted">${esc(l.website.replace(/^https?:\/\//,"").slice(0,32))}</a>`:""}</td>
+      <td>${esc(l.city)}</td><td>${esc(l.product.slice(0,40))}</td><td><div class="reach">${reach(l)}</div>${l.email?`<small class="muted">${esc(l.email)}</small>`:""}${!l.email&&!l.phone?`<span class="muted">none yet</span>`:""}</td>
+      <td>${statusSel(l)}</td></tr>${out.open===l.id?detail(l):""}`).join("")}
     </tbody></table></div>${shown.length>300?`<p class="hint">Showing 300 of ${shown.length}. Narrow with search or filters.</p>`:""}`
     :`<p class="muted">No leads yet. Import a CSV, for example the supplier and exporter lists Bhai researched.</p>`}
   </div>
@@ -225,6 +251,8 @@ async function renderOutreachView(){
     ${out.result?`<div class="negres">${out.result}</div>`:""}
   </div>`;
 }
+/* Opening WhatsApp or the dialer counts as contact; the status moves new → contacted. The message itself is sent by you. */
+function markContacted(id){Repo.updateLead(id,{contacted:true}).then(()=>{const l=out.data?.leads.find(x=>x.id===id);if(l){l.lastContacted=Date.now();if(l.status==="new")l.status="contacted";}setTimeout(renderOutreachView,400);}).catch(fail);}
 async function importLeadFile(file){
   if(!file)return;
   try{const rows=parseCSV(await file.text());if(!rows.length){toast("That file has no rows.");return;}
@@ -294,6 +322,9 @@ Object.assign(ACTIONS,{
   "app-onboard":a=>onboardFromApp(a.dataset.id),
   "app-status":a=>Repo.updateApplication(a.dataset.id,{status:a.dataset.v}).then(renderApps).catch(fail),
   "o-filter":a=>{out.filter=a.dataset.v;renderOutreachView();},
+  "o-open":a=>{out.open=out.open===a.dataset.id?null:a.dataset.id;renderOutreachView();},
+  "o-wa":a=>{window.open(a.href,"_blank","noopener");markContacted(a.dataset.id);},
+  "o-call":a=>{location.href=a.href;markContacted(a.dataset.id);},
   "o-settings":()=>Repo.saveOutreachSettings({senderName:$("#oName").value,senderAddress:$("#oAddr").value}).then(()=>{toast("Saved");renderOutreachView();}).catch(fail),
   "o-export":()=>exportMailMerge(),
   "o-send":a=>sendOutreach(a),
@@ -315,6 +346,8 @@ document.addEventListener("change",e=>{
   if(t.id==="oAll"){const shown=[...document.querySelectorAll("[data-lead]")].filter(x=>!x.disabled).map(x=>x.dataset.lead);shown.forEach(id=>t.checked?out.sel.add(id):out.sel.delete(id));renderOutreachView();return;}
   if(t.dataset?.leadStatus){Repo.updateLead(t.dataset.leadStatus,{status:t.value}).then(()=>toast("Updated")).catch(fail);return;}
   if(t.id==="oStatus"){out.status=t.value;renderOutreachView();return;}
+  if(t.id==="oReach"){out.reach=t.value;renderOutreachView();return;}
+  if(t.dataset?.leadNote){Repo.updateLead(t.dataset.leadNote,{notes:t.value}).then(()=>toast("Note saved")).catch(fail);return;}
   if(t.id==="oTpl"){out.tpl=t.value;renderOutreachView();return;}
 });
 document.addEventListener("input",e=>{if(e.target.id==="oSearch"){out.q=e.target.value.toLowerCase().trim();clearTimeout(out._t);out._t=setTimeout(()=>{renderOutreachView().then(()=>{const s=$("#oSearch");if(s){s.focus();s.setSelectionRange(s.value.length,s.value.length);}});},250);}});

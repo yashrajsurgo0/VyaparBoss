@@ -141,8 +141,9 @@ function createApp(opts = {}) {
     ["PATCH", /^\/api\/admin\/leads\/(.+)$/, async (req, m) => {
       admin(req); const l = store.data.leads.find(x => x.id === m[1]); if (!l) throw notFound("Lead");
       const p = await jsonBody(req);
-      if (["new", "emailed", "replied", "joined", "not_interested", "unsubscribed", "bounced"].includes(p.status)) l.status = p.status;
-      if ("notes" in p) l.notes = String(p.notes || "").slice(0, 300);
+      if (core.LEAD_STATUSES.includes(p.status)) l.status = p.status;
+      if (p.contacted) { l.lastContacted = Date.now(); if (l.status === "new") l.status = "contacted"; }
+      if ("notes" in p) l.notes = String(p.notes || "").slice(0, 1000);
       if ("email" in p) { const e = String(p.email || "").trim().toLowerCase(); if (e && !core.isEmail(e)) throw bad("Invalid email"); l.email = e; }
       store.save(); return l;
     }],

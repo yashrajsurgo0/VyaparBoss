@@ -181,6 +181,10 @@ const { createApp } = require("../server");
           { business_name: "Dup", email: "SALES@rc.test" }] }, "k3y-123")).body;
         assert.deepStrictEqual([imp.added, imp.skipped], [3, 1]);
         const leads = (await c3("GET", "/api/admin/leads", null, "k3y-123")).body.leads;
+        // calling or WhatsApp marks the lead contacted
+        const agra = leads.find(l => l.business === "Agra Shoes");
+        const contacted = (await c3("PATCH", "/api/admin/leads/" + agra.id, { contacted: true, notes: "Call back Monday" }, "k3y-123")).body;
+        assert.deepStrictEqual([contacted.status, contacted.notes, !!contacted.lastContacted], ["contacted", "Call back Monday", true]);
         // sending needs sender identity first
         assert.strictEqual((await c3("POST", "/api/admin/outreach", { leadIds: [leads[0].id], templateId: "supplier_free", send: true }, "k3y-123")).status, 400);
         await c3("PUT", "/api/admin/outreach/settings", { senderName: "Yashraj", senderAddress: "House of 24, Nagpur" }, "k3y-123");
