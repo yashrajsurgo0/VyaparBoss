@@ -129,7 +129,7 @@ function normalizeLead(x){
   const lead={id:str(x.id,40)||null,business:str(x.business||x.business_name||x.name,100),city:str(x.city,60),state:str(x.state,40),
     segment:/supplier/.test(segRaw)&&!/buyer/.test(segRaw)?"supplier":/buyer|export/.test(segRaw)?"exporter":"supplier",
     product:str(x.product||x.products||x.cluster_product||x.category,120),website:str(x.website,200),
-    email:str(x.email,120).toLowerCase(),phone:str(x.phone,40),contact:str(x.contact||x.contact_name,80),
+    email:(String(x.email||"").match(/[^\s@,;<>"()]+@[^\s@,;<>"()]+\.[a-z]{2,}/i)||[""])[0].toLowerCase().slice(0,120),phone:str(x.phone,40),contact:str(x.contact||x.contact_name,80),
     source:str(x.source||x.source_url,300),notes:str(x.notes,1000),status:str(x.status,20)||"new",
     createdAt:Number(x.createdAt)||Date.now(),lastEmailed:Number(x.lastEmailed)||null,sends:Array.isArray(x.sends)?x.sends.slice(-10):[]};
   if(lead.business.length<2)errors.push("Business name is missing");
