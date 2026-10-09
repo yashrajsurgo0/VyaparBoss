@@ -110,4 +110,51 @@ test("sample data builds three linked orders", () => {
   for (const o of d.orders) assert.ok(d.rfqs.find(r => r.id === o.rfqId && r.wonBy === o.sid));
 });
 
+test("CSV parser handles quotes, commas and blank lines", () => {
+  const rows = plain(C.parseCSV('business_name,city,email\n"Shree, Ganesh Pack",Rajkot,a@b.in\n\n"Say ""hi"" Ltd",Moradabad,\n'));
+  assert.deepStrictEqual(rows.map(r => r.business_name), ["Shree, Ganesh Pack", 'Say "hi" Ltd']);
+  assert.strictEqual(C.parseCSV(C.toCSV(rows, ["business_name", "city"]))[0].business_name, "Shree, Ganesh Pack");
+});
+test("leads: researched rows normalise, bad emails dropped, duplicates skipped", () => {
+  const exp = C.normalizeLead({ business_name: "Karur Weaves", city: "Karur", segment: "exporter-buyer", cluster_product: "home textiles", email: "not-an-email" }).lead;
+  assert.deepStrictEqual([exp.segment, exp.email, exp.product], ["exporter", "", "home textiles"]);
+  assert.strictEqual(C.normalizeLead({ business_name: "Rudra Box", category: "Corrugated boxes" }).lead.segment, "supplier");
+  const { added, skipped } = C.mergeLeads([{ business: "Alpha", email: "a@x.in" }], [{ business_name: "Beta", email: "A@x.in" }, { business_name: "Agra Kraft", city: "Agra" }, { business_name: "agra kraft", city: "agra" }]);
+  assert.deepStrictEqual([added.length, skipped.length], [1, 2]);
+});
+test("outreach email: placeholders filled, opt-out and sender always present", () => {
+  const lead = { id: "L0007", business: "Moradabad Brass Co", city: "Moradabad", segment: "exporter", product: "brassware; gifts", contact: "Mr. Ravi Kumar" };
+  const m = C.renderOutreach("exporter_buyer", lead, { senderName: "Yashraj", senderAddress: "House of 24, Nagpur", joinBase: "https://x.test/", unsubLink: () => "https://x.test/unsub" });
+  assert.match(m.text, /Namaste Ravi ji/);
+  assert.match(m.text, /https:\/\/x\.test\/#join\/b\/L0007/);
+  assert.match(m.text, /House of 24, Nagpur/);
+  assert.match(m.text, /https:\/\/x\.test\/unsub/);
+  assert.ok(!/\{\{/.test(m.subject + m.text));
+  for (const t of C.OUTREACH_TEMPLATES) assert.match(t.body, /\{\{unsub_link\}\}/);
+});
+test("sign-up validation", () => {
+  const ok = C.normalizeJoin({ role: "supplier", business: "Rudrapur Cartons", name: "Amit", phone: "+91 98765 43210", city: "Rudrapur", cats: ["pack"], consent: true });
+  assert.ok(ok.ok, ok.errors.join("; "));
+  assert.strictEqual(ok.a.phone, "9876543210");
+  const bad = C.normalizeJoin({ role: "buyer", business: "X", phone: "12345", consent: false });
+  assert.ok(bad.errors.length >= 4);
+});
+test("a supplier's own quote replaces their rate card and is ranked", () => {
+  const r = { productId: "box3", qty: 5000, city: "Pune", deadline: null };
+  const base = C.discover(r, {}, {});
+  const sid = base.eligible.at(-1).s.id;
+  const live = { [sid]: { unit: 9, lead: 1 } };
+  const res = C.discover(r, {}, live);
+  const q = res.eligible.find(x => x.s.id === sid);
+  assert.deepStrictEqual([q.live, q.unit, q.ready], [true, 9, 1]);
+  assert.strictEqual(res.eligible[0].s.id, sid);
+  assert.ok(C.normalizeLiveQuote({ unit: 900, lead: 2 }, 16).errors.length === 1, "absurd price is caught");
+  assert.strictEqual(plain(C.liveMap({ invites: [{ sid: "s1", quote: { unit: 5, lead: 2 } }, { sid: "s2", quote: null }] })).s1.unit, 5);
+});
+test("export clusters are deliverable cities", () => {
+  for (const c of ["Moradabad", "Karur", "Panipat", "Silvassa", "Kanpur"]) assert.ok(C.CITIES[c], c);
+  assert.strictEqual(C.ruleParse("50 ISPM pallets Moradabad 10 din").product_id, "pallet");
+  assert.ok(C.checkGstin("26AAACV1234A1Z5").why !== "GSTIN must be 15 characters: state code, PAN, entity code, Z, check character");
+});
+
 console.log(`\n${passed} engine tests passed`);

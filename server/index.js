@@ -8,6 +8,8 @@ const { Store } = require("./store");
 const { createClaude } = require("./anthropic");
 const { createGemini } = require("./gemini");
 const { createWhatsApp } = require("./whatsapp");
+const { createMailer, unsubSig } = require("./email");
+const crypto = require("crypto");
 
 const ROOT = path.join(__dirname, "..");
 const STATIC_DIR = path.join(ROOT, "src");
@@ -31,6 +33,13 @@ function createApp(opts = {}) {
   const claude = opts.claude !== undefined ? opts.claude : pickLLM(env);
   const ctx = { core, store, claude, syncSuppliers, env };
   ctx.services = makeServices(ctx);
+  const mailer = createMailer(env, opts.fetch);
+  const PUBLIC_URL = String(env.PUBLIC_URL || "https://vyaparboss.onrender.com").replace(/\/+$/, "");
+  const ORIGINS = String(env.ALLOWED_ORIGINS || "https://yashrajsurgo0.github.io").split(",").map(s => s.trim()).filter(Boolean);
+  const DAILY_CAP = Number(env.OUTREACH_DAILY_CAP) || 30;
+  const secret = env.OUTREACH_SECRET || env.ADMIN_KEY || "";
+  const unsubUrl = email => `${PUBLIC_URL}/unsubscribe?e=${encodeURIComponent(email)}&t=${unsubSig(secret, email)}`;
+  const joinHits = new Map();
   const whatsapp = createWhatsApp(ctx, { verifyToken: env.WHATSAPP_VERIFY_TOKEN, accessToken: env.WHATSAPP_TOKEN, phoneNumberId: env.WHATSAPP_PHONE_NUMBER_ID, appSecret: env.WHATSAPP_APP_SECRET, apiVersion: env.WHATSAPP_API_VERSION, send: opts.waSend });
 
   const send = (res, code, body, headers = {}) => {
@@ -45,8 +54,139 @@ function createApp(opts = {}) {
   });
   const jsonBody = async req => { const raw = await readBody(req); if (!raw.length) return {}; try { return JSON.parse(raw); } catch { throw Object.assign(new Error("Body must be JSON"), { status: 400 }); } };
 
+  // Ops-only routes need the ADMIN_KEY (sent as x-admin-key). Without one set, they stay closed.
+  const admin = req => {
+    if (!env.ADMIN_KEY) throw Object.assign(new Error("Set ADMIN_KEY on the server to use ops tools"), { status: 503 });
+    const got = Buffer.from(String(req.headers["x-admin-key"] || "")), want = Buffer.from(String(env.ADMIN_KEY));
+    if (got.length !== want.length || !crypto.timingSafeEqual(got, want)) throw Object.assign(new Error("Admin key needed"), { status: 401 });
+  };
+  const findInvite = token => { for (const r of store.data.rfqs) { const i = (r.invites || []).find(x => x.token === token); if (i) return { r, i }; } return {}; };
+  const unsubscribed = email => store.data.outreach.unsub.includes(String(email).toLowerCase());
+
   const routes = [
-    ["GET", /^\/api\/health$/, () => ({ ok: true, app: "vyaparboss", ai: !!claude, provider: claude?.provider || null, model: claude?.model || null, whatsapp: whatsapp.configured })],
+    ["GET", /^\/api\/health$/, () => ({ ok: true, app: "vyaparboss", ai: !!claude, provider: claude?.provider || null, model: claude?.model || null, whatsapp: whatsapp.configured, email: mailer.configured, ops: !!env.ADMIN_KEY })],
+
+    // ---------- Public: sign-up and supplier quote links ----------
+    ["POST", /^\/api\/join$/, async req => {
+      const ip = String(req.headers["x-forwarded-for"] || req.socket.remoteAddress || "").split(",")[0].trim();
+      const hour = Date.now() - 36e5, hits = (joinHits.get(ip) || []).filter(t => t > hour);
+      if (hits.length >= 8) throw Object.assign(new Error("Too many sign-ups from here. Try again in an hour."), { status: 429 });
+      joinHits.set(ip, hits.concat(Date.now()));
+      const body = await jsonBody(req);
+      if (body.company_site) return { ok: true }; // honeypot: bots fill every field
+      const { ok, a, errors } = core.normalizeJoin(body);
+      if (!ok) throw bad(errors.join(". "));
+      const app = { ...a, id: "A" + String(++store.data.seq.app).padStart(4, "0"), at: Date.now(), status: "new" };
+      store.data.applications.unshift(app);
+      const lead = a.ref && store.data.leads.find(l => l.id === a.ref);
+      if (lead) lead.status = "joined";
+      store.save();
+      console.log(`New ${a.role} sign-up ${app.id} from ${a.city}`);
+      return { ok: true, id: app.id };
+    }],
+    ["GET", /^\/api\/quote\/([\w-]{16,})$/, (req, m) => {
+      const { r, i } = findInvite(m[1]); if (!r) throw notFound("Quote request");
+      const s = core.getSMAP()[i.sid], p = core.PMAP[r.productId];
+      const o = s?.offers.find(x => x.p === r.productId);
+      return { rfq: { id: r.id, product: p.name, spec: p.spec, unit: p.unit, gst: p.gst, qty: r.qty, city: r.city, deadline: r.deadline, date: r.date, open: r.status !== "ordered" },
+        supplier: { name: s?.name || i.sname, city: s?.city || "" }, rateCard: o ? core.tierPrice(o, r.qty) : null, quote: i.quote || null };
+    }],
+    ["POST", /^\/api\/quote\/([\w-]{16,})$/, async (req, m) => {
+      const { r, i } = findInvite(m[1]); if (!r) throw notFound("Quote request");
+      if (r.status === "ordered") throw Object.assign(new Error("This request is already closed. Thank you!"), { status: 409 });
+      const s = core.getSMAP()[i.sid], o = s?.offers.find(x => x.p === r.productId);
+      const { ok, q, errors } = core.normalizeLiveQuote(await jsonBody(req), o ? core.tierPrice(o, r.qty) : null);
+      if (!ok) throw bad(errors.join(". "));
+      i.quote = q; store.save(); return { ok: true, quote: q };
+    }],
+    ["GET", /^\/unsubscribe$/, (req, m, url, res) => unsubscribePage(url, res)],
+    ["POST", /^\/unsubscribe$/, (req, m, url, res) => unsubscribePage(url, res)],
+
+    // ---------- Ops (admin key) ----------
+    ["GET", /^\/api\/admin\/check$/, req => { admin(req); return { ok: true, email: mailer.configured, from: mailer.from, cap: DAILY_CAP, publicUrl: PUBLIC_URL }; }],
+    ["GET", /^\/api\/admin\/applications$/, req => { admin(req); return { applications: store.data.applications }; }],
+    ["PATCH", /^\/api\/admin\/applications\/(.+)$/, async (req, m) => {
+      admin(req); const a = store.data.applications.find(x => x.id === m[1]); if (!a) throw notFound("Sign-up");
+      const p = await jsonBody(req);
+      if (["new", "contacted", "onboarded", "rejected"].includes(p.status)) a.status = p.status;
+      if ("note" in p) a.note = String(p.note || "").slice(0, 300);
+      if (p.supplierId) a.supplierId = String(p.supplierId).slice(0, 40);
+      store.save(); return a;
+    }],
+    ["POST", /^\/api\/admin\/rfqs\/(.+)\/invites$/, async (req, m) => {
+      admin(req); const r = store.data.rfqs.find(x => x.id === m[1]); if (!r) throw notFound("RFQ");
+      const { sids } = await jsonBody(req); const smap = core.getSMAP();
+      r.invites ||= [];
+      for (const sid of Array.isArray(sids) ? sids.slice(0, 20) : []) {
+        const s = smap[sid]; if (!s || s.sample || r.invites.some(i => i.sid === sid)) continue;
+        r.invites.push({ sid, sname: s.name, token: crypto.randomBytes(12).toString("base64url"), at: Date.now(), quote: null });
+      }
+      store.save();
+      return { invites: r.invites.map(i => ({ ...i, url: `${PUBLIC_URL}/#quote/${i.token}`, contact: smap[i.sid]?.contact || "" })) };
+    }],
+    ["GET", /^\/api\/admin\/rfqs\/(.+)\/invites$/, (req, m) => {
+      admin(req); const r = store.data.rfqs.find(x => x.id === m[1]); if (!r) throw notFound("RFQ");
+      const smap = core.getSMAP();
+      return { invites: (r.invites || []).map(i => ({ ...i, url: `${PUBLIC_URL}/#quote/${i.token}`, contact: smap[i.sid]?.contact || "" })) };
+    }],
+    ["GET", /^\/api\/admin\/leads$/, req => { admin(req); return { leads: store.data.leads, outreach: { settings: store.data.outreach.settings, sentToday: sentSince(864e5), cap: DAILY_CAP, email: mailer.configured, from: mailer.from, publicUrl: PUBLIC_URL } }; }],
+    ["POST", /^\/api\/admin\/leads$/, async req => {
+      admin(req); const { leads } = await jsonBody(req);
+      if (!Array.isArray(leads)) throw bad("leads must be a list");
+      const { added, skipped } = core.mergeLeads(store.data.leads, leads.slice(0, 2000));
+      for (const l of added) { l.id = "L" + String(++store.data.seq.lead).padStart(4, "0"); if (l.email && unsubscribed(l.email)) l.status = "unsubscribed"; }
+      store.data.leads.push(...JSON.parse(JSON.stringify(added))); store.save();
+      return { added: added.length, skipped: skipped.length, total: store.data.leads.length };
+    }],
+    ["PATCH", /^\/api\/admin\/leads\/(.+)$/, async (req, m) => {
+      admin(req); const l = store.data.leads.find(x => x.id === m[1]); if (!l) throw notFound("Lead");
+      const p = await jsonBody(req);
+      if (["new", "emailed", "replied", "joined", "not_interested", "unsubscribed", "bounced"].includes(p.status)) l.status = p.status;
+      if ("notes" in p) l.notes = String(p.notes || "").slice(0, 300);
+      if ("email" in p) { const e = String(p.email || "").trim().toLowerCase(); if (e && !core.isEmail(e)) throw bad("Invalid email"); l.email = e; }
+      store.save(); return l;
+    }],
+    ["DELETE", /^\/api\/admin\/leads\/(.+)$/, (req, m) => { admin(req); store.data.leads = store.data.leads.filter(l => l.id !== m[1]); store.save(); return { ok: true }; }],
+    ["PUT", /^\/api\/admin\/outreach\/settings$/, async req => {
+      admin(req); const p = await jsonBody(req), st = store.data.outreach.settings;
+      for (const k of ["senderName", "senderAddress"]) if (k in p) st[k] = String(p[k] || "").trim().slice(0, 200);
+      store.save(); return st;
+    }],
+    ["POST", /^\/api\/admin\/outreach$/, async req => {
+      admin(req); const { leadIds, templateId, send } = await jsonBody(req);
+      if (!core.OUTREACH_TEMPLATES.some(t => t.id === templateId)) throw bad("Unknown template");
+      const st = store.data.outreach.settings;
+      if (send && (!st.senderName || !st.senderAddress)) throw bad("Add your name and business address first; every outreach email must show who sent it");
+      const ids = new Set(Array.isArray(leadIds) ? leadIds : []);
+      const leads = store.data.leads.filter(l => ids.has(l.id));
+      const ctx = { senderName: st.senderName, senderAddress: st.senderAddress, joinBase: PUBLIC_URL + "/", unsubLink: l => l.email ? unsubUrl(l.email) : "" };
+      let room = DAILY_CAP - sentSince(864e5);
+      const out = []; let sent = 0;
+      for (const l of leads) {
+        const mail = core.renderOutreach(templateId, l, ctx);
+        const skip = !l.email ? "No email" : unsubscribed(l.email) || l.status === "unsubscribed" ? "Unsubscribed"
+          : ["bounced", "not_interested", "joined"].includes(l.status) ? `Marked ${l.status.replace("_", " ")}`
+          : (l.sends || []).some(s => s.t === templateId) ? "Already got this email"
+          : l.lastEmailed && Date.now() - l.lastEmailed < 3 * 864e5 ? "Emailed in the last 3 days" : null;
+        const row = { id: l.id, business: l.business, to: l.email, subject: mail.subject, text: mail.text, skip };
+        if (send && !skip) {
+          if (room <= 0) row.skip = `Daily limit of ${DAILY_CAP} reached`;
+          else {
+            try {
+              await mailer.send({ to: l.email, subject: mail.subject, text: mail.text, unsubUrl: unsubUrl(l.email) });
+              room--; sent++; row.sent = true;
+              l.status = l.status === "new" ? "emailed" : l.status; l.lastEmailed = Date.now();
+              l.sends = (l.sends || []).concat({ t: templateId, at: Date.now() }).slice(-10);
+              store.data.outreach.log.push({ at: Date.now(), lead: l.id, t: templateId });
+            } catch (e) { row.skip = e.message; if (e.status === 503) { store.save(); throw e; } }
+          }
+        }
+        out.push(row);
+      }
+      store.data.outreach.log = store.data.outreach.log.slice(-5000);
+      store.save();
+      return { previews: out, sent, remaining: Math.max(0, room), cap: DAILY_CAP };
+    }],
     ["GET", /^\/api\/state$/, () => store.publicState()],
 
     ["POST", /^\/api\/rfqs$/, async req => ctx.services.createRfq(await jsonBody(req))],
@@ -130,6 +270,19 @@ function createApp(opts = {}) {
     ["GET", /^\/api\/whatsapp\/log$/, () => ({ configured: whatsapp.configured, log: store.data.whatsapp.log.slice(-100) })],
   ];
 
+  function sentSince(ms) { const t = Date.now() - ms; return store.data.outreach.log.filter(x => x.at > t).length; }
+  function unsubscribePage(url, res) {
+    const e = String(url.searchParams.get("e") || "").toLowerCase(), t = url.searchParams.get("t") || "";
+    const ok = e && t === unsubSig(secret, e);
+    if (ok && !unsubscribed(e)) {
+      store.data.outreach.unsub.push(e);
+      for (const l of store.data.leads) if (l.email === e) l.status = "unsubscribed";
+      store.save();
+    }
+    res.writeHead(ok ? 200 : 400, { "content-type": "text/html; charset=utf-8" });
+    res.end(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>VyaparBoss</title><body style="font:17px/1.5 system-ui,sans-serif;max-width:520px;margin:12vh auto;padding:0 20px;color:#1E1F25;background:#FBF7EF"><h1 style="font-size:24px">${ok ? "You're unsubscribed" : "This link didn't work"}</h1><p>${ok ? "VyaparBoss won't email this address again. Sorry for the trouble." : "Reply to the email with \"unsubscribe\" and we'll remove you by hand."}</p><p style="color:#6b6b6b;font-size:14px">VyaparBoss, House of 24 Pvt. Ltd.</p></body>`);
+  }
+
   function serveStatic(url, res) {
     let rel = decodeURIComponent(url.pathname);
     if (rel.endsWith("/")) rel += "index.html";
@@ -144,6 +297,12 @@ function createApp(opts = {}) {
 
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, "http://localhost");
+    // The static copy on GitHub Pages posts sign-ups and supplier quotes here.
+    const origin = req.headers.origin;
+    if (origin && ORIGINS.includes(origin) && /^\/api\/(join|quote\/|health)/.test(url.pathname)) {
+      res.setHeader("access-control-allow-origin", origin); res.setHeader("vary", "origin");
+      if (req.method === "OPTIONS") { res.writeHead(204, { "access-control-allow-methods": "GET, POST", "access-control-allow-headers": "content-type", "access-control-max-age": "86400" }).end(); return; }
+    }
     const route = routes.find(([m, re]) => m === req.method && re.test(url.pathname));
     if (!route) {
       if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/webhooks/")) return send(res, 404, { error: "No such endpoint" });
@@ -159,7 +318,7 @@ function createApp(opts = {}) {
       if (!res.headersSent) send(res, e.status || 500, { error: e.status ? e.message : "Server error" });
     }
   });
-  return { server, store, ctx };
+  return { server, store, ctx, mailer };
 }
 
 function pickLLM(env) {

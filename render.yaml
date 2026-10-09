@@ -30,3 +30,15 @@ services:
         generateValue: true
       - key: WHATSAPP_APP_SECRET
         sync: false
+      - key: ADMIN_KEY
+        sync: false
+      - key: PUBLIC_URL
+        value: https://vyaparboss.onrender.com
+      - key: EMAIL_PROVIDER
+        value: brevo
+      - key: EMAIL_API_KEY
+        sync: false
+      - key: OUTREACH_FROM_EMAIL
+        sync: false
+      - key: OUTREACH_DAILY_CAP
+        value: "30"

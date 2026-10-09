@@ -6,14 +6,17 @@ const els={};
 function el(id){return els[id]||(els[id]={id,value:"",innerHTML:"",textContent:"",hidden:id.startsWith("v-")&&id!=="v-buy"||id==="s-desk",disabled:false,checked:false,className:"",dataset:{},options:[],
   attrs:{},setAttribute(k,v){this.attrs[k]=v},removeAttribute(k){delete this.attrs[k]},getAttribute(k){return this.attrs[k]},toggleAttribute(){},addEventListener(){},focus(){},select(){},scrollIntoView(){},
   querySelector(){return el(id+"-child")},querySelectorAll(){return []},closest(){return null},matches(){return false},classList:{add(){},remove(){}}});}
-const documentStub={querySelector:s=>el(s.replace(/^#/,"")),querySelectorAll:()=>[],getElementById:id=>el(id),addEventListener(){},hidden:false,activeElement:null};
+const bodyClasses=new Set();
+const documentStub={querySelector:s=>el(s.replace(/^#/,"")),querySelectorAll:()=>[],getElementById:id=>el(id),addEventListener(){},hidden:false,activeElement:null,
+  body:{classList:{add:c=>bodyClasses.add(c),remove:c=>bodyClasses.delete(c),contains:c=>bodyClasses.has(c),toggle:(c,on)=>on?bodyClasses.add(c):bodyClasses.delete(c)},appendChild(){}}};
+const loc={protocol:BASE?"http:":"file:",hash:"",pathname:"/",search:"",origin:BASE||"null"};
 const ls={},errors=[];
 const ctx=vm.createContext({console:{log(){},warn(){},error:(...a)=>errors.push(a.join(" "))},document:documentStub,localStorage:{getItem:k=>ls[k]??null,setItem:(k,v)=>ls[k]=String(v)},
-  location:{protocol:BASE?"http:":"file:"},fetch:(u,o)=>fetch(new URL(u,BASE+"/"),o),AbortController,setTimeout,clearTimeout,setInterval:()=>0,requestAnimationFrame:f=>f(),
+  location:loc,history:{replaceState(){loc.hash="";}},sessionStorage:{getItem:()=>null,setItem(){},removeItem(){}},addEventListener(){},fetch:(u,o)=>fetch(new URL(u,BASE+"/"),o),AbortController,setTimeout,clearTimeout,setInterval:()=>0,requestAnimationFrame:f=>f(),
   matchMedia:()=>({matches:false}),scrollTo(){},navigator:{},Date,Math,Intl,JSON,URL,Promise});
 ctx.window=ctx;
-const src=["data","util","engine","parser","repo","app"].map(f=>fs.readFileSync(path.join(ROOT,"src/js",f+".js"),"utf8")).join("\n;\n");
-vm.runInContext(src+"\nthis.__t={say:sayToBhai,Repo,get flow(){return flow},ACTIONS,renderAll};",ctx);
+const src=["data","util","engine","parser","repo","app","grow"].map(f=>fs.readFileSync(path.join(ROOT,"src/js",f+".js"),"utf8")).join("\n;\n");
+vm.runInContext(src+"\nthis.__t={say:sayToBhai,Repo,get flow(){return flow},ACTIONS,renderAll,route,loc:location,get pub(){return pub},submitJoin,showInsightsView,showSupplierView};",ctx);
 const T=ctx.__t,wait=ms=>new Promise(r=>setTimeout(r,ms));
 let fails=0;const check=(c,m)=>{console.log((c?"ok - ":"FAIL - ")+m);if(!c)fails++;};
 const act=(name,ds={})=>T.ACTIONS[name]({dataset:ds,disabled:false,textContent:"",classList:{add(){},remove(){}},isConnected:true});
@@ -60,6 +63,21 @@ const buy=()=>els["v-buy"].innerHTML;
   check(els["v-orders"].innerHTML.includes("Orders")&&els["v-orders"].innerHTML.includes("Details"),"orders render");
   check(els.sgrid.innerHTML.includes("Shreeji")&&els.sgrid.innerHTML.includes("Rates and terms"),"suppliers render with details on demand");
   check(els.kpis.innerHTML.includes("Buyers saved"),"insights render");
+  // Order again
+  const po=T.Repo.data.orders[0].po;act("reorder",{po});
+  check(T.flow.stage==="ask"&&buy().includes("When do you need it?")&&T.flow.r.qty===T.Repo.data.orders[0].qty,"order again pre-fills the request and asks only the date");
+
+  // Public sign-up page
+  T.loc.hash="#join/s/L0001";T.route();
+  check(bodyClasses.has("public")&&els["v-public"].innerHTML.includes("List my business free"),"sign-up link opens the supplier form, no tabs");
+  check(T.pub.role==="supplier"&&T.pub.ref==="L0001","sign-up remembers role and outreach lead");
+  act("join-cat",{v:"pack"});check(T.pub.cats.includes("pack"),"category chip toggles");
+  await T.submitJoin();check(els["v-public"].innerHTML.includes("Enter your business name"),"sign-up validates before sending");
+  T.loc.hash="";T.route();check(!bodyClasses.has("public")&&!els["v-buy"].hidden,"leaving the sign-up returns to the app");
+
+  // Ops screens
+  T.showSupplierView("apps");check(els.appsList.innerHTML.length>50,"sign-ups view renders");
+  T.showInsightsView("outreach");await wait(50);check(els.outreachBox.innerHTML.length>50,"outreach view renders");
   check(!errors.length,"no console errors "+errors.join(" | "));
   process.exitCode=fails?1:0;
 })();

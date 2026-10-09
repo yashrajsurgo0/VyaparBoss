@@ -47,6 +47,10 @@ The app checks for `api/health` on load and picks the mode by itself.
 | GET / POST | `/webhooks/whatsapp` | Meta webhook verification and incoming messages (HMAC-checked when `WHATSAPP_APP_SECRET` is set) |
 | POST | `/api/whatsapp/simulate` | `{from, text}` → the reply a buyer would get (no message sent) |
 | GET | `/api/whatsapp/log` | Recent conversations, phone numbers masked |
+| POST | `/api/join` | Public sign-up (rate-limited, honeypot) |
+| GET / POST | `/api/quote/:token` | Supplier quote link: see the request, send a price |
+| GET / POST | `/unsubscribe` | Signed unsubscribe link from outreach emails |
+| * | `/api/admin/*` | Team only (`x-admin-key`): sign-ups, leads, outreach, quote links |
 | DELETE | `/api/samples` | Remove sample orders |
 
 ## What's in the prototype
@@ -60,8 +64,15 @@ The app checks for `api/health` on load and picks the mode by itself.
 | Suppliers | Network: onboard real suppliers (GSTIN checksum, products, price tiers, MOQ, capacity, delivery radius, negotiation limit); 15 sample suppliers you can hide |
 | Suppliers → Supplier view | What a supplier sees: requests they qualified for, auto-quote, rank, drafted WhatsApp reply |
 | Insights | Value bought, buyer savings, request→order conversion, platform revenue, spend by category, WhatsApp practice chat |
+| Insights → Outreach (team) | Import lead CSVs, email templates in Bhai's voice, preview, send with daily cap and unsubscribe, or download for mail merge |
+| Suppliers → Sign-ups (team) | Everyone who signed up at `#join`, with WhatsApp links; one tap to onboard as a supplier |
+| `#join` | Public 2-minute sign-up for suppliers (free listing) and buyers |
+| `#quote/<token>` | A supplier sends their own price for one request; it replaces the rate-card estimate |
+| Orders → Order again | Repeat a past order with fresh prices |
 
-Categories live: packaging, industrial consumables, agri inputs (14 products).
+Categories live: packaging (incl. export pallets and container desiccants), industrial consumables, agri inputs (16 products). 55 cities, including tier-2/3 export clusters (Moradabad, Kanpur, Karur, Panipat, Tiruppur, Morbi, Silvassa…).
+
+Team tools need `ADMIN_KEY` on the server. Outreach setup and rules: [docs/OUTREACH.md](docs/OUTREACH.md).
 
 ## Code map
 
@@ -73,6 +84,7 @@ server/
   gemini.js         Google Gemini API client
   anthropic.js      Anthropic Messages API client
   whatsapp.js       WhatsApp Cloud API: webhook, conversation state, APPROVE flow, order updates
+  email.js          outreach email via Brevo or Resend, signed unsubscribe links
 scripts/            build-single.js, wa-simulate.js
 render.yaml         one-click Render deploy with a persistent disk
 src/
@@ -84,6 +96,7 @@ src/
   js/parser.js      Buyer Intelligence Agent: Hinglish rule parser, Claude prompts, output sanitising
   js/repo.js        storage: server API when available, otherwise localStorage
   js/app.js         UI rendering and event wiring
+  js/grow.js        sign-up and quote pages, sign-ups, outreach, quote links
 tests/            engine.test.js, server.test.js, ui.smoke.js (drives the Buy flow in a fake DOM)
 docs/               PROJECT_BRIEF.md, DEPLOY.md, WHATSAPP_SETUP.md
 ```

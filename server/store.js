@@ -16,6 +16,11 @@ class Store {
     this.data.suppliers ||= [];
     this.data.useSamples ??= true;
     this.data.whatsapp ||= { sessions: {}, log: [] };
+    this.data.applications ||= [];
+    this.data.leads ||= [];
+    this.data.outreach ||= { settings: {}, log: [], unsub: [] };
+    this.data.seq.lead ??= this.data.leads.length;
+    this.data.seq.app ??= this.data.applications.length;
   }
   save() {
     const tmp = this.file + ".tmp";
@@ -23,7 +28,9 @@ class Store {
     fs.renameSync(tmp, this.file); // atomic replace so a crash never leaves half a file
   }
   publicState() {
-    const { orders, rfqs, seq, suppliers, useSamples } = this.data;
+    const { orders, seq, suppliers, useSamples } = this.data;
+    // Quote-link tokens are secrets: the public state only says who was asked and what they quoted.
+    const rfqs = this.data.rfqs.map(r => r.invites ? { ...r, invites: r.invites.map(({ token, ...i }) => i) } : r);
     return { orders, rfqs, seq, suppliers, useSamples };
   }
 }

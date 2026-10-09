@@ -8,21 +8,22 @@ function freightCost(w,d){const ptl=Math.max(1200,w*(2.5+0.006*d));if(w<1000)ret
 const NEW_SUPPLIER={onTime:85,rating:4.0};
 const onTimeOf=s=>s.onTime??NEW_SUPPLIER.onTime, ratingOf=s=>s.rating??NEW_SUPPLIER.rating;
 
-function quoteFor(s,r,neg={}){
+function quoteFor(s,r,neg={},live={}){
   const o=s.offers.find(x=>x.p===r.productId);const p=PMAP[r.productId];
   const d=km(s.city,r.city);
-  const list=tierPrice(o,r.qty);
+  const lq=live[s.id];
+  const list=lq?lq.unit:tierPrice(o,r.qty);
   const unit=neg[s.id]?.price ?? list;
   const subtotal=unit*r.qty;
   const gst=subtotal*p.gst/100;
   const w=r.qty*p.kgPer;const f=freightCost(w,d);
   const landed=subtotal+gst+f.cost;
   const transit=Math.max(1,Math.ceil(d/450));
-  const eta=s.lead+transit;
+  const eta=(lq?lq.lead:s.lead)+transit;
   const intra=CITIES[s.city][2]===CITIES[r.city][2];
-  return {s,o,d,list,unit,subtotal,gst,gstRate:p.gst,gstType:intra?"CGST + SGST":"IGST",weight:w,freight:f.cost,freightMode:f.mode,landed,per:landed/r.qty,transit,eta,meets:!r.deadline||eta<=r.deadline};
+  return {s,o,d,list,unit,subtotal,gst,gstRate:p.gst,gstType:intra?"CGST + SGST":"IGST",weight:w,freight:f.cost,freightMode:f.mode,landed,per:landed/r.qty,transit,eta,ready:lq?lq.lead:s.lead,live:!!lq,meets:!r.deadline||eta<=r.deadline};
 }
-function discover(r,neg={}){
+function discover(r,neg={},live=liveMap(r)){
   const eligible=[],excluded=[];
   for(const s of SUPPLIERS){
     const o=s.offers.find(x=>x.p===r.productId);if(!o||!CITIES[s.city])continue;
@@ -30,7 +31,7 @@ function discover(r,neg={}){
     if(r.qty<moq){excluded.push({s,why:`Minimum order is ${qfmt(moq)} ${PMAP[r.productId].unit}`});continue;}
     if(r.qty>o.cap){excluded.push({s,why:`Capacity ${qfmt(o.cap)} ${PMAP[r.productId].unit} per order`});continue;}
     if(d>s.coverage){excluded.push({s,why:`Doesn't deliver to ${r.city} (${qfmt(d)} km; serves up to ${qfmt(s.coverage)} km)`});continue;}
-    eligible.push(quoteFor(s,r,neg));
+    eligible.push(quoteFor(s,r,neg,live));
   }
   if(eligible.length){
     const min=Math.min(...eligible.map(q=>q.landed));
@@ -82,7 +83,7 @@ function normalizeSupplier(x){
 }
 
 /* ===================== RECORDS ===================== */
-const quoteSummary=res=>res.eligible.map(q=>({sid:q.s.id,unit:q.unit,landed:Math.round(q.landed),eta:q.eta,meets:q.meets}));
+const quoteSummary=res=>res.eligible.map(q=>({sid:q.s.id,unit:q.unit,landed:Math.round(q.landed),eta:q.eta,meets:q.meets,...(q.live?{live:true}:{})}));
 function rfqRecord(r,res,extra={}){
   return {id:null,date:Date.now(),productId:r.productId,qty:r.qty,city:r.city,deadline:r.deadline||null,quotes:quoteSummary(res),status:"open",wonBy:null,source:"web",...extra};
 }
@@ -119,3 +120,68 @@ function quoteMessage(r,res){
   const why=cheapest!==top[0]?`\nOption 1 ${inr(top[0].landed-cheapest.landed)} mehenga hai par delivery record behtar hai. Sabse sasta: option ${top.indexOf(cheapest)+1}.`:"";
   return `${r.id?`${r.id}\n`:""}${qfmt(r.qty)} ${p.unit} ${p.name} → ${r.city}${r.deadline?`, ${r.deadline} din mein`:""}\n\n${lines.join("\n")}${why}\n\nTotal landed = rate + GST + freight. Order karne ke liye reply karein "APPROVE 1" (ya 2/3).`;
 }
+
+/* ===================== GROWTH: LEADS, SIGN-UPS, LIVE QUOTES ===================== */
+/* A lead from a researched CSV row (supplier or exporter lists). Only business contact details are kept. */
+function normalizeLead(x){
+  x=x||{};const str=(v,n)=>String(v??"").trim().slice(0,n);const errors=[];
+  const segRaw=str(x.segment||x.type||(x.category?"supplier":""),60).toLowerCase();
+  const lead={id:str(x.id,40)||null,business:str(x.business||x.business_name||x.name,100),city:str(x.city,60),state:str(x.state,40),
+    segment:/supplier/.test(segRaw)&&!/buyer/.test(segRaw)?"supplier":/buyer|export/.test(segRaw)?"exporter":"supplier",
+    product:str(x.product||x.products||x.cluster_product||x.category,120),website:str(x.website,200),
+    email:str(x.email,120).toLowerCase(),phone:str(x.phone,40),contact:str(x.contact||x.contact_name,80),
+    source:str(x.source||x.source_url,300),notes:str(x.notes,300),status:str(x.status,20)||"new",
+    createdAt:Number(x.createdAt)||Date.now(),lastEmailed:Number(x.lastEmailed)||null,sends:Array.isArray(x.sends)?x.sends.slice(-10):[]};
+  if(lead.business.length<2)errors.push("Business name is missing");
+  if(lead.email&&!isEmail(lead.email)){lead.notes=(lead.notes+" (invalid email removed: "+lead.email+")").trim();lead.email="";}
+  if(!["new","emailed","replied","joined","not_interested","unsubscribed","bounced"].includes(lead.status))lead.status="new";
+  return {ok:!errors.length,lead,errors};
+}
+const leadKey=l=>(l.email||(l.business+"|"+l.city)).toLowerCase().replace(/\s+/g," ").trim();
+/* Merge freshly imported leads into an existing list without duplicates (by email, else business + city). */
+function mergeLeads(existing,incoming){
+  const seen=new Set(existing.map(leadKey));const added=[],skipped=[];
+  for(const raw of incoming){const {ok,lead}=normalizeLead(raw);if(!ok){skipped.push(raw);continue;}
+    const k=leadKey(lead);if(seen.has(k)){skipped.push(raw);continue;}seen.add(k);added.push(lead);}
+  return {added,skipped};
+}
+/* Variables for an outreach email. ctx: {senderName, senderAddress, joinBase, unsubLink(lead)} */
+function outreachVars(lead,ctx){
+  const first=lead.contact?lead.contact.replace(/^(mr|mrs|ms|shri|smt|dr)\.?\s+/i,"").split(/\s+/)[0]:"";
+  const base=String(ctx.joinBase||"").replace(/#.*$/,"");
+  const city=String(lead.city||"").replace(/\s*\(.*?\)\s*/g," ").trim();
+  const product=String(lead.product||"").split(/[;|,(]/)[0].replace(/\s+/g," ").trim().toLowerCase().slice(0,50).trim();
+  return {business:lead.business,city:city||"your city",product:product||(lead.segment==="supplier"?"packaging":"export"),
+    greeting:first?first+" ji":lead.business+" team",sender_name:ctx.senderName||"Team VyaparBoss",sender_address:ctx.senderAddress||"",
+    join_link:`${base}#join/${lead.segment==="supplier"?"s":"b"}/${lead.id||""}`,unsub_link:ctx.unsubLink?ctx.unsubLink(lead):""};
+}
+function renderOutreach(tplId,lead,ctx){
+  const t=OUTREACH_TEMPLATES.find(x=>x.id===tplId);if(!t)return null;
+  const v=outreachVars(lead,ctx);return {to:lead.email,subject:fillTemplate(t.subject,v),text:fillTemplate(t.body,v)};
+}
+/* Self-serve sign-up from the public "Join" page. role: supplier | buyer. */
+function normalizeJoin(x){
+  x=x||{};const str=(v,n)=>String(v??"").trim().slice(0,n);const errors=[];
+  const a={role:x.role==="buyer"?"buyer":"supplier",business:str(x.business,100),name:str(x.name,80),phone:phoneDigits(x.phone),email:str(x.email,120).toLowerCase(),
+    city:str(x.city,60),cats:(Array.isArray(x.cats)?x.cats:[]).filter(c=>CATS[c]).slice(0,3),what:str(x.what,300),gstin:str(x.gstin,15).toUpperCase(),
+    monthly:MONTHLY_BANDS.includes(x.monthly)?x.monthly:"",exports:EXPORT_STAGES.includes(x.exports)?x.exports:"",ref:str(x.ref,40)};
+  if(a.business.length<2)errors.push("Enter your business name");
+  if(a.name.length<2)errors.push("Enter your name");
+  if(!/^[6-9]\d{9}$/.test(a.phone))errors.push("Enter a 10-digit mobile number");
+  if(a.email&&!isEmail(a.email))errors.push("That email doesn't look right");
+  if(a.city.length<2)errors.push("Enter your city");
+  if(!a.cats.length&&a.what.length<3)errors.push(a.role==="supplier"?"Tell us what you make or sell":"Tell us what you buy");
+  if(a.gstin){const g=checkGstin(a.gstin,CITIES[a.city]?a.city:null);if(!g.ok)errors.push(g.why);}
+  if(x.consent!==true)errors.push("Please agree that VyaparBoss can contact you");
+  return {ok:!errors.length,a,errors};
+}
+/* Supplier's own quote from a quote link: price per unit (before GST) and days to get it ready. */
+function normalizeLiveQuote(x,listPrice){
+  x=x||{};const errors=[];const unit=Math.round(Number(x.unit)*100)/100,lead=Math.round(Number(x.lead));
+  if(!(unit>0))errors.push("Enter your price per unit");
+  else if(listPrice&&(unit>listPrice*5||unit<listPrice/5))errors.push("That price looks off by a lot. Check the unit (per piece, per kg…)");
+  if(!(lead>=1&&lead<=60))errors.push("Days to get it ready must be 1–60");
+  return {ok:!errors.length,q:{unit,lead,note:String(x.note??"").trim().slice(0,200),at:Date.now()},errors};
+}
+/* {sid:{unit,lead}} from an RFQ's invites, used by discover() so real quotes replace rate-card estimates. */
+const liveMap=rfq=>Object.fromEntries((rfq?.invites||[]).filter(i=>i.quote).map(i=>[i.sid,i.quote]));

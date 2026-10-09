@@ -10,14 +10,14 @@ B2B procurement MVP for Indian MSMEs. Founder: Yashraj Surgoniwar (House of 24 P
 - `npm run build:single` — single-file build in `dist/` (gitignored).
 
 ## Architecture
-- Plain browser scripts loaded in order: data → util → engine → parser → repo → app. They share globals; keep that order.
+- Plain browser scripts loaded in order: data → util → engine → parser → repo → app → grow. They share globals; keep that order. `grow.js` holds the public pages (`#join`, `#quote/<token>`) and ops tools (Sign-ups, Outreach, quote links).
 - `data.js`, `util.js`, `engine.js`, `parser.js` must stay DOM-free: `server/core.js` loads them into Node so server and browser share one engine. Add new shared functions to the `EXPORTS` list in `server/core.js`.
 - `repo.js` is the only place that persists data: server API when `/api/health` answers, else localStorage.
 - Server: `server/index.js` routes; business actions in `makeServices()` so REST and WhatsApp share them. WhatsApp logic lives in `server/whatsapp.js` (try it with `npm run wa -- "message"`).
 - Don't log full buyer phone numbers; use `mask()` from `server/whatsapp.js`.
 - Agents map to code: Buyer Intelligence = `parser.js`; Supplier Discovery + RFQ + Optimization = `discover()` / `quoteFor()` in `engine.js`; Negotiation = `negotiate()` in `engine.js`.
 - Server data: `data/db.json` (gitignored). Browser data: localStorage key `vyaparboss.v1`.
-- Never commit `.env` or `data/`.
+- Never commit `.env`, `data/` or `leads/` (researched business contacts; the repo is public).
 
 ## Rules
 - AI provider is pluggable (`server/gemini.js`, `server/anthropic.js`, chosen in `pickLLM()`); both expose `{provider, model, complete, json}`.
@@ -32,3 +32,6 @@ B2B procurement MVP for Indian MSMEs. Founder: Yashraj Surgoniwar (House of 24 P
 - The assistant is called **Bhai** everywhere (UI, AI prompts, WhatsApp). Voice: warm, short, Hinglish-friendly; never promises price or availability.
 - Buy flow is progressive: show one question at a time (`nextField()`), keep details behind `<details>` expanders. Don't put everything on screen at once.
 - After UI changes: `npm test` (includes `tests/ui.smoke.js`), push, `npm run deploy:pages`, and redeploy Render.
+- Ops routes (`/api/admin/*`) need `ADMIN_KEY` (header `x-admin-key`); without it set they stay closed. Sign-ups and leads never go in `/api/state`; quote-link tokens are stripped from it.
+- Supplier quotes come only from the supplier's own quote link (`normalizeLiveQuote`) or their rate card. Bhai never invents a price.
+- Outreach: every email carries sender name, business address and a signed unsubscribe link; daily cap; no repeat of the same template; never auto-send (an admin presses Send, twice). Lead lists only hold contact details the business published itself, with a source URL. See `docs/OUTREACH.md`.

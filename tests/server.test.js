@@ -161,6 +161,76 @@ const { createApp } = require("../server");
       const { body } = await call("POST", "/api/draft", { rfqId: r.id, sid: r.quotes[0].sid });
       assert.match(body.text, /Namaste/);
     });
+    await test("growth: sign-up, ops gate, quote links, leads, outreach, unsubscribe", async () => {
+      const mails = [];
+      const fakeFetch = async (url, init) => { mails.push({ url, body: JSON.parse(init.body) }); return { ok: true, text: async () => "" }; };
+      const { server: s3 } = createApp({ dataFile: path.join(dir, "db3.json"), claude: null, fetch: fakeFetch,
+        env: { ADMIN_KEY: "k3y-123", EMAIL_PROVIDER: "brevo", EMAIL_API_KEY: "x", OUTREACH_FROM_EMAIL: "hello@vb.test", PUBLIC_URL: "https://vb.test", OUTREACH_DAILY_CAP: "2" } });
+      await new Promise(r => s3.listen(0, r));
+      const b3 = `http://127.0.0.1:${s3.address().port}`;
+      const c3 = async (method, p, body, key) => { const r = await fetch(b3 + p, { method, headers: { "content-type": "application/json", ...(key ? { "x-admin-key": key } : {}) }, body: body ? JSON.stringify(body) : undefined }); return { status: r.status, body: r.headers.get("content-type")?.includes("json") ? await r.json() : await r.text() }; };
+      try {
+        // ops tools are closed without the key
+        assert.strictEqual((await c3("GET", "/api/admin/applications")).status, 401);
+        assert.strictEqual((await c3("GET", "/api/admin/applications", null, "wrong-key")).status, 401);
+        // leads import with dedupe
+        const imp = (await c3("POST", "/api/admin/leads", { leads: [
+          { business_name: "Rudrapur Cartons", city: "Rudrapur", email: "sales@rc.test", category: "Corrugated boxes" },
+          { business_name: "Karur Weaves", city: "Karur", email: "hi@kw.test", segment: "exporter-buyer", cluster_product: "home textiles" },
+          { business_name: "Agra Shoes", city: "Agra", email: "", segment: "exporter-buyer" },
+          { business_name: "Dup", email: "SALES@rc.test" }] }, "k3y-123")).body;
+        assert.deepStrictEqual([imp.added, imp.skipped], [3, 1]);
+        const leads = (await c3("GET", "/api/admin/leads", null, "k3y-123")).body.leads;
+        // sending needs sender identity first
+        assert.strictEqual((await c3("POST", "/api/admin/outreach", { leadIds: [leads[0].id], templateId: "supplier_free", send: true }, "k3y-123")).status, 400);
+        await c3("PUT", "/api/admin/outreach/settings", { senderName: "Yashraj", senderAddress: "House of 24, Nagpur" }, "k3y-123");
+        const prev = (await c3("POST", "/api/admin/outreach", { leadIds: leads.map(l => l.id), templateId: "supplier_free" }, "k3y-123")).body;
+        assert.strictEqual(prev.sent, 0); assert.strictEqual(mails.length, 0, "preview never sends");
+        assert.strictEqual(prev.previews.find(p => p.business === "Agra Shoes").skip, "No email");
+        const sent = (await c3("POST", "/api/admin/outreach", { leadIds: leads.map(l => l.id), templateId: "supplier_free", send: true }, "k3y-123")).body;
+        assert.strictEqual(sent.sent, 2); assert.strictEqual(mails.length, 2);
+        assert.match(mails[0].body.textContent, /https:\/\/vb\.test\/unsubscribe\?e=/);
+        assert.ok(mails[0].body.headers["List-Unsubscribe"]);
+        const again = (await c3("POST", "/api/admin/outreach", { leadIds: leads.map(l => l.id), templateId: "supplier_free", send: true }, "k3y-123")).body;
+        assert.strictEqual(again.sent, 0, "no repeat emails, daily cap respected");
+        // unsubscribe: bad signature refused, good one recorded
+        const unsubLink = mails[1].body.textContent.match(/https:\/\/vb\.test(\/unsubscribe\?\S+)/)[1];
+        assert.strictEqual((await fetch(b3 + "/unsubscribe?e=hi@kw.test&t=forged")).status, 400);
+        assert.strictEqual((await fetch(b3 + unsubLink)).status, 200);
+        const after = (await c3("GET", "/api/admin/leads", null, "k3y-123")).body.leads;
+        assert.ok(after.some(l => l.status === "unsubscribed"));
+        // public sign-up, linked to the outreach lead
+        const bad = await c3("POST", "/api/join", { role: "supplier", business: "X" });
+        assert.strictEqual(bad.status, 400);
+        const ok = await c3("POST", "/api/join", { role: "supplier", business: "Rudrapur Cartons", name: "Amit", phone: "9876543210", city: "Rudrapur", cats: ["pack"], consent: true, ref: leads[0].id });
+        assert.match(ok.body.id, /^A\d{4}$/);
+        assert.deepStrictEqual((await c3("POST", "/api/join", { company_site: "spam" })).body, { ok: true }, "honeypot quietly ignored");
+        const apps = (await c3("GET", "/api/admin/applications", null, "k3y-123")).body.applications;
+        assert.strictEqual(apps.length, 1);
+        assert.strictEqual((await c3("GET", "/api/admin/leads", null, "k3y-123")).body.leads.find(l => l.id === leads[0].id).status, "joined");
+        assert.ok(!JSON.stringify((await c3("GET", "/api/state")).body).includes("9876543210"), "sign-ups never in public state");
+        // quote links: onboard a real supplier, invite, supplier answers, price shows up
+        const sup = (await c3("PUT", "/api/suppliers/new", { name: "Rudrapur Cartons", city: "Rudrapur", gstin: "05AABCR1234A1Z8", lead: 2, coverage: 1500, offers: [{ p: "box5", tiersText: "200:44, 1000:40", cap: 20000 }] }));
+        const sid = sup.body.id;
+        assert.ok(sid, JSON.stringify(sup.body));
+        const rfq = (await c3("POST", "/api/rfqs", { productId: "box5", qty: 2000, city: "Moradabad", deadline: 10, quotes: [] })).body;
+        assert.strictEqual((await c3("POST", `/api/admin/rfqs/${rfq.id}/invites`, { sids: [sid] })).status, 401);
+        const invs = (await c3("POST", `/api/admin/rfqs/${rfq.id}/invites`, { sids: [sid, "s1"] }, "k3y-123")).body.invites;
+        assert.strictEqual(invs.length, 1, "sample suppliers can't be invited");
+        const token = invs[0].url.split("#quote/")[1];
+        const view = (await c3("GET", "/api/quote/" + token)).body;
+        assert.deepStrictEqual([view.rfq.qty, view.rfq.city, view.rateCard], [2000, "Moradabad", 40]);
+        assert.strictEqual((await c3("POST", "/api/quote/" + token, { unit: 4000, lead: 2 })).status, 400);
+        assert.strictEqual((await c3("POST", "/api/quote/" + token, { unit: 37.5, lead: 3, note: "30% advance" })).body.quote.unit, 37.5);
+        assert.strictEqual((await c3("GET", "/api/quote/not-a-real-token-123")).status, 404);
+        const pubRfq = (await c3("GET", "/api/state")).body.rfqs.find(r => r.id === rfq.id);
+        assert.strictEqual(pubRfq.invites[0].quote.unit, 37.5);
+        assert.ok(!("token" in pubRfq.invites[0]), "tokens stay secret");
+        // CORS for the GitHub Pages copy
+        const pre = await fetch(b3 + "/api/join", { method: "OPTIONS", headers: { origin: "https://yashrajsurgo0.github.io" } });
+        assert.strictEqual(pre.headers.get("access-control-allow-origin"), "https://yashrajsurgo0.github.io");
+      } finally { s3.close(); }
+    });
     await test("unknown API path is a JSON 404", async () => {
       const { status, body } = await call("GET", "/api/nope");
       assert.deepStrictEqual([status, body.error], [404, "No such endpoint"]);
