@@ -27,6 +27,7 @@ B2B procurement MVP for Indian MSMEs. Founder: Yashraj Surgoniwar (House of 24 P
 - Sample suppliers (`SAMPLE_SUPPLIERS`, flagged `sample:true`) are illustrative; onboarded suppliers go through `normalizeSupplier()` on both client and server. Keep the footer disclaimer.
 - New suppliers have no track record: `onTime`/`rating` stay `null` and ranking uses `NEW_SUPPLIER` defaults. Never invent history.
 - Colors only through CSS tokens in `styles.css`; light and dark themes both supported. Drawings live as `<symbol>`s in `index.html` and take color from `.f-*`/`.s-*` classes.
+- Logo: `#logo` (two-gold folded up-right arrow) and `#logo-tile` (on #16171B, app icon/favicon) in `index.html`. Wordmark is "Vyapar" + "Boss" in gold. Before registering the brand, get a trademark search done: the established "Vyapar" billing app serves the same MSME market.
 - Taglines: company "Vyapar bada, jhanjhat chhota!"; Bhai "Tu business badha, jugaad mera!". Bhai is an original character: don't base him on film characters or real people.
 - The assistant is called **Bhai** everywhere (UI, AI prompts, WhatsApp). Voice: warm, short, Hinglish-friendly; never promises price or availability.
 - Buy flow is progressive: show one question at a time (`nextField()`), keep details behind `<details>` expanders. Don't put everything on screen at once.
