@@ -130,11 +130,12 @@ function normalizeLead(x){
     segment:/supplier/.test(segRaw)&&!/buyer/.test(segRaw)?"supplier":/buyer|export/.test(segRaw)?"exporter":"supplier",
     product:str(x.product||x.products||x.cluster_product||x.category,120),website:str(x.website,200),
     email:str(x.email,120).toLowerCase(),phone:str(x.phone,40),contact:str(x.contact||x.contact_name,80),
-    source:str(x.source||x.source_url,300),notes:str(x.notes,300),status:str(x.status,20)||"new",
+    source:str(x.source||x.source_url,300),notes:str(x.notes,1000),status:str(x.status,20)||"new",
     createdAt:Number(x.createdAt)||Date.now(),lastEmailed:Number(x.lastEmailed)||null,sends:Array.isArray(x.sends)?x.sends.slice(-10):[]};
   if(lead.business.length<2)errors.push("Business name is missing");
   if(lead.email&&!isEmail(lead.email)){lead.notes=(lead.notes+" (invalid email removed: "+lead.email+")").trim();lead.email="";}
-  if(!["new","emailed","replied","joined","not_interested","unsubscribed","bounced"].includes(lead.status))lead.status="new";
+  if(!LEAD_STATUSES.includes(lead.status))lead.status="new";
+  lead.lastContacted=Number(x.lastContacted)||null;
   return {ok:!errors.length,lead,errors};
 }
 const leadKey=l=>(l.email||(l.business+"|"+l.city)).toLowerCase().replace(/\s+/g," ").trim();
@@ -159,6 +160,9 @@ function renderOutreach(tplId,lead,ctx){
   const t=OUTREACH_TEMPLATES.find(x=>x.id===tplId);if(!t)return null;
   const v=outreachVars(lead,ctx);return {to:lead.email,subject:fillTemplate(t.subject,v),text:fillTemplate(t.body,v)};
 }
+/* WhatsApp opener and call script for a lead, in the same honest voice as the emails. */
+function renderWhatsAppPitch(lead,ctx){return fillTemplate(WA_TEMPLATES[lead.segment==="supplier"?"supplier":"exporter"],outreachVars(lead,ctx));}
+function renderCallScript(lead,ctx){const v=outreachVars(lead,ctx);return CALL_SCRIPTS[lead.segment==="supplier"?"supplier":"exporter"].map(l=>fillTemplate(l,v));}
 /* Self-serve sign-up from the public "Join" page. role: supplier | buyer. */
 function normalizeJoin(x){
   x=x||{};const str=(v,n)=>String(v??"").trim().slice(0,n);const errors=[];
@@ -173,6 +177,19 @@ function normalizeJoin(x){
   if(!a.cats.length&&a.what.length<3)errors.push(a.role==="supplier"?"Tell us what you make or sell":"Tell us what you buy");
   if(a.gstin){const g=checkGstin(a.gstin,CITIES[a.city]?a.city:null);if(!g.ok)errors.push(g.why);}
   if(x.consent!==true)errors.push("Please agree that VyaparBoss can contact you");
+  // Optional rate card from suppliers, so the team doesn't have to collect it by phone.
+  a.offers=[];
+  if(a.role==="supplier")(Array.isArray(x.offers)?x.offers:[]).slice(0,4).forEach(o=>{
+    if(!o||(!o.p&&!o.tiersText))return;const p=PMAP[o.p];
+    if(!p){errors.push("Pick the product for each rate you added");return;}
+    const tiers=parseTiers(o.tiersText);
+    if(!tiers){errors.push(`${p.name}: write rates like "500:17.9, 2000:16.2" (quantity:₹ per ${unitOne(p.unit)})`);return;}
+    const cap=Math.round(Number(o.cap))||tiers[tiers.length-1][0]*5;
+    if(cap<tiers[0][0]){errors.push(`${p.name}: most per order must be at least your minimum order`);return;}
+    if(!a.offers.some(y=>y.p===p.id))a.offers.push({p:p.id,tiers,cap});
+  });
+  const opt=(v,lo,hi)=>{const n=Math.round(Number(v));return v===""||v==null||!isFinite(n)?null:Math.min(hi,Math.max(lo,n));};
+  a.coverage=opt(x.coverage,25,3500);a.lead=opt(x.lead,1,60);
   return {ok:!errors.length,a,errors};
 }
 /* Supplier's own quote from a quote link: price per unit (before GST) and days to get it ready. */

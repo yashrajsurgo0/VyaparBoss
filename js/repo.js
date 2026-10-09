@@ -121,7 +121,9 @@ const Repo={
   },
   async updateLead(id,patch){
     if(this.ops)return this.api("PATCH","api/admin/leads/"+encodeURIComponent(id),patch);
-    const o=await this.leads();const l=o.leads.find(x=>x.id===id);if(l)Object.assign(l,patch);this.saveLocalLeads(o);return l;
+    const o=await this.leads();const l=o.leads.find(x=>x.id===id);
+    if(l){const {contacted,...rest}=patch;Object.assign(l,rest);if(contacted){l.lastContacted=Date.now();if(l.status==="new")l.status="contacted";}}
+    this.saveLocalLeads(o);return l;
   },
   async deleteLead(id){
     if(this.ops)return this.api("DELETE","api/admin/leads/"+encodeURIComponent(id));
