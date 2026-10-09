@@ -436,3 +436,22 @@ tr.leaddetail td{background:var(--sunk)}
 .script li:last-child{color:var(--muted);font-style:italic}
 .joinform .offer select,.joinform .offer input{width:100%}
 @media(max-width:560px){.joinform .offer{grid-template-columns:1fr}}
+
+/* Region and language switch (header) */
+.regionpick{margin-left:auto;position:relative}
+.regionpick+.bhai-status{margin-left:8px}
+.regionpick summary{list-style:none;white-space:nowrap;display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:600;font-size:14.5px;color:var(--muted);padding:6px 12px;border:1px solid var(--line);border-radius:999px;background:var(--surface)}
+.regionpick summary::-webkit-details-marker{display:none}
+.regionpick summary:hover,.regionpick[open] summary{color:var(--ink);border-color:var(--brand)}
+.regionpick summary svg{width:17px;height:17px}
+.regionpick .rp-short{display:none}
+@media(max-width:560px){.regionpick .rp-long{display:none}.regionpick .rp-short{display:inline}.regionpick summary{padding:6px 10px}}
+.rp-menu{position:absolute;right:0;top:calc(100% + 8px);z-index:40;min-width:230px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--lift);padding:8px;display:grid;gap:2px}
+.rp-h{margin:6px 8px 2px;font-size:12.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.rp-menu button{border:0;background:none;text-align:left;padding:8px 10px;border-radius:var(--r-sm);font:inherit;font-weight:600;color:var(--ink);cursor:pointer;display:flex;justify-content:space-between;align-items:center}
+.rp-menu button:hover{background:var(--sunk)}
+.rp-menu button[aria-checked="true"]{background:var(--brand-tint);color:var(--brand-text)}
+.rp-menu button[aria-checked="true"]::after{content:"✓"}
+.rp-note{margin:6px 8px 2px;font-size:13px;color:var(--muted);max-width:240px}
+.callnext{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin:8px 0 4px;padding:10px 14px;border-radius:var(--r);background:var(--accent-tint)}
+.callnext span{color:var(--muted);font-size:14.5px;flex:1;min-width:160px}

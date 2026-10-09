@@ -143,6 +143,8 @@ function createApp(opts = {}) {
       const p = await jsonBody(req);
       if (core.LEAD_STATUSES.includes(p.status)) l.status = p.status;
       if (p.contacted) { l.lastContacted = Date.now(); if (l.status === "new") l.status = "contacted"; }
+      // Sent outside the app (mail merge): record it so the follow-up call comes up on time.
+      if (p.emailed) { l.lastEmailed = Date.now(); if (["new", "contacted"].includes(l.status)) l.status = "emailed"; l.sends = (l.sends || []).concat({ t: String(p.template || "manual").slice(0, 40), at: Date.now() }).slice(-10); }
       if ("notes" in p) l.notes = String(p.notes || "").slice(0, 1000);
       if ("email" in p) { const e = String(p.email || "").trim().toLowerCase(); if (e && !core.isEmail(e)) throw bad("Invalid email"); l.email = e; }
       store.save(); return l;
@@ -248,9 +250,9 @@ function createApp(opts = {}) {
         excluded: res.excluded.map(x => ({ sid: x.s.id, supplier: x.s.name, why: x.why })) };
     }],
     ["POST", /^\/api\/parse$/, async req => {
-      const { text, partial } = await jsonBody(req);
+      const { text, partial, lang } = await jsonBody(req);
       if (!text || typeof text !== "string") throw bad("text is required");
-      return ctx.services.parse(text, partial || null);
+      return ctx.services.parse(text, partial || null, lang === "en" ? "en" : "hi");
     }],
     ["POST", /^\/api\/draft$/, async req => {
       const { rfqId, sid } = await jsonBody(req);
@@ -336,10 +338,10 @@ function notFound(what) { return Object.assign(new Error(`${what} not found`), {
 function makeServices({ core, store, claude }) {
   const plain = v => JSON.parse(JSON.stringify(v));
   return {
-    async parse(text, partial) {
+    async parse(text, partial, lang) {
       if (claude) {
         try {
-          const p = core.cleanParsed(await claude.json(core.buildParsePrompt(text, partial)));
+          const p = core.cleanParsed(await claude.json(core.buildParsePrompt(text, partial, lang)));
           if (p) return { parsed: p, via: claude.provider || "AI" };
         } catch (e) { console.warn(`${claude.provider || "AI"} parse failed, using rules:`, e.message); }
       }

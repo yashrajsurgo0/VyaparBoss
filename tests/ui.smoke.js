@@ -10,13 +10,13 @@ const bodyClasses=new Set();
 const documentStub={querySelector:s=>el(s.replace(/^#/,"")),querySelectorAll:()=>[],getElementById:id=>el(id),addEventListener(){},hidden:false,activeElement:null,
   body:{classList:{add:c=>bodyClasses.add(c),remove:c=>bodyClasses.delete(c),contains:c=>bodyClasses.has(c),toggle:(c,on)=>on?bodyClasses.add(c):bodyClasses.delete(c)},appendChild(){}}};
 const loc={protocol:BASE?"http:":"file:",hash:"",pathname:"/",search:"",origin:BASE||"null"};
-const ls={},errors=[];
+const ls={"vyaparboss.v1.locale":"in_hi"},errors=[];
 const ctx=vm.createContext({console:{log(){},warn(){},error:(...a)=>errors.push(a.join(" "))},document:documentStub,localStorage:{getItem:k=>ls[k]??null,setItem:(k,v)=>ls[k]=String(v)},
-  location:loc,history:{replaceState(){loc.hash="";}},sessionStorage:{getItem:()=>null,setItem(){},removeItem(){}},addEventListener(){},fetch:(u,o)=>fetch(new URL(u,BASE+"/"),o),AbortController,setTimeout,clearTimeout,setInterval:()=>0,requestAnimationFrame:f=>f(),
+  location:loc,URLSearchParams,history:{replaceState(){loc.hash="";}},sessionStorage:{getItem:()=>null,setItem(){},removeItem(){}},addEventListener(){},fetch:(u,o)=>fetch(new URL(u,BASE+"/"),o),AbortController,setTimeout,clearTimeout,setInterval:()=>0,requestAnimationFrame:f=>f(),
   matchMedia:()=>({matches:false}),scrollTo(){},navigator:{},Date,Math,Intl,JSON,URL,Promise});
 ctx.window=ctx;
-const src=["data","util","engine","parser","repo","app","grow"].map(f=>fs.readFileSync(path.join(ROOT,"src/js",f+".js"),"utf8")).join("\n;\n");
-vm.runInContext(src+"\nthis.__t={say:sayToBhai,Repo,get flow(){return flow},ACTIONS,renderAll,route,loc:location,get pub(){return pub},submitJoin,showInsightsView,showSupplierView};",ctx);
+const src=["data","util","engine","parser","repo","i18n","app","grow"].map(f=>fs.readFileSync(path.join(ROOT,"src/js",f+".js"),"utf8")).join("\n;\n");
+vm.runInContext(src+"\nthis.__t={say:sayToBhai,Repo,get flow(){return flow},ACTIONS,renderAll,route,loc:location,get pub(){return pub},submitJoin,showInsightsView,showSupplierView,setLocale,get LOCALE(){return LOCALE}};",ctx);
 const T=ctx.__t,wait=ms=>new Promise(r=>setTimeout(r,ms));
 let fails=0;const check=(c,m)=>{console.log((c?"ok - ":"FAIL - ")+m);if(!c)fails++;};
 const act=(name,ds={})=>T.ACTIONS[name]({dataset:ds,disabled:false,textContent:"",classList:{add(){},remove(){}},isConnected:true});
@@ -78,6 +78,14 @@ const buy=()=>els["v-buy"].innerHTML;
   // Ops screens
   T.showSupplierView("apps");check(els.appsList.innerHTML.length>50,"sign-ups view renders");
   T.showInsightsView("outreach");await wait(50);check(els.outreachBox.innerHTML.length>50,"outreach view renders");
+  // Regions and languages
+  T.setLocale("in_hi");act("new-req");check(buy().includes("Bolo kya chahiye"),"India · Hinglish hero");
+  T.setLocale("gl_en");check(buy().includes("What do you need from India?")&&!/chahiye|Namaste|jugaad/.test(buy()),"Global hero is plain English");
+  await T.say("5000 export cartons to Nhava Sheva in 7 days");
+  check(T.flow.stage==="quotes"&&T.flow.r.city==="Nhava Sheva"&&buy().includes("Found")&&buy().includes("Indian rupees"),"Global: port delivery, English Bhai, rupee note");
+  check(!/chahiye|Mil gaye|Pakka|karwao/.test(buy()),"no Hinglish in Global quotes");
+  T.setLocale("in_en");check(!buy().includes("Indian rupees")&&!/karwao/.test(buy()),"India · English drops the Hinglish and the global note");
+  T.setLocale("in_hi");check(buy().includes("thoda kam karwao"),"back to Hinglish");
   check(!errors.length,"no console errors "+errors.join(" | "));
   process.exitCode=fails?1:0;
 })();

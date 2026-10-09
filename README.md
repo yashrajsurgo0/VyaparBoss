@@ -19,6 +19,8 @@ npm run deploy:pages     # publish src/ to GitHub Pages (gh-pages branch)
 npm run build:single     # dist/vyaparboss.html: whole app in one file, for sharing
 ```
 
+**Regions and languages:** one app, switch in the header. India · Hinglish (default in India), India · English, and Global · English for buyers anywhere sourcing from Indian suppliers (delivery to Indian cities and ports: Nhava Sheva, Mundra, Chennai, Tuticorin…). Link straight to one with `?region=global` or `?lang=en`.
+
 **Live server:** https://vyaparboss.onrender.com (shared data, Gemini AI; Render free plan, so it sleeps when idle and data resets on redeploy).
 **Static demo:** https://yashrajsurgo0.github.io/VyaparBoss/ (data stays in your browser). Redeploy with `npm run deploy:pages`.
 

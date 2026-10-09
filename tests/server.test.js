@@ -185,6 +185,8 @@ const { createApp } = require("../server");
         const agra = leads.find(l => l.business === "Agra Shoes");
         const contacted = (await c3("PATCH", "/api/admin/leads/" + agra.id, { contacted: true, notes: "Call back Monday" }, "k3y-123")).body;
         assert.deepStrictEqual([contacted.status, contacted.notes, !!contacted.lastContacted], ["contacted", "Call back Monday", true]);
+        const mm = (await c3("PATCH", "/api/admin/leads/" + agra.id, { emailed: true, template: "exporter_buyer" }, "k3y-123")).body;
+        assert.deepStrictEqual([mm.status, mm.sends.at(-1).t, !!mm.lastEmailed], ["emailed", "exporter_buyer", true], "mail-merge sends are recorded");
         // sending needs sender identity first
         assert.strictEqual((await c3("POST", "/api/admin/outreach", { leadIds: [leads[0].id], templateId: "supplier_free", send: true }, "k3y-123")).status, 400);
         await c3("PUT", "/api/admin/outreach/settings", { senderName: "Yashraj", senderAddress: "House of 24, Nagpur" }, "k3y-123");

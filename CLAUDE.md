@@ -10,7 +10,7 @@ B2B procurement MVP for Indian MSMEs. Founder: Yashraj Surgoniwar (House of 24 P
 - `npm run build:single` — single-file build in `dist/` (gitignored).
 
 ## Architecture
-- Plain browser scripts loaded in order: data → util → engine → parser → repo → app → grow. They share globals; keep that order. `grow.js` holds the public pages (`#join`, `#quote/<token>`) and ops tools (Sign-ups, Outreach, quote links).
+- Plain browser scripts loaded in order: data → util → engine → parser → repo → i18n → app → grow. They share globals; keep that order. `grow.js` holds the public pages (`#join`, `#quote/<token>`) and ops tools (Sign-ups, Outreach, quote links).
 - `data.js`, `util.js`, `engine.js`, `parser.js` must stay DOM-free: `server/core.js` loads them into Node so server and browser share one engine. Add new shared functions to the `EXPORTS` list in `server/core.js`.
 - `repo.js` is the only place that persists data: server API when `/api/health` answers, else localStorage.
 - Server: `server/index.js` routes; business actions in `makeServices()` so REST and WhatsApp share them. WhatsApp logic lives in `server/whatsapp.js` (try it with `npm run wa -- "message"`).
@@ -28,7 +28,8 @@ B2B procurement MVP for Indian MSMEs. Founder: Yashraj Surgoniwar (House of 24 P
 - New suppliers have no track record: `onTime`/`rating` stay `null` and ranking uses `NEW_SUPPLIER` defaults. Never invent history.
 - Colors only through CSS tokens in `styles.css`; light and dark themes both supported. Drawings live as `<symbol>`s in `index.html` and take color from `.f-*`/`.s-*` classes.
 - Logo: `#logo` (two-gold folded up-right arrow) and `#logo-tile` (on #16171B, app icon/favicon) in `index.html`. Wordmark is "Vyapar" + "Boss" in gold. Before registering the brand, get a trademark search done: the established "Vyapar" billing app serves the same MSME market.
-- Taglines: company "Vyapar bada, jhanjhat chhota!"; Bhai "Tu business badha, jugaad mera!". Bhai is an original character: don't base him on film characters or real people.
+- Regions/languages (`i18n.js`): India · Hinglish (`in_hi`, original voice), India · English (`in_en`), Global · English (`gl_en`, buyers anywhere sourcing from Indian suppliers). Every user-facing line that differs goes through `t(key)` with entries in `STR.hi`, `STR.en` and, if Global needs different framing, `STR.gl`. No Hindi words in English modes. Logo, the name VyaparBoss and Bhai never change. Switcher in the header; `?region=global` / `?lang=en` in links; default guessed from time zone (India time → Hinglish, else Global).
+- Taglines: company "Vyapar bada, jhanjhat chhota!" (English: "Bigger business. Smaller hassle."); Bhai "Tu business badha, jugaad mera!" (English: "You grow the business. I'll handle the buying."). Bhai is an original character: don't base him on film characters or real people.
 - The assistant is called **Bhai** everywhere (UI, AI prompts, WhatsApp). Voice: warm, short, Hinglish-friendly; never promises price or availability.
 - Buy flow is progressive: show one question at a time (`nextField()`), keep details behind `<details>` expanders. Don't put everything on screen at once.
 - After UI changes: `npm test` (includes `tests/ui.smoke.js`), push, `npm run deploy:pages`, and redeploy Render.

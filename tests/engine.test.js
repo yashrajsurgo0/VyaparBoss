@@ -169,6 +169,20 @@ test("phone-first outreach: mobiles detected, WhatsApp pitch and call script are
   assert.match(wa, /#join\/b\/L0009/); assert.match(wa, /"no"/); assert.ok(!/\{\{/.test(wa));
   const script = C.renderCallScript({ ...lead, segment: "supplier" }, { senderName: "Yashraj" });
   assert.ok(script.length >= 5 && /Don't promise/.test(script.at(-1)));
+  const after = C.renderCallScript({ ...lead, segment: "supplier", lastEmailed: Date.now() }, { senderName: "Yashraj" });
+  assert.match(after[1], /email bheja tha/);
+  assert.match(C.renderWhatsAppPitch({ ...lead, lastEmailed: Date.now() }, { senderName: "Yashraj" }), /email bhi bheja tha/);
+});
+
+test("global region: international buyer numbers, English-only AI replies, ports", () => {
+  const base = { role: "buyer", business: "Lyon Home Decor", name: "Claire", city: "Lyon", what: "export cartons", consent: true };
+  const g = C.normalizeJoin({ ...base, region: "global", phone: "+33 6 12 34 56 78" });
+  assert.ok(g.ok, g.errors.join()); assert.deepStrictEqual([g.a.phone, g.a.region], ["+33612345678", "global"]);
+  assert.ok(C.normalizeJoin({ ...base, region: "global", phone: "98765 43210" }).ok, "Indian mobile still fine in Global");
+  assert.ok(!C.normalizeJoin({ ...base, phone: "+33 6 12 34 56 78" }).ok, "India region expects an Indian mobile");
+  assert.match(C.buildParsePrompt("hi", null, "en"), /plain English with no Hindi words/);
+  assert.match(C.buildParsePrompt("hi", null), /same language style/);
+  assert.strictEqual(C.ruleParse("50 pallets to JNPT in 10 days").city, "Nhava Sheva");
 });
 
 console.log(`\n${passed} engine tests passed`);

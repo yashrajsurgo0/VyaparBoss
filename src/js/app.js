@@ -15,15 +15,14 @@ const CAT_INFO={pack:{icon:"cat-pack",name:"Packaging",hint:"Boxes, film, tape"}
 const QTY_PRESETS={kg:[500,1000,2000,5000],pcs:[1000,5000,10000,25000],rolls:[20,50,100,500],boxes:[50,100,250,500]};
 const TOP_CITIES=["Pune","Mumbai","Delhi","Ahmedabad","Bengaluru","Chennai","Hyderabad","Indore"];
 const DEADLINES=[[3,"In 3 days"],[7,"Within a week"],[15,"In 2 weeks"],[0,"No rush"]];
-const TRY=["5000 corrugated boxes, Pune, 7 din","2 tonne NPK 19:19:19 Indore","300 boxes nitrile gloves Chennai"];
 
 /* ===================== BHAI'S BRAIN ===================== */
 /* Server AI (Gemini/Claude) → Claude inside claude.ai → built-in Hinglish rules. */
 async function understand(text,base){
   if(aiState==="server"){
-    try{const j=await Repo.parse(text,base);const p=cleanParsed(j.parsed);if(p)return{parsed:p,via:j.via||"AI"};}catch(e){console.warn("server parse failed",e);}
+    try{const j=await Repo.parse(text,base,LOCALE.lang);const p=cleanParsed(j.parsed);if(p)return{parsed:p,via:j.via||"AI"};}catch(e){console.warn("server parse failed",e);}
   }else if(ai&&aiState==="live"){
-    try{const p=cleanParsed(await ai.json(buildParsePrompt(text,base),{modelTier:"quick",cache:false}));if(p)return{parsed:p,via:"Claude"};}
+    try{const p=cleanParsed(await ai.json(buildParsePrompt(text,base,LOCALE.lang),{modelTier:"quick",cache:false}));if(p)return{parsed:p,via:"Claude"};}
     catch(e){if(["not_granted","sampling_disabled","not_declared","capability_disabled","capability_removed"].includes(e.code)){aiState="off";renderAiChip();}}
   }
   return{parsed:ruleParse(text),via:"Rules"};
@@ -34,8 +33,7 @@ const discoverNow=(neg=flow.neg)=>discover(flow.r,neg,liveFor(flow.r));
 const nextField=r=>!r.productId?"product":!r.qty?"qty":!r.city?"city":r.deadline===undefined?"deadline":null;
 function askLine(f){
   const p=PMAP[flow.r.productId];
-  return {product:"Kya kharidna hai? Pick a category, or just type it in your own words.",
-    qty:`${p?p.name:"Got it"}. Kitna chahiye?`,city:"Delivery kahan chahiye?",deadline:"Kab tak chahiye?"}[f];
+  return f==="qty"?t("ask.qty",{name:p?p.name:"Got it"}):t("ask."+f);
 }
 function bhai(text){flow.msgs.push({who:"b",text,fresh:true});}
 function me(text){flow.msgs.push({who:"u",text});}
@@ -58,7 +56,7 @@ async function sayToBhai(text){
   flow.busy=false;flow.open=null;
   const changed=JSON.stringify(r)!==before;
   if(!changed){
-    bhai(`Maaf kijiye, samjha nahi. Try something like "5000 boxes Pune 7 din", or pick from the options.`);
+    bhai(t("notUnderstood"));
     renderBuy();return;
   }
   // A typed request with product, quantity and city doesn't need a date question.
@@ -85,19 +83,19 @@ async function showQuotes(lead){
   flow.stage="quotes";flow.sel=null;flow.showNeg=false;flow.newCard=true;
   let line;
   if(!res.eligible.length)line=res.offering?`${res.offering} supplier${res.offering>1?"s":""} sell this, but none can take ${qfmt(r.qty)} ${p.unit} to ${r.city} right now. Try a different quantity or city.`:`No supplier in the network sells ${p.name} yet.`;
-  else if(!ok.length)line=`${res.eligible.length>1?"Mil gaye":"Mila"} ${res.eligible.length} option${res.eligible.length>1?"s":""}, but none can make it in ${r.deadline} days. The fastest takes ${best.eta} days.`;
-  else line=`${res.eligible.length>1?`Mil gaye ${res.eligible.length} options! My pick:`:"Mila 1 option:"} ${best.s.name}, ${inr(best.landed)} delivered to ${r.city}.`;
+  else if(!ok.length)line=`${res.eligible.length>1?t("lateN",{n:res.eligible.length}):t("late1")}, but none can make it in ${r.deadline} days. The fastest takes ${best.eta} days.`;
+  else line=`${res.eligible.length>1?t("pickN",{n:res.eligible.length}):t("pick1")} ${best.s.name}, ${inr(best.landed)} delivered to ${r.city}.`;
   bhai((lead?lead+"\n":"")+line);
   renderBuy();
 }
-function choose(sid){flow.sel=sid;flow.stage="confirm";flow.newCard=true;const q=discoverNow().eligible.find(x=>x.s.id===sid);me(`${q.s.name} chahiye`);bhai("Pakka? Check the order once, then approve.");renderBuy();}
+function choose(sid){flow.sel=sid;flow.stage="confirm";flow.newCard=true;const q=discoverNow().eligible.find(x=>x.s.id===sid);me(t("want",{name:q.s.name}));bhai(t("confirmQ"));renderBuy();}
 async function approve(btn){
   const r=flow.r,res=discoverNow(),q=res.eligible.find(x=>x.s.id===flow.sel);if(!q)return;
   btn.disabled=true;
   try{
     const o=await Repo.createOrder(orderRecord(r,res,q),{status:"ordered",wonBy:q.s.id,quotes:quoteSummary(res)});
     flow.po=o.po;flow.stage="done";flow.newCard=true;
-    bhai(`Ho gaya! Purchase order ${o.po} is with ${q.s.name}. I'll keep an eye on it.`);
+    bhai(t("placed",{po:o.po,name:q.s.name}));
     renderBuy();renderOrders();toast(`Order placed: ${o.po}`);
   }catch(e){fail(e);btn.disabled=false;}
 }
@@ -105,7 +103,7 @@ function negotiateNow(){
   const target=parseFloat($("#negTarget")?.value);if(!(target>0)){toast("Enter the price you'd like to pay per unit.");return;}
   const r=negotiate(discoverNow({}),target);flow.neg=r.neg;flow.negLast=r.out;
   const acc=r.out.filter(x=>x.ok).length;
-  bhai(acc?`Baat ho gayi! ${acc} supplier${acc>1?"s":""} agreed to ${inr(target,2)}. Updated prices below.`:`Itna kam nahi hua. I got everyone's best counter-offer; prices below are updated.`);
+  bhai(acc?t("negOk",{n:acc,s:acc>1?"s":"",price:inr(target,2)}):t("negNo"));
   flow.newCard=true;renderBuy();
 }
 
@@ -113,25 +111,25 @@ function negotiateNow(){
 function heroHTML(){
   return `<section class="hero">
     <div>
-      <p class="hello">Namaste! Main Bhai hoon.</p>
-      <h1>Bolo kya chahiye.</h1>
-      <p class="lede">Tell me what your business needs to buy. I'll find verified suppliers and show you the full price, delivered to your door.</p>
+      <p class="hello">${esc(t("hello"))}</p>
+      <h1>${esc(t("heroH1"))}</h1>
+      <p class="lede">${esc(t("heroLede"))}</p>
       <form class="askbox" data-form="ask" role="search">
-        <input id="heroAsk" autocomplete="off" placeholder="e.g. 5000 corrugated boxes, Pune, 7 din" aria-label="What do you need to buy?">
+        <input id="heroAsk" autocomplete="off" placeholder="${esc(t("askPh"))}" aria-label="What do you need to buy?">
         <button class="btn primary">Ask Bhai</button>
       </form>
-      <div class="try">Try: ${TRY.map(t=>`<button data-action="try" data-v="${esc(t)}">${esc(t)}</button>`).join("")}</div>
+      <div class="try">Try: ${t("try").map(t=>`<button data-action="try" data-v="${esc(t)}">${esc(t)}</button>`).join("")}</div>
       <p class="cats-title">Or pick what you're buying</p>
       <div class="cats">${Object.entries(CAT_INFO).map(([k,c])=>`<button class="cat" data-action="cat" data-cat="${k}">${ico(c.icon,"")}<b>${c.name}</b><span>${c.hint}</span></button>`).join("")}</div>
     </div>
-    <div class="hero-art"><p class="bhai-says">Tu business badha, jugaad mera!</p><svg class="bhai-xl" role="img" aria-label="Bhai, your buying assistant"><use href="#bhai"/></svg></div>
+    <div class="hero-art"><p class="bhai-says">${esc(t("bhaiTag"))}</p><svg class="bhai-xl" role="img" aria-label="Bhai, your buying assistant"><use href="#bhai"/></svg></div>
   </section>
   <section class="how">
-    <div><span class="n">1</span><p><b>Tell Bhai what you need</b><span>Type it the way you'd say it, in English, Hindi or Hinglish.</span></p></div>
+    <div><span class="n">1</span><p><b>Tell Bhai what you need</b><span>${esc(t("how1"))}</span></p></div>
     <div><span class="n">2</span><p><b>Compare delivered prices</b><span>Price, GST and freight in one number, from verified suppliers.</span></p></div>
     <div><span class="n">3</span><p><b>Approve and track</b><span>Nothing is ordered until you say yes.</span></p></div>
   </section>
-  <section class="joinband"><div><b>Supplier ho?</b> List your business free. Get only orders you can serve, and pay only when one closes.</div><a class="btn marigold" href="#join/s">List free</a></section>`;
+  <section class="joinband"><div><b>${esc(t("joinQ"))}</b> List your business free. Get only orders you can serve, and pay only when one closes.</div><a class="btn marigold" href="#join/s">List free</a></section>`;
 }
 function stepperHTML(){
   const idx={ask:0,quotes:1,confirm:2,done:3}[flow.stage]??0;
@@ -163,9 +161,9 @@ function askCard(){
       <div class="chips">${pre.map(n=>`<button class="chip" data-action="qty" data-v="${n}">${qfmt(n)}</button>`).join("")}</div>
       ${moqs.length?`<p class="hint">Suppliers in the network start from ${qfmt(Math.min(...moqs))} ${esc(p.unit)}.</p>`:""}`;
   }else if(f==="city"){
-    const others=Object.keys(CITIES).filter(c=>!TOP_CITIES.includes(c)).sort();
+    const others=Object.keys(CITIES).filter(c=>!topCities().includes(c)).sort();
     body=`<p class="q-title">Deliver to which city?</p>
-      <div class="chips">${TOP_CITIES.map(c=>`<button class="chip" data-action="city" data-v="${c}" aria-pressed="${r.city===c}">${c}</button>`).join("")}</div>
+      <div class="chips">${topCities().map(c=>`<button class="chip" data-action="city" data-v="${c}" aria-pressed="${r.city===c}">${c}</button>`).join("")}</div>
       <div class="field narrow"><label for="cityOther">Another city</label><select id="cityOther"><option value="">Choose…</option>${others.map(c=>`<option ${r.city===c?"selected":""}>${c}</option>`).join("")}</select></div>`;
   }else if(f==="deadline"){
     body=`<p class="q-title">When do you need it?</p>
@@ -227,7 +225,8 @@ function quotesCard(){
   html+=flow.showNeg?`<div class="negbox"><div class="field"><label for="negTarget">Price you'd like per ${unitOne(p.unit)} (₹)</label><input id="negTarget" type="number" step="0.01" min="0" value="${(best.list*0.95).toFixed(2)}"></div><button class="btn marigold" data-action="negotiate">Ask all suppliers</button></div>
       <p class="hint">Bhai asks every supplier. Each one only goes as low as their own limit, and nothing is ordered.</p>
       ${flow.negLast?`<div class="negres">${flow.negLast.map(x=>`<span>${esc(x.name)}: ${x.ok?`<b style="color:var(--good)">agreed ${inr(x.price,2)}</b>`:`best ${inr(x.price,2)}`}</span>`).join("")}</div>`:""}`
-    :`<p><button class="link" data-action="show-neg">Bhai, thoda kam karwao? Ask for a better price</button></p>`;
+    :`<p><button class="link" data-action="show-neg">${esc(t("askBetter"))}</button></p>`;
+  if(isGlobal())html+=`<p class="hint">${esc(t("globalNote"))}</p>`;
   html+=typeof liveQuotesHTML==="function"?liveQuotesHTML(res):"";
   return html+`</div>`;
 }
@@ -441,7 +440,7 @@ function renderDesk(){
       <div class="actions">${canDraft?`<button class="btn sm" data-action="draft" data-rfq="${esc(r.id)}">${ico("bhai")}Ask Bhai to write it</button>`:""}<button class="btn sm ghost" data-action="copy" data-rfq="${esc(r.id)}">Copy reply</button></div>
     </div>`;}).join(""):`<div class="panel empty">${ico("art-shop","")}<h2>No requests for ${esc(s.name)} yet</h2><p>Requests show up here when a buyer needs something this supplier sells, in a quantity and place they can serve.</p></div>`;
 }
-function templateReply(r,s,mine){const p=PMAP[r.productId];return `Namaste ji, ${s.name} se. ${qfmt(r.qty)} ${p.unit} ${p.name} (${p.spec}) ke liye hamara rate ${inr(mine.unit,2)} per ${unitOne(p.unit)} + GST ${p.gst}% hai. ${r.city} delivery ${mine.eta} din mein ho jayegi. Payment: ${s.terms||"advance"}. Confirm karein to order dispatch plan bhej dete hain.`;}
+function templateReply(r,s,mine){const p=PMAP[r.productId];return t("supplierReply",{s:s.name,qty:qfmt(r.qty),unit:p.unit,product:p.name,spec:p.spec,rate:inr(mine.unit,2),one:unitOne(p.unit),gst:p.gst,city:r.city,eta:mine.eta,terms:s.terms||"advance"});}
 async function draftReply(id,btn){
   const r=store().rfqs.find(x=>x.id===id),s=SMAP[$("#deskSel").value],mine=r.quotes.find(q=>q.sid===s.id);const ta=document.getElementById("reply-"+id);
   btn.disabled=true;const prev=ta.value;ta.value="Bhai is writing…";
@@ -499,8 +498,8 @@ function renderAiChip(){
   const c=$("#aichip");const live=aiState==="server"||aiState==="live";
   c.className="bhai-status"+(live?" live":"");
   c.querySelector("span").textContent=aiState==="pending"?"Bhai…":"Bhai";
-  c.title="Bhai: tu business badha, jugaad mera! "+(live?`Online (${aiState==="server"?(Repo.info.provider||"AI"):"Claude"}). Prices and suppliers always come from supplier rate cards.`
-    :"Basic mode: understands common Hinglish and English requests without AI.");
+  c.title="Bhai: "+t("bhaiTag")+" "+(live?`Online (${aiState==="server"?(Repo.info.provider||"AI"):"Claude"}). Prices and suppliers always come from supplier rate cards.`
+    :t("basicMode"));
 }
 
 /* ===================== NAVIGATION ===================== */
@@ -515,11 +514,19 @@ function showTab(t){
   if(Repo.mode==="server")Repo.refresh().then(ch=>ch&&renderAll()).catch(()=>{});
 }
 
+/* Region or language changed: redraw everything; Bhai's next lines use the new voice. */
+function onLocaleChange(){
+  if(flow.stage==="start")renderBuy();else{flow.newCard=true;renderBuy();}
+  renderAiChip();renderAll();
+  if(typeof pub!=="undefined"&&pub.view){pub.view==="join"?rerenderJoin():renderQuotePage();}
+  toast(LOCALE.label);
+}
 const ACTIONS={
+  locale:a=>setLocale(a.dataset.v),
   go:a=>showTab(a.dataset.tab),
   try:a=>sayToBhai(a.dataset.v),
   cat:a=>{const c=a.dataset.cat||null;
-    if(flow.stage==="start"||flow.stage==="done"){flow=freshFlow();flow.stage="ask";flow.cat=c;me(CAT_INFO[c].name);bhai(`${CAT_INFO[c].name}, achha. Which one?`);}
+    if(flow.stage==="start"||flow.stage==="done"){flow=freshFlow();flow.stage="ask";flow.cat=c;me(CAT_INFO[c].name);bhai(t("catPicked",{cat:CAT_INFO[c].name}));}
     else{flow.cat=c;flow.open="product";}
     flow.newCard=true;renderBuy();},
   pick:a=>setField("product",a.dataset.p,PMAP[a.dataset.p].name),
@@ -537,7 +544,7 @@ const ACTIONS={
   reorder:a=>{const o=store().orders.find(x=>x.po===a.dataset.po);if(!o||!PMAP[o.productId])return;
     flow=freshFlow();flow.stage="ask";flow.cat=PMAP[o.productId].cat;flow.r={productId:o.productId,qty:o.qty,city:o.city};
     me(`Same as last time: ${qfmt(o.qty)} ${PMAP[o.productId].unit} ${PMAP[o.productId].name} to ${o.city}`);
-    bhai("Haan ji, same order again. I'll get fresh prices, since rates change. Kab tak chahiye?");flow.newCard=true;showTab("buy");},
+    bhai(t("reorder"));flow.newCard=true;showTab("buy");},
   advance:a=>{const o=store().orders.find(x=>x.po===a.dataset.po);if(o&&o.stage<4){const history=o.history.slice();history[o.stage+1]=Date.now();Repo.updateOrder(o.po,{stage:o.stage+1,history}).catch(fail);renderOrders();}},
   issue:a=>{const o=store().orders.find(x=>x.po===a.dataset.po);if(o){Repo.updateOrder(o.po,{issue:o.stage>=3?"Short quantity received":"Dispatch delayed"}).catch(fail);renderOrders();}},
   resolve:a=>{Repo.updateOrder(a.dataset.po,{issue:null}).catch(fail);renderOrders();},
@@ -585,7 +592,7 @@ document.addEventListener("change",e=>{
 
 /* ===================== BOOT ===================== */
 (async function boot(){
-  renderBuy();renderAiChip();
+  applyStatic();renderBuy();renderAiChip();
   await Repo.init();
   if(Repo.mode==="server"){aiState=Repo.info.ai?"server":"off";setInterval(()=>{if(!document.hidden)Repo.refresh().then(ch=>ch&&renderAll()).catch(()=>{});},20000);}
   renderAiChip();renderAll();
