@@ -11,13 +11,14 @@ const { createApp } = require("../server");
   const fakeClaude = { provider: "Claude", model: "fake", async json(prompt) { if (!prompt.includes("3000 dabbe pune\"\"\"")) throw new Error("fake Claude: no canned answer"); return { product_id: "box3", quantity: 3000, unit: "pcs", city: "Pune", deadline_days: 4, notes: "", reply: "Samajh gaya" }; }, async complete() { return "Namaste ji, rate confirmed."; } };
   const { server } = createApp({
     dataFile: path.join(dir, "db.json"), claude: fakeClaude,
-    env: { WHATSAPP_VERIFY_TOKEN: "verify-me", WHATSAPP_TOKEN: "t", WHATSAPP_PHONE_NUMBER_ID: "123" },
+    env: { WHATSAPP_VERIFY_TOKEN: "verify-me", WHATSAPP_TOKEN: "t", WHATSAPP_PHONE_NUMBER_ID: "123", ADMIN_KEY: "team-key" },
     waSend: async (to, text) => { sent.push({ to, text }); },
   });
   await new Promise(r => server.listen(0, r));
   const base = `http://127.0.0.1:${server.address().port}`;
   const call = async (method, p, body) => {
-    const r = await fetch(base + p, { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+    // The main helper acts as the team (admin key), so it sees everything; account tests below use cookies instead.
+    const r = await fetch(base + p, { method, headers: { "content-type": "application/json", "x-admin-key": "team-key" }, body: body ? JSON.stringify(body) : undefined });
     return { status: r.status, body: r.headers.get("content-type")?.includes("json") ? await r.json() : await r.text() };
   };
   let passed = 0;
@@ -216,7 +217,7 @@ const { createApp } = require("../server");
         assert.strictEqual((await c3("GET", "/api/admin/leads", null, "k3y-123")).body.leads.find(l => l.id === leads[0].id).status, "joined");
         assert.ok(!JSON.stringify((await c3("GET", "/api/state")).body).includes("9876543210"), "sign-ups never in public state");
         // quote links: onboard a real supplier, invite, supplier answers, price shows up
-        const sup = (await c3("PUT", "/api/suppliers/new", { name: "Rudrapur Cartons", city: "Rudrapur", gstin: "05AABCR1234A1Z8", lead: 2, coverage: 1500, offers: [{ p: "box5", tiersText: "200:44, 1000:40", cap: 20000 }] }));
+        const sup = (await c3("PUT", "/api/admin/suppliers/new", { name: "Rudrapur Cartons", city: "Rudrapur", gstin: "05AABCR1234A1Z8", lead: 2, coverage: 1500, offers: [{ p: "box5", tiersText: "200:44, 1000:40", cap: 20000 }] }, "k3y-123"));
         const sid = sup.body.id;
         assert.ok(sid, JSON.stringify(sup.body));
         const rfq = (await c3("POST", "/api/rfqs", { productId: "box5", qty: 2000, city: "Moradabad", deadline: 10, quotes: [] })).body;
@@ -229,7 +230,7 @@ const { createApp } = require("../server");
         assert.strictEqual((await c3("POST", "/api/quote/" + token, { unit: 4000, lead: 2 })).status, 400);
         assert.strictEqual((await c3("POST", "/api/quote/" + token, { unit: 37.5, lead: 3, note: "30% advance" })).body.quote.unit, 37.5);
         assert.strictEqual((await c3("GET", "/api/quote/not-a-real-token-123")).status, 404);
-        const pubRfq = (await c3("GET", "/api/state")).body.rfqs.find(r => r.id === rfq.id);
+        const pubRfq = (await fetch(b3 + "/api/state").then(r => r.json())).rfqs.find(r => r.id === rfq.id) || (await c3("GET", "/api/state", null, "k3y-123")).body.rfqs.find(r => r.id === rfq.id);
         assert.strictEqual(pubRfq.invites[0].quote.unit, 37.5);
         assert.ok(!("token" in pubRfq.invites[0]), "tokens stay secret");
         // link clicks are counted on the lead, unknown events refused
@@ -253,6 +254,91 @@ const { createApp } = require("../server");
         let last; for (let i = 0; i < 12; i++) last = (await c3("GET", "/api/admin/leads", null, "guess-" + i)).status;
         assert.strictEqual(last, 429);
       } finally { s3.close(); }
+    });
+    await test("accounts: buyers and suppliers sign up, log in, and see only their own data", async () => {
+      const crypto = require("crypto");
+      // A fake Google: our own RSA key published as a JWKS, so ID-token checks run for real.
+      const { publicKey, privateKey } = crypto.generateKeyPairSync("rsa", { modulusLength: 2048 });
+      const jwk = { ...publicKey.export({ format: "jwk" }), kid: "k1", alg: "RS256", use: "sig" };
+      const sign = claims => { const h = Buffer.from(JSON.stringify({ alg: "RS256", kid: "k1", typ: "JWT" })).toString("base64url"), b = Buffer.from(JSON.stringify(claims)).toString("base64url");
+        return `${h}.${b}.${crypto.sign("RSA-SHA256", Buffer.from(h + "." + b), privateKey).toString("base64url")}`; };
+      const fakeFetch = async url => ({ ok: true, json: async () => (String(url).includes("googleapis.com/oauth2/v3/certs") ? { keys: [jwk] } : {}) });
+      const { server: s4 } = createApp({ dataFile: path.join(dir, "db4.json"), claude: null, fetch: fakeFetch, env: { ADMIN_KEY: "k4", GOOGLE_CLIENT_ID: "gid.apps" } });
+      await new Promise(r => s4.listen(0, r));
+      const b4 = `http://127.0.0.1:${s4.address().port}`;
+      const agent = () => { let cookie = ""; return async (method, p, body) => {
+        const r = await fetch(b4 + p, { method, headers: { "content-type": "application/json", ...(cookie ? { cookie } : {}) }, body: body ? JSON.stringify(body) : undefined });
+        const sc = r.headers.get("set-cookie"); if (sc) cookie = sc.split(";")[0];
+        return { status: r.status, body: await r.json() }; }; };
+      try {
+        const cfg = (await agent()("GET", "/api/auth/config")).body;
+        assert.deepStrictEqual([cfg.email, !!cfg.google, cfg.apple, cfg.facebook], [true, true, null, null]);
+
+        // Guest makes a request, then signs up as a buyer and keeps it.
+        const buyer = agent();
+        const rfq = (await buyer("POST", "/api/rfqs", { productId: "box3", qty: 5000, city: "Pune", quotes: [{ sid: "s1", unit: 15, landed: 90000, eta: 4, meets: true }, { sid: "s2", unit: 14, landed: 88000, eta: 3, meets: true }] })).body;
+        assert.ok((await buyer("GET", "/api/state")).body.rfqs.some(r => r.id === rfq.id), "guest sees own request");
+        assert.strictEqual((await buyer("POST", "/api/auth/signup", { role: "buyer", name: "Ravi", business: "Ravi Exports", email: "ravi@x.in", password: "short" })).status, 400);
+        const su = await buyer("POST", "/api/auth/signup", { role: "buyer", name: "Ravi", business: "Ravi Exports", email: "Ravi@X.in", password: "longenough1", city: "Moradabad" });
+        assert.deepStrictEqual([su.status, su.body.user.role, su.body.user.email, su.body.user.guest], [200, "buyer", "ravi@x.in", false]);
+        assert.ok((await buyer("GET", "/api/state")).body.rfqs.some(r => r.id === rfq.id), "signing up keeps the guest's request");
+        assert.ok(!JSON.stringify((await buyer("GET", "/api/state")).body).includes("passwordHash") && !JSON.stringify(su.body).includes("s1$"));
+        assert.strictEqual((await agent()("POST", "/api/auth/signup", { role: "supplier", name: "R", business: "Dup", email: "ravi@x.in", password: "longenough1" })).status, 400);
+        assert.strictEqual((await agent()("POST", "/api/auth/signup", { role: "supplier", name: "Ravi K", business: "Dup Co", email: "ravi@x.in", password: "longenough1" })).status, 409);
+
+        // Strangers don't see Ravi's request.
+        assert.ok(!(await agent()("GET", "/api/state")).body.rfqs.some(r => r.id === rfq.id));
+
+        // Log in: wrong password, wrong side, right.
+        assert.strictEqual((await agent()("POST", "/api/auth/login", { role: "buyer", email: "ravi@x.in", password: "nope-nope" })).status, 401);
+        const wrongSide = await agent()("POST", "/api/auth/login", { role: "supplier", email: "ravi@x.in", password: "longenough1" });
+        assert.strictEqual(wrongSide.status, 409); assert.match(wrongSide.body.error, /I'm buying/);
+        const again = agent();
+        assert.strictEqual((await again("POST", "/api/auth/login", { role: "buyer", email: "ravi@x.in", password: "longenough1" })).status, 200);
+        assert.strictEqual((await again("GET", "/api/auth/me")).body.user.name, "Ravi");
+        await again("POST", "/api/auth/logout"); assert.strictEqual((await again("GET", "/api/auth/me")).body.user, null);
+
+        // Supplier signs up with Google, lists itself, sees the request it qualifies for (not rivals' prices), quotes in-app.
+        const sup = agent();
+        const tok = sign({ iss: "https://accounts.google.com", aud: "gid.apps", sub: "g-123", email: "owner@shreeji.in", email_verified: true, name: "Mehul", exp: Math.floor(Date.now() / 1000) + 600 });
+        assert.strictEqual((await agent()("POST", "/api/auth/oauth", { provider: "google", role: "supplier", credential: tok.slice(0, -4) + "AAAA" })).status, 401, "tampered token refused");
+        assert.strictEqual((await agent()("POST", "/api/auth/oauth", { provider: "apple", role: "supplier", credential: tok })).status, 503, "Apple not configured");
+        const g = await sup("POST", "/api/auth/oauth", { provider: "google", role: "supplier", credential: tok, profile: { business: "Shreeji Corrugators" } });
+        assert.deepStrictEqual([g.status, g.body.created, g.body.user.role, g.body.user.providers], [200, true, "supplier", ["google"]]);
+        assert.strictEqual((await sup("POST", "/api/rfqs", { productId: "box3", qty: 10, city: "Pune" })).status, 403, "suppliers can't buy");
+        const gst = "27AAPFU0939F1ZV";
+        const listing = await sup("PUT", "/api/my/listing", { name: "Shreeji Corrugators", city: "Chakan", gstin: gst, lead: 2, coverage: 600, offers: [{ p: "box3", tiersText: "500:16, 5000:14.5", cap: 50000 }] });
+        assert.deepStrictEqual([listing.status, listing.body.selfListed, listing.body.verified, listing.body.mine], [200, true, false, true]);
+        const sid = listing.body.id;
+        // The team's quote run includes the new supplier in this request.
+        const st0 = (await fetch(b4 + "/api/state", { headers: { "x-admin-key": "k4" } }).then(r => r.json()));
+        const rec = st0.rfqs.find(r => r.id === rfq.id); rec.quotes.push({ sid, unit: 14.5, landed: 87000, eta: 3, meets: true });
+        await fetch(b4 + "/api/rfqs/" + rfq.id, { method: "PATCH", headers: { "content-type": "application/json", "x-admin-key": "k4" }, body: JSON.stringify({ quotes: rec.quotes }) });
+        const sst = (await sup("GET", "/api/state")).body;
+        const seen = sst.rfqs.find(r => r.id === rfq.id);
+        assert.deepStrictEqual([seen.quotes.length, seen.quotes[0].sid, seen.rank, seen.of], [1, sid, 1, 3], "own quote only, plus rank");
+        assert.ok(!("invites" in seen) && !("ownerId" in seen));
+        assert.strictEqual((await sup("POST", "/api/my/quotes", { rfqId: rfq.id, unit: 13.9, lead: 2, note: "Ready stock" })).body.quote.unit, 13.9);
+        assert.strictEqual((await sup("GET", "/api/state")).body.rfqs.find(r => r.id === rfq.id).myQuote.unit, 13.9);
+        const bst = (await again("POST", "/api/auth/login", { role: "buyer", email: "ravi@x.in", password: "longenough1" }), (await again("GET", "/api/state")).body);
+        assert.strictEqual(bst.rfqs.find(r => r.id === rfq.id).invites[0].quote.unit, 13.9, "buyer sees the supplier's own quote");
+        assert.ok(!bst.suppliers.some(s => "contact" in s && !s.mine), "supplier phone numbers stay private");
+        // Orders: prices are rebuilt on the server; only from your own request; one order per request.
+        const stranger = agent();
+        assert.strictEqual((await stranger("POST", "/api/orders", { order: { productId: "box3", sid: "s1", rfqId: rfq.id, unit: 1, landed: 1 } })).status, 400, "can't order on someone else's request");
+        const ord = (await again("POST", "/api/orders", { order: { productId: "box3", sid: "s1", rfqId: rfq.id, unit: 0.5, landed: 1, subtotal: 1 } })).body;
+        const s1 = (await fetch(b4 + "/api/state", { headers: { "x-admin-key": "k4" } }).then(r => r.json())).suppliers;
+        assert.ok(ord.po && ord.landed > 50000 && ord.unit >= 14, "tampered price replaced by the supplier's rate within its discount limit: " + ord.unit);
+        assert.strictEqual((await again("POST", "/api/orders", { order: { productId: "box3", sid: "s1", rfqId: rfq.id } })).status, 409, "no second order on the same request");
+        // Drafts and the WhatsApp practice chat are not open to the public.
+        assert.strictEqual((await stranger("POST", "/api/draft", { rfqId: rfq.id, sid: "s1" })).status, 404);
+        assert.strictEqual((await stranger("POST", "/api/whatsapp/simulate", { text: "hi" })).status, 401);
+        // Same Google account later: logs in, no duplicate.
+        const g2 = await agent()("POST", "/api/auth/oauth", { provider: "google", role: "supplier", credential: tok });
+        assert.deepStrictEqual([g2.body.created, g2.body.user.supplierId], [false, sid]);
+        // Team-only network edits.
+        assert.strictEqual((await sup("PUT", "/api/admin/suppliers/new", { name: "X" })).status, 401, "suppliers can't edit the network");
+      } finally { s4.close(); }
     });
     await test("unknown API path is a JSON 404", async () => {
       const { status, body } = await call("GET", "/api/nope");

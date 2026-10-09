@@ -9,6 +9,7 @@ const { createClaude } = require("./anthropic");
 const { createGemini } = require("./gemini");
 const { createWhatsApp } = require("./whatsapp");
 const { createMailer, unsubSig } = require("./email");
+const { createAuth } = require("./auth");
 const crypto = require("crypto");
 
 const ROOT = path.join(__dirname, "..");
@@ -49,6 +50,7 @@ function createApp(opts = {}) {
     list.push(Date.now()); hits.set(k, list);
     if (hits.size > 5000) for (const [kk, v] of hits) if (!v.some(t => t > since)) hits.delete(kk);
   };
+  const auth = createAuth({ store, env, fetchImpl: opts.fetch || globalThis.fetch });
   const whatsapp = createWhatsApp(ctx, { verifyToken: env.WHATSAPP_VERIFY_TOKEN, accessToken: env.WHATSAPP_TOKEN, phoneNumberId: env.WHATSAPP_PHONE_NUMBER_ID, appSecret: env.WHATSAPP_APP_SECRET, apiVersion: env.WHATSAPP_API_VERSION, send: opts.waSend });
 
   const send = (res, code, body, headers = {}) => {
@@ -72,11 +74,104 @@ function createApp(opts = {}) {
       throw Object.assign(new Error("Admin key needed"), { status: 401 });
     }
   };
+  /** True when the request carries the right admin key (no throw, no rate-limit side effects). */
+  const isAdmin = req => {
+    if (!env.ADMIN_KEY || !req.headers["x-admin-key"]) return false;
+    const got = Buffer.from(String(req.headers["x-admin-key"])), want = Buffer.from(String(env.ADMIN_KEY));
+    return got.length === want.length && crypto.timingSafeEqual(got, want);
+  };
+  const needUser = (req, role) => {
+    const u = auth.userOf(req);
+    if (!u || u.guest) throw Object.assign(new Error("Please log in first"), { status: 401 });
+    if (role && u.role !== role) throw Object.assign(new Error(`This needs a ${role} account`), { status: 403 });
+    return u;
+  };
+  const plainJ = v => JSON.parse(JSON.stringify(v));
+  /** What one person may see. Team (admin key): everything. Buyers: their own requests and orders, plus examples.
+      Suppliers: requests they qualified for (only their own quote, plus their rank) and orders placed with them. */
+  function stateFor(req) {
+    const base = store.publicState();
+    const u = auth.userOf(req), me = auth.publicUser(u);
+    if (isAdmin(req)) return { ...base, me, team: true };
+    const strip = s => { const { contact, ownerId, ...rest } = s; return u && ownerId === u.id ? { ...rest, contact, mine: true } : rest; };
+    const suppliers = base.suppliers.map(strip);
+    if (u && u.role === "supplier") {
+      const sid = u.supplierId;
+      const rfqs = base.rfqs.filter(r => sid && r.quotes.some(q => q.sid === sid)).map(r => {
+        const ranked = r.quotes.filter(q => q.meets).sort((a, b) => a.landed - b.landed);
+        const { invites, ownerId, ...rest } = r;
+        return { ...rest, quotes: r.quotes.filter(q => q.sid === sid), rank: ranked.findIndex(q => q.sid === sid) + 1, of: ranked.length,
+          myQuote: (invites || []).find(i => i.sid === sid)?.quote || null };
+      });
+      return { orders: base.orders.filter(o => sid && o.sid === sid).map(({ ownerId, ...o }) => o), rfqs, seq: base.seq, suppliers, useSamples: base.useSamples, me };
+    }
+    const mine = r => r.sample || (u && r.ownerId === u.id);
+    return { orders: base.orders.filter(mine), rfqs: base.rfqs.filter(mine), seq: base.seq, suppliers, useSamples: base.useSamples, me };
+  }
+  const canTouchOrder = (req, o) => isAdmin(req) || (() => { const u = auth.userOf(req); return u && (o.ownerId === u.id || (u.role === "supplier" && u.supplierId && o.sid === u.supplierId)); })();
   const findInvite = token => { for (const r of store.data.rfqs) { const i = (r.invites || []).find(x => x.token === token); if (i) return { r, i }; } return {}; };
   const unsubscribed = email => store.data.outreach.unsub.includes(String(email).toLowerCase());
 
   const routes = [
     ["GET", /^\/api\/health$/, () => ({ ok: true, app: "vyaparboss", ai: !!claude, provider: claude?.provider || null, model: claude?.model || null, whatsapp: whatsapp.configured, email: mailer.configured, ops: !!env.ADMIN_KEY })],
+
+    // ---------- Accounts ----------
+    ["GET", /^\/api\/auth\/config$/, () => auth.config()],
+    ["GET", /^\/api\/auth\/me$/, req => ({ user: auth.publicUser(auth.userOf(req)) })],
+    ["POST", /^\/api\/auth\/signup$/, async (req, m, url, res) => {
+      limit(req, "signup", 10, 36e5, "Too many sign-ups from here. Try again in an hour.");
+      const b = await jsonBody(req);
+      const { ok, a, errors } = core.normalizeAccount(b);
+      if (!ok) throw bad(errors.join(". "));
+      return { user: auth.publicUser(auth.signup(req, res, a, b.password)) };
+    }],
+    ["POST", /^\/api\/auth\/login$/, async (req, m, url, res) => {
+      limit(req, "login", 12, 15 * 6e4, "Too many tries. Wait 15 minutes, then try again.");
+      const b = await jsonBody(req);
+      return { user: auth.publicUser(auth.login(req, res, b.role === "supplier" ? "supplier" : "buyer", String(b.email || "").trim(), b.password)) };
+    }],
+    ["POST", /^\/api\/auth\/oauth$/, async (req, m, url, res) => {
+      limit(req, "oauth", 20, 15 * 6e4);
+      const b = await jsonBody(req);
+      if (!["google", "apple", "facebook"].includes(b.provider)) throw bad("Unknown sign-in method");
+      const { user, created } = await auth.oauth(req, res, b.provider, b.role === "supplier" ? "supplier" : "buyer", b);
+      return { user: auth.publicUser(user), created };
+    }],
+    ["POST", /^\/api\/auth\/logout$/, (req, m, url, res) => { auth.endSession(req, res); store.save(); return { ok: true }; }],
+    ["PATCH", /^\/api\/auth\/me$/, async req => {
+      const u = needUser(req); const b = await jsonBody(req);
+      const { ok, a, errors } = core.normalizeAccount({ ...auth.publicUser(u), ...b, role: u.role, email: u.email || b.email });
+      if (!ok) throw bad(errors.join(". "));
+      Object.assign(u, { name: a.name, business: a.business, phone: a.phone, city: a.city });
+      if (!u.email && a.email) u.email = a.email;
+      store.save(); return { user: auth.publicUser(u) };
+    }],
+
+    // ---------- Supplier accounts: own listing and quotes ----------
+    ["PUT", /^\/api\/my\/listing$/, async req => {
+      const u = needUser(req, "supplier"); const input = await jsonBody(req);
+      const prev = u.supplierId && store.data.suppliers.find(s => s.id === u.supplierId);
+      const { ok, s, errors } = core.normalizeSupplier({ ...input, id: prev ? prev.id : null, createdAt: prev?.createdAt, onTime: prev?.onTime, rating: prev?.rating });
+      if (!ok) throw bad(errors.join(". "));
+      s.id ||= "c" + Date.now().toString(36);
+      Object.assign(s, { orders: prev?.orders || 0, ownerId: u.id, selfListed: true, verified: !!prev?.verified });
+      store.data.suppliers = store.data.suppliers.filter(x => x.id !== s.id).concat(plainJ(s));
+      u.supplierId = s.id; store.save(); syncSuppliers();
+      const { ownerId, ...pub } = s; return { ...plainJ(pub), mine: true };
+    }],
+    ["POST", /^\/api\/my\/quotes$/, async req => {
+      const u = needUser(req, "supplier"); const b = await jsonBody(req);
+      const r = store.data.rfqs.find(x => x.id === b.rfqId);
+      if (!r || !u.supplierId || !r.quotes.some(q => q.sid === u.supplierId)) throw notFound("Request");
+      if (r.status === "ordered") throw Object.assign(new Error("This request is already closed."), { status: 409 });
+      const sup = core.getSMAP()[u.supplierId], o = sup?.offers.find(x => x.p === r.productId);
+      const { ok, q, errors } = core.normalizeLiveQuote(b, o ? core.tierPrice(o, r.qty) : null);
+      if (!ok) throw bad(errors.join(". "));
+      r.invites ||= [];
+      let i = r.invites.find(x => x.sid === u.supplierId);
+      if (!i) { i = { sid: u.supplierId, sname: sup?.name || "", token: crypto.randomBytes(12).toString("base64url"), at: Date.now(), via: "app" }; r.invites.push(i); }
+      i.quote = q; store.save(); return { ok: true, quote: q };
+    }],
 
     // ---------- Public: sign-up and supplier quote links ----------
     ["POST", /^\/api\/join$/, async req => {
@@ -233,23 +328,47 @@ function createApp(opts = {}) {
       store.save();
       return { previews: out, sent, remaining: Math.max(0, room), cap: DAILY_CAP };
     }],
-    ["GET", /^\/api\/state$/, () => store.publicState()],
+    ["GET", /^\/api\/state$/, req => stateFor(req)],
 
-    ["POST", /^\/api\/rfqs$/, async req => ctx.services.createRfq(await jsonBody(req))],
+    ["POST", /^\/api\/rfqs$/, async (req, m, url, res) => {
+      const body = await jsonBody(req);
+      const u = auth.ensureUser(req, res);
+      if (u.role === "supplier") throw Object.assign(new Error("Supplier accounts can't place buy requests. Log in as a buyer."), { status: 403 });
+      return ctx.services.createRfq({ ...body, ownerId: u.id });
+    }],
     ["PATCH", /^\/api\/rfqs\/(.+)$/, async (req, m) => {
       const rec = store.data.rfqs.find(r => r.id === m[1]); if (!rec) throw notFound("RFQ");
+      const u = auth.userOf(req);
+      if (!isAdmin(req) && !(u && rec.ownerId === u.id)) throw notFound("RFQ");
       const p = await jsonBody(req);
       for (const k of ["productId", "qty", "city", "deadline", "quotes", "status", "wonBy"]) if (k in p) rec[k] = p[k];
       store.save(); return rec;
     }],
 
-    ["POST", /^\/api\/orders$/, async req => {
+    ["POST", /^\/api\/orders$/, async (req, m, url, res) => {
       const { order, rfqPatch } = await jsonBody(req);
       if (!order?.productId || !order?.sid) throw bad("Order needs productId and sid");
-      return ctx.services.createOrder(order, rfqPatch);
+      const u = auth.ensureUser(req, res);
+      if (u.role === "supplier") throw Object.assign(new Error("Supplier accounts can't place orders. Log in as a buyer."), { status: 403 });
+      const rec = order.rfqId && store.data.rfqs.find(r => r.id === order.rfqId);
+      if (isAdmin(req)) return ctx.services.createOrder({ ...order, ownerId: order.ownerId || u.id }, rfqPatch);
+      // Buyers can't set prices: rebuild the order from their own request and the supplier's rates or own quote.
+      if (!rec || rec.ownerId !== u.id) throw bad("Place orders from one of your own requests");
+      if (rec.status === "ordered") throw Object.assign(new Error("This request already has an order"), { status: 409 });
+      const r = { productId: rec.productId, qty: rec.qty, city: rec.city, deadline: rec.deadline || null, id: rec.id };
+      const live = core.liveMap(rec), base = core.discover(r, {}, live), q0 = base.eligible.find(x => x.s.id === order.sid);
+      if (!q0) throw bad("That supplier can't take this order");
+      // A negotiated price is kept only if it's within the supplier's own discount limit.
+      const floor = +(q0.list * (1 - (q0.s.maxDisc ?? 0.03))).toFixed(2);
+      const asked = Number(order.unit);
+      const neg = asked > 0 && asked < q0.list ? { [order.sid]: { price: Math.max(floor, asked) } } : {};
+      const qres = core.discover(r, neg, live), q = qres.eligible.find(x => x.s.id === order.sid);
+      const clean = plainJ(core.orderRecord(r, qres, q, { ownerId: u.id, source: "web" }));
+      return ctx.services.createOrder(clean, { status: "ordered", wonBy: q.s.id, quotes: plainJ(core.quoteSummary(qres)) });
     }],
     ["PATCH", /^\/api\/orders\/(.+)$/, async (req, m) => {
       const o = store.data.orders.find(x => x.po === m[1]); if (!o) throw notFound("Order");
+      if (!o.sample && !canTouchOrder(req, o)) throw notFound("Order");
       const p = await jsonBody(req);
       const before = [o.stage, o.issue];
       if ("stage" in p) { const s = Math.round(p.stage); if (s < 0 || s > 4) throw bad("stage must be 0–4"); o.stage = s; }
@@ -259,27 +378,39 @@ function createApp(opts = {}) {
       if (o.stage !== before[0] || (o.issue && o.issue !== before[1])) whatsapp.notifyOrder(o);
       return o;
     }],
-    ["DELETE", /^\/api\/samples$/, () => {
+    ["DELETE", /^\/api\/samples$/, req => {
+      admin(req);
       store.data.orders = store.data.orders.filter(o => !o.sample);
       store.data.rfqs = store.data.rfqs.filter(r => !r.sample);
       store.save(); return { ok: true };
     }],
 
-    ["PUT", /^\/api\/suppliers\/(.+)$/, async (req, m) => {
+    // Team: manage the supplier network.
+    ["PUT", /^\/api\/(?:admin\/)?suppliers\/(.+)$/, async (req, m) => {
+      admin(req);
       const input = await jsonBody(req);
       const prev = store.data.suppliers.find(s => s.id === m[1]);
       const { ok, s, errors } = core.normalizeSupplier({ ...input, id: prev ? prev.id : null, createdAt: prev?.createdAt });
       if (!ok) throw bad(errors.join(". "));
       s.id ||= "c" + Date.now().toString(36);
-      s.orders = prev?.orders || 0;
-      store.data.suppliers = store.data.suppliers.filter(x => x.id !== s.id).concat(JSON.parse(JSON.stringify(s)));
+      Object.assign(s, { orders: prev?.orders || 0, verified: "verified" in input ? !!input.verified : prev ? !!prev.verified : true });
+      if (prev?.ownerId) Object.assign(s, { ownerId: prev.ownerId, selfListed: true });
+      store.data.suppliers = store.data.suppliers.filter(x => x.id !== s.id).concat(plainJ(s));
       store.save(); syncSuppliers(); return s;
     }],
-    ["DELETE", /^\/api\/suppliers\/(.+)$/, (req, m) => {
+    ["PATCH", /^\/api\/admin\/suppliers\/(.+)$/, async (req, m) => {
+      admin(req); const s = store.data.suppliers.find(x => x.id === m[1]); if (!s) throw notFound("Supplier");
+      const p = await jsonBody(req); if ("verified" in p) s.verified = !!p.verified;
+      store.save(); syncSuppliers(); return s;
+    }],
+    ["DELETE", /^\/api\/(?:admin\/)?suppliers\/(.+)$/, (req, m) => {
+      admin(req);
       store.data.suppliers = store.data.suppliers.filter(s => s.id !== m[1]);
+      for (const u of store.data.users || []) if (u.supplierId === m[1]) u.supplierId = null;
       store.save(); syncSuppliers(); return { ok: true };
     }],
-    ["PUT", /^\/api\/settings$/, async req => {
+    ["PUT", /^\/api\/(?:admin\/)?settings$/, async req => {
+      admin(req);
       const p = await jsonBody(req);
       if ("useSamples" in p) store.data.useSamples = !!p.useSamples;
       store.save(); syncSuppliers(); return { useSamples: store.data.useSamples };
@@ -302,6 +433,8 @@ function createApp(opts = {}) {
       const r = store.data.rfqs.find(x => x.id === rfqId), s = core.getSMAP()[sid];
       const mine = r?.quotes.find(q => q.sid === sid);
       if (!r || !s || !mine) throw notFound("RFQ or supplier");
+      const du = auth.userOf(req);
+      if (!isAdmin(req) && !(du && du.role === "supplier" && du.supplierId === sid)) throw notFound("RFQ or supplier");
       if (!claude) throw Object.assign(new Error("AI drafting needs GEMINI_API_KEY or ANTHROPIC_API_KEY on the server"), { status: 503 });
       return { text: await claude.complete(core.buildReplyPrompt(r, s, mine), { maxTokens: 400 }) };
     }],
@@ -309,11 +442,12 @@ function createApp(opts = {}) {
     ["GET", /^\/webhooks\/whatsapp$/, (req, m, url, res) => whatsapp.verify(url, res)],
     ["POST", /^\/webhooks\/whatsapp$/, async (req, m, url, res) => whatsapp.receive(await readBody(req), req.headers, res)],
     ["POST", /^\/api\/whatsapp\/simulate$/, async req => {
+      admin(req);
       const { from, text } = await jsonBody(req);
       if (!text) throw bad("text is required");
       return { reply: await whatsapp.handleText(String(from || "919800000000"), String(text), { simulated: true }) };
     }],
-    ["GET", /^\/api\/whatsapp\/log$/, () => ({ configured: whatsapp.configured, log: store.data.whatsapp.log.slice(-100) })],
+    ["GET", /^\/api\/whatsapp\/log$/, req => (admin(req), { configured: whatsapp.configured, log: store.data.whatsapp.log.slice(-100) })],
   ];
 
   function sentSince(ms) { const t = Date.now() - ms; return store.data.outreach.log.filter(x => x.at > t).length; }
@@ -391,7 +525,7 @@ function makeServices({ core, store, claude }) {
       return { parsed: plain(core.ruleParse(text)), via: "Rules" };
     },
     createRfq(input) {
-      const rec = { ...input, id: core.rfqIdFor(++store.data.seq.rfq), date: input.date || Date.now(), status: "open", wonBy: null };
+      const rec = { ...input, id: core.rfqIdFor(++store.data.seq.rfq), date: input.date || Date.now(), status: "open", wonBy: null, invites: [] };
       if (!core.PMAP[rec.productId] || !core.CITIES[rec.city] || !(rec.qty > 0)) { store.data.seq.rfq--; throw bad("RFQ needs a known productId, city and qty"); }
       store.data.rfqs.unshift(rec); store.save(); return rec;
     },

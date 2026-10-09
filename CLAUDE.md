@@ -10,7 +10,7 @@ B2B procurement MVP for Indian MSMEs. Founder: Yashraj Surgoniwar (House of 24 P
 - `npm run build:single` — single-file build in `dist/` (gitignored).
 
 ## Architecture
-- Plain browser scripts loaded in order: data → util → engine → parser → repo → i18n → app → grow. They share globals; keep that order. `grow.js` holds the public pages (`#join`, `#quote/<token>`) and ops tools (Sign-ups, Outreach, quote links).
+- Plain browser scripts loaded in order: data → util → engine → parser → repo → i18n → app → grow → roles. `roles.js` holds the welcome/sign-in screen, per-role tabs (buyer: Buy, Orders, Suppliers directory, Insights; supplier: Requests, Orders, My listing, Insights), the account menu, the supplier screens, the filtered directory and the Team area. They share globals; keep that order. `grow.js` holds the public pages (`#join`, `#quote/<token>`) and ops tools (Sign-ups, Outreach, quote links).
 - `data.js`, `util.js`, `engine.js`, `parser.js` must stay DOM-free: `server/core.js` loads them into Node so server and browser share one engine. Add new shared functions to the `EXPORTS` list in `server/core.js`.
 - `repo.js` is the only place that persists data: server API when `/api/health` answers, else localStorage.
 - Server: `server/index.js` routes; business actions in `makeServices()` so REST and WhatsApp share them. WhatsApp logic lives in `server/whatsapp.js` (try it with `npm run wa -- "message"`).
@@ -33,6 +33,7 @@ B2B procurement MVP for Indian MSMEs. Founder: Yashraj Surgoniwar (House of 24 P
 - The assistant is called **Bhai** everywhere (UI, AI prompts, WhatsApp). Voice: warm, short, Hinglish-friendly; never promises price or availability.
 - Buy flow is progressive: show one question at a time (`nextField()`), keep details behind `<details>` expanders. Don't put everything on screen at once.
 - After UI changes: `npm test` (includes `tests/ui.smoke.js`), push, `npm run deploy:pages`, and redeploy Render.
+- Accounts (`server/auth.js`): buyer or supplier, one email per side; email+password (scrypt) and Google/Apple/Facebook via verified ID tokens / Graph API when their env keys are set (docs/SIGN_IN_SETUP.md). Sessions: HttpOnly cookie, hashed in the store. `/api/state` is scoped per person (`stateFor`): buyers see own + sample records, suppliers see only requests they qualified for (own quote + rank, never rivals' prices) and orders placed with them, team sees all. Never expose supplier `contact` or `ownerId` to others. Network edits (`/api/admin/suppliers`, settings, delete samples) are team-only; suppliers edit only their own listing (`/api/my/listing`) and quote via `/api/my/quotes`.
 - Ops routes (`/api/admin/*`) need `ADMIN_KEY` (header `x-admin-key`); without it set they stay closed. Sign-ups and leads never go in `/api/state`; quote-link tokens are stripped from it.
 - Supplier quotes come only from the supplier's own quote link (`normalizeLiveQuote`) or their rate card. Bhai never invents a price.
 - Outreach: every email carries sender name, business address and a signed unsubscribe link; daily cap; no repeat of the same template; never auto-send (an admin presses Send, twice). Lead lists only hold contact details the business published itself, with a source URL. See `docs/OUTREACH.md`.

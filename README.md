@@ -19,6 +19,8 @@ npm run deploy:pages     # publish src/ to GitHub Pages (gh-pages branch)
 npm run build:single     # dist/vyaparboss.html: whole app in one file, for sharing
 ```
 
+**Two sides, one app:** the welcome screen asks "I'm buying" or "I'm supplying"; each side has its own sign-up/log-in (email, Google, Apple, Facebook; see [docs/SIGN_IN_SETUP.md](docs/SIGN_IN_SETUP.md)) and its own tabs. Buyers: Buy, Orders, a supplier directory with filters (product, ships from, delivers to, distance, quantity, max price, rating, verified, on-time; sort by price, distance, rating), Insights. Suppliers: Requests (quote in the app; see your rank), Orders (confirm, dispatch, deliver), My listing, Insights. Team tools sit under Team (admin key). Buyers can also explore as a guest.
+
 **Regions and languages:** one app, switch in the header. India · Hinglish (default in India), India · English, and Global · English for buyers anywhere sourcing from Indian suppliers (delivery to Indian cities and ports: Nhava Sheva, Mundra, Chennai, Tuticorin…). Link straight to one with `?region=global` or `?lang=en`.
 
 **Live server:** https://vyaparboss.onrender.com (shared data, Gemini AI; Render free plan, so it sleeps when idle and data resets on redeploy).

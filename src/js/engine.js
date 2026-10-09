@@ -215,3 +215,16 @@ function normalizeLiveQuote(x,listPrice){
 }
 /* {sid:{unit,lead}} from an RFQ's invites, used by discover() so real quotes replace rate-card estimates. */
 const liveMap=rfq=>Object.fromEntries((rfq?.invites||[]).filter(i=>i.quote).map(i=>[i.sid,i.quote]));
+
+/* ===================== ACCOUNTS ===================== */
+/* Sign-up details for a buyer or supplier account (password is checked by the server). */
+function normalizeAccount(x){
+  x=x||{};const str=(v,n)=>String(v??"").trim().slice(0,n);const errors=[];
+  const a={role:x.role==="supplier"?"supplier":"buyer",name:str(x.name,80),business:str(x.business,100),email:str(x.email,120).toLowerCase(),
+    phone:str(x.phone,20),city:str(x.city,60)};
+  if(a.name.length<2)errors.push("Enter your name");
+  if(a.business.length<2)errors.push("Enter your business name");
+  if(!isEmail(a.email))errors.push("Enter a valid email");
+  if(a.phone){const d=String(a.phone).replace(/[^\d+]/g,"");if(!/^(\+\d{8,15}|[6-9]\d{9}|91[6-9]\d{9})$/.test(d.replace(/^\+91/,"")))errors.push("Enter a 10-digit mobile, or a number with country code");}
+  return {ok:!errors.length,a,errors};
+}

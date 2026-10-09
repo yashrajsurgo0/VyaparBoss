@@ -151,3 +151,6 @@ const CALL_SCRIPTS={
   "Close: agli requirement aaye to WhatsApp par bata dijiye, hum quotes laa denge. Sign-up link bhej raha hoon.",
   "Don't promise savings or delivery dates. If they say no, thank them and mark 'not interested'."]
 };
+/* State names for the GST state codes used in CITIES (filters show full names). */
+const STATE_NAMES={MH:"Maharashtra",GJ:"Gujarat",DL:"Delhi",HR:"Haryana",PB:"Punjab",RJ:"Rajasthan",MP:"Madhya Pradesh",UP:"Uttar Pradesh",KA:"Karnataka",TN:"Tamil Nadu",
+ TS:"Telangana",WB:"West Bengal",KL:"Kerala",AP:"Andhra Pradesh",UK:"Uttarakhand",HP:"Himachal Pradesh",DN:"Dadra & Nagar Haveli and Daman & Diu",GA:"Goa",CG:"Chhattisgarh",OD:"Odisha",JH:"Jharkhand",BR:"Bihar",AS:"Assam",JK:"Jammu & Kashmir",CH:"Chandigarh",PY:"Puducherry"};

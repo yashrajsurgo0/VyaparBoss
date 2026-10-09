@@ -42,3 +42,11 @@ services:
         sync: false
       - key: OUTREACH_DAILY_CAP
         value: "30"
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: APPLE_CLIENT_ID
+        sync: false
+      - key: FACEBOOK_APP_ID
+        sync: false
+      - key: FACEBOOK_APP_SECRET
+        sync: false
