@@ -97,6 +97,16 @@ const Repo={
 
   /* Public pages: sign-up and supplier quote links. In the static copy these go to the live server. */
   get publicBase(){return this.mode==="server"?"":LIVE_API;},
+  async track(ev,ref){try{await this.api("POST","api/track",{ev,ref},this.publicBase);}catch(e){}},
+  async backup(){
+    const r=await fetch("api/admin/backup",{headers:{"x-admin-key":this.adminKey}});
+    if(!r.ok)throw Object.assign(new Error((await r.json().catch(()=>({}))).error||"Backup failed"),{status:r.status});
+    return r.blob();
+  },
+  async restore(text){
+    const r=await fetch("api/admin/restore",{method:"POST",headers:{"content-type":"application/json","x-admin-key":this.adminKey},body:text});
+    const j=await r.json().catch(()=>({}));if(!r.ok)throw Object.assign(new Error(j.error||"Restore failed"),{status:r.status});return j;
+  },
   async join(form){return this.api("POST","api/join",form,this.publicBase);},
   async getQuote(token){return this.api("GET","api/quote/"+encodeURIComponent(token),null,this.publicBase);},
   async sendQuote(token,q){return this.api("POST","api/quote/"+encodeURIComponent(token),q,this.publicBase);},
