@@ -77,7 +77,7 @@ const EXAMPLES=[
    Honest by design: no invented numbers, no price or delivery promises, sender identity and opt-out in every mail. */
 const OUTREACH_TEMPLATES=[
  {id:"supplier_free",label:"Supplier: free listing",audience:"supplier",
-  subject:"Free listing for {{business}}: buyer requests for {{product}}",
+  subject:"Free listing for {{business}} on VyaparBoss ({{product}})",
   body:`Namaste {{greeting}},
 
 I'm {{sender_name}} from VyaparBoss (House of 24 Pvt. Ltd.). We're building a buying assistant for Indian MSMEs: a business tells our assistant, Bhai, what it needs, and we pass the request only to suppliers who make that product, can handle that quantity and deliver to that city.

@@ -151,7 +151,10 @@ function outreachVars(lead,ctx){
   const first=lead.contact?lead.contact.replace(/^(mr|mrs|ms|shri|smt|dr)\.?\s+/i,"").split(/\s+/)[0]:"";
   const base=String(ctx.joinBase||"").replace(/#.*$/,"");
   const city=String(lead.city||"").replace(/\s*\(.*?\)\s*/g," ").trim();
-  const product=String(lead.product||"").split(/[;|,(]/)[0].replace(/\s+/g," ").trim().toLowerCase().slice(0,50).trim();
+  // "Moradabad (brassware/metal decor): metal" → "brassware": skip a leading city name and use what's in brackets.
+  let raw=String(lead.product||"");const br=raw.match(/^([^(]+)\(([^)]+)\)/);
+  if(br&&city&&br[1].trim().toLowerCase().startsWith(city.toLowerCase().split(" ")[0]))raw=br[2].split("/")[0];
+  const product=raw.split(/[;|,(:]/)[0].replace(/\s+/g," ").trim().toLowerCase().slice(0,50).trim();
   return {business:lead.business,city:city||"your city",product:product||(lead.segment==="supplier"?"packaging":"export"),
     greeting:first?first+" ji":lead.business+" team",sender_name:ctx.senderName||"Team VyaparBoss",sender_address:ctx.senderAddress||"",
     join_link:`${base}#join/${lead.segment==="supplier"?"s":"b"}/${lead.id||""}`,unsub_link:ctx.unsubLink?ctx.unsubLink(lead):""};
