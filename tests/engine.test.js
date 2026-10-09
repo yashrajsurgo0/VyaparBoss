@@ -119,6 +119,7 @@ test("leads: researched rows normalise, bad emails dropped, duplicates skipped",
   const exp = C.normalizeLead({ business_name: "Karur Weaves", city: "Karur", segment: "exporter-buyer", cluster_product: "home textiles", email: "not-an-email" }).lead;
   assert.deepStrictEqual([exp.segment, exp.email, exp.product], ["exporter", "", "home textiles"]);
   assert.strictEqual(C.normalizeLead({ business_name: "Rudra Box", category: "Corrugated boxes" }).lead.segment, "supplier");
+  assert.strictEqual(C.normalizeLead({ business_name: "Two Mails", email: "Sales@rb.in; info@rb.in" }).lead.email, "sales@rb.in");
   const { added, skipped } = C.mergeLeads([{ business: "Alpha", email: "a@x.in" }], [{ business_name: "Beta", email: "A@x.in" }, { business_name: "Agra Kraft", city: "Agra" }, { business_name: "agra kraft", city: "agra" }]);
   assert.deepStrictEqual([added.length, skipped.length], [1, 2]);
 });
