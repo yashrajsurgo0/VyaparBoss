@@ -309,7 +309,7 @@ function renderOrders(){
         <p class="hint">Purchase order <b class="num">${esc(o.po)}</b>, placed ${dstr(o.date)}</p>
         <table class="breakdown"><tbody><tr><td>Goods</td><td>${inr(o.subtotal)}</td></tr><tr><td>GST</td><td>${inr(o.gst)}</td></tr><tr><td>Freight</td><td>${inr(o.freight)}</td></tr><tr class="tot"><td>Total</td><td>${inr(o.landed)}</td></tr></tbody></table>
         <div class="steps">${STAGES.map((st,i)=>`<div class="${i<=o.stage?"on":""}">${st}${o.history[i]?`<br><span class="muted">${dstr(o.history[i])}</span>`:""}</div>`).join("")}</div>
-        <div class="actions"><button class="btn sm" data-action="reorder" data-po="${esc(o.po)}">Order again</button>${o.stage>=2&&o.stage<4?`<button class="btn sm" data-action="received" data-po="${esc(o.po)}">I received it</button>`:""}
+        <div class="actions"><button class="btn sm" data-action="reorder" data-po="${esc(o.po)}">Order again</button><button class="btn sm ghost" data-action="print-po" data-po="${esc(o.po)}">Print PO</button>${o.stage>=2&&o.stage<4?`<button class="btn sm" data-action="received" data-po="${esc(o.po)}">I received it</button>`:""}
           ${o.issue?`<button class="btn sm ghost" data-action="resolve" data-po="${esc(o.po)}">Problem solved</button>`:`<button class="btn sm ghost" data-action="issue" data-po="${esc(o.po)}">Report a problem</button>`}</div>
       </div></details>
     </div>`;}).join("")}</div>`;
@@ -520,7 +520,32 @@ function onLocaleChange(){
   if(typeof pub!=="undefined"&&pub.view){pub.view==="join"?rerenderJoin():renderQuotePage();}
   toast(LOCALE.label);
 }
+/* Printable purchase order: drawn into #printArea, shown only when printing (or saving as PDF). */
+function poHTML(o){
+  const p=PMAP[o.productId],s=SMAP[o.sid]||{},me=Repo.me,buyerSide=role()!=="supplier";
+  const per=o.unit??(o.subtotal/o.qty);
+  const buyer=buyerSide&&me&&!me.guest?[me.business,me.name,me.city].filter(Boolean).map(esc).join("<br>"):"Buyer on VyaparBoss";
+  return `<div class="po">
+    <div class="po-head"><div><svg class="logo"><use href="#logo"/></svg><b>Vyapar<span class="boss">Boss</span></b></div><div><h1>Purchase order</h1><p><b>${esc(o.po)}</b><br>${new Date(o.date).toLocaleDateString("en-IN",{day:"numeric",month:"long",year:"numeric"})}</p></div></div>
+    ${o.sample?`<p class="po-note">Example order: illustrative only, not a real purchase.</p>`:""}
+    <div class="po-parties"><div><small>Supplier</small><p><b>${esc(s.name||o.sname||"")}</b><br>${esc(s.area?s.area+", ":"")}${esc(s.city||o.scity||"")}${s.gstin?`<br>GSTIN ${esc(s.gstin)}`:""}</p></div>
+      <div><small>Buyer</small><p>${buyer}</p></div><div><small>Deliver to</small><p>${esc(o.city)}${o.deadline?`<br>Needed within ${o.deadline} days`:""}<br>Expected by ${new Date(o.date+o.eta*864e5).toLocaleDateString("en-IN",{day:"numeric",month:"long",year:"numeric"})}</p></div></div>
+    <table class="po-lines"><thead><tr><th>Item</th><th>Quantity</th><th>Rate</th><th>Amount</th></tr></thead>
+      <tbody><tr><td><b>${esc(p.name)}</b><br><small>${esc(p.spec||"")}</small></td><td>${qfmt(o.qty)} ${p.unit}</td><td>${inr(per,2)} / ${unitOne(p.unit)}</td><td>${inr(o.subtotal)}</td></tr></tbody>
+      <tfoot><tr><td colspan="3">GST (${p.gst}%)</td><td>${inr(o.gst)}</td></tr><tr><td colspan="3">Freight</td><td>${inr(o.freight)}</td></tr><tr class="tot"><td colspan="3">Total delivered</td><td>${inr(o.landed)}</td></tr></tfoot></table>
+    ${s.terms?`<p><small>Payment terms</small><br>${esc(s.terms)}</p>`:""}
+    <p class="po-fine">Approved by the buyer on VyaparBoss. This order is between the buyer and the supplier; the supplier's tax invoice is the bill. VyaparBoss, House of 24 Pvt. Ltd.</p>
+  </div>`;
+}
+function printPO(po){
+  const o=store().orders.find(x=>x.po===po);if(!o)return;
+  let el=document.getElementById("printArea");
+  if(!el){el=document.createElement("div");el.id="printArea";document.body.appendChild(el);}
+  el.innerHTML=poHTML(o);
+  if(typeof window.print==="function")window.print();
+}
 const ACTIONS={
+  "print-po":a=>printPO(a.dataset.po),
   locale:a=>setLocale(a.dataset.v),
   theme:a=>{setTheme(a.dataset.v);toast(a.dataset.v==="dark"?"Dark look":"Beige look");},
   go:a=>showTab(a.dataset.tab),

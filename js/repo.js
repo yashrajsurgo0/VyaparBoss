@@ -139,6 +139,20 @@ const Repo={
     const {ok,a,errors}=normalizeAccount({...this.data.me,...patch});if(!ok)throw new Error(errors.join(". "));
     Object.assign(this.data.me,{name:a.name,business:a.business,phone:a.phone,city:a.city});this.saveLocalMe();return this.data.me;
   },
+  async forgot(email){
+    if(this.mode!=="server")throw new Error("Password reset works on the live app. This demo copy keeps your account in this browser only.");
+    return this.api("POST","api/auth/forgot",{email});
+  },
+  async resetPassword(token,password){const j=await this.api("POST","api/auth/reset",{token,password});this.data.me=j.user;this.setGuest(false);await this.refresh();return j.user;},
+  async changePassword(current,password){
+    if(this.mode!=="server")throw new Error("Passwords are only checked on the live app.");
+    const j=await this.api("POST","api/auth/password",{current,password});this.data.me=j.user;return j.user;
+  },
+  async deleteMe(){
+    if(this.mode==="server"){await this.api("DELETE","api/auth/me",{confirm:"DELETE"});this.data.me=null;this.setGuest(false);await this.refresh().catch(()=>{});return;}
+    const sid=this.data.me?.supplierId;if(sid){this.data.suppliers=this.data.suppliers.filter(s=>s.id!==sid);setSuppliers(this.data.suppliers,this.data.useSamples);this.saveLocal();}
+    try{localStorage.removeItem(KEY+".acct");}catch(e){}this.data.me=null;this.saveLocalMe();this.setGuest(false);
+  },
   /* Supplier account: its own listing, and quotes sent from the app. */
   get myListing(){return this.data.suppliers.find(s=>s.mine)||null;},
   async saveListing(s){
@@ -181,6 +195,7 @@ const Repo={
   /* Ops tools (server + admin key). Leads also work in the static copy, kept in this browser. */
   get ops(){return this.mode==="server";},
   async adminCheck(){return this.api("GET","api/admin/check");},
+  async messages(){return (await this.api("GET","api/admin/messages")).messages;},
   async applications(){return (await this.api("GET","api/admin/applications")).applications;},
   async updateApplication(id,patch){return this.api("PATCH","api/admin/applications/"+encodeURIComponent(id),patch);},
   async invites(rfqId,sids){return (await this.api(sids?"POST":"GET","api/admin/rfqs/"+encodeURIComponent(rfqId)+"/invites",sids?{sids}:undefined)).invites;},

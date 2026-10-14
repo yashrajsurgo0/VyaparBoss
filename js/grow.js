@@ -166,7 +166,7 @@ async function renderApps(){
   const list=appsCache;
   const head=`<div class="toolbar"><p class="muted" style="margin:0">${list.length} sign-up${list.length===1?"":"s"}. Call new ones within a day; a fast first call is half the sale.</p>
     <a class="btn sm" href="#join">Sign-up page</a><button class="btn sm" data-action="copy-join">Copy link</button>${list.length?`<button class="btn sm ghost" data-action="apps-csv">Download CSV</button>`:""}</div>`;
-  if(!list.length){el.innerHTML=head+`<div class="panel empty">${ico("art-shop","")}<h2>No sign-ups yet</h2><p>Send the sign-up link in your outreach emails and WhatsApp groups.</p></div>`;return;}
+  if(!list.length){el.innerHTML=head+`<div class="panel empty">${ico("art-shop","")}<h2>No sign-ups yet</h2><p>Send the sign-up link in your outreach emails and WhatsApp groups.</p></div><div id="msgBox"></div>`;loadMessages();return;}
   const statusPill={new:"gold",contacted:"",onboarded:"good",rejected:"bad"};
   el.innerHTML=head+`<div class="applist">${list.map(a=>`<div class="panel ocard">
     <div class="ohead"><div><h3>${esc(a.business)}</h3><p class="meta">${a.role==="supplier"?"Supplier":"Buyer"} · ${esc(a.city)} · ${dstr(a.at)}${a.ref?` · from outreach`:""}</p></div><span class="pill ${statusPill[a.status]}">${esc(a.status)}</span></div>
@@ -177,7 +177,17 @@ async function renderApps(){
       ${a.status==="new"?`<button class="btn sm" data-action="app-status" data-id="${esc(a.id)}" data-v="contacted">Mark called</button>`:""}
       ${a.role==="buyer"&&a.status!=="onboarded"?`<button class="btn sm" data-action="app-status" data-id="${esc(a.id)}" data-v="onboarded">Active buyer</button>`:""}
       ${a.status!=="rejected"&&a.status!=="onboarded"?`<button class="btn sm ghost" data-action="app-status" data-id="${esc(a.id)}" data-v="rejected">Not a fit</button>`:""}</div>
-  </div>`).join("")}</div>`;
+  </div>`).join("")}</div><div id="msgBox"></div>`;
+  loadMessages();
+}
+/* Messages from the contact page (privacy and deletion requests included). */
+async function loadMessages(){
+  const box=document.getElementById("msgBox");if(!box)return;
+  let list=[];try{list=await Repo.messages();}catch(e){return;}
+  const topic={general:"Question",buyer:"Buying",supplier:"Listing",privacy:"Privacy",delete:"Delete account"};
+  box.innerHTML=`<h2 class="sub">Messages <span class="muted">(${list.length})</span></h2>${list.length?list.slice(0,50).map(m=>`<div class="panel ocard">
+    <div class="ohead"><div><h3>${esc(m.name||m.email)}</h3><p class="meta">${dstr(m.at)} · <a href="mailto:${esc(m.email)}">${esc(m.email)}</a></p></div><span class="pill ${m.topic==="delete"||m.topic==="privacy"?"gold":""}">${esc(topic[m.topic]||m.topic)}</span></div>
+    <p class="pre">${esc(m.text)}</p></div>`).join(""):`<p class="muted">No messages yet. The contact page is linked in the footer.</p>`}`;
 }
 function onboardFromApp(id){
   const a=appsCache?.find(x=>x.id===id);if(!a)return;
