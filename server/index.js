@@ -10,11 +10,30 @@ const { createGemini } = require("./gemini");
 const { createWhatsApp } = require("./whatsapp");
 const { createMailer, unsubSig } = require("./email");
 const { createAuth } = require("./auth");
+const { createNotifier } = require("./notify");
 const crypto = require("crypto");
+const zlib = require("zlib");
+const { createRemote, pullSnapshot, attachRemote } = require("./remote");
 
 const ROOT = path.join(__dirname, "..");
 const STATIC_DIR = path.join(ROOT, "src");
-const TYPES = { ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".json": "application/json", ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon", ".webmanifest": "application/manifest+json" };
+const TYPES = { ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".json": "application/json", ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon", ".webmanifest": "application/manifest+json", ".txt": "text/plain; charset=utf-8", ".xml": "application/xml; charset=utf-8" };
+// Content-Security-Policy: our own scripts, plus the Google / Apple / Facebook sign-in SDKs. Inline styles are allowed
+// (the app sets a few style attributes); inline scripts are not.
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self' https://accounts.google.com https://appleid.cdn-apple.com https://connect.facebook.net",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com",
+  "font-src 'self' https://fonts.gstatic.com",
+  "img-src 'self' data: blob: https:",
+  "connect-src 'self' https://accounts.google.com https://*.facebook.com https://graph.facebook.com",
+  "frame-src https://accounts.google.com https://appleid.apple.com https://*.facebook.com",
+  "form-action 'self' https://appleid.apple.com",
+  "base-uri 'self'", "object-src 'none'", "frame-ancestors 'self'",
+].join("; ");
+const SECURITY_HEADERS = { "x-content-type-options": "nosniff", "referrer-policy": "strict-origin-when-cross-origin", "x-frame-options": "SAMEORIGIN",
+  "permissions-policy": "camera=(), microphone=(self), geolocation=()", "cross-origin-opener-policy": "same-origin-allow-popups" };
+const ZIP = /^(text\/|application\/(json|manifest|xml)|image\/svg)/;
 
 function loadEnv(file = path.join(ROOT, ".env")) {
   if (!fs.existsSync(file)) return;
@@ -33,6 +52,9 @@ function createApp(opts = {}) {
   // AI provider: Gemini if a Google key is set, else Claude if an Anthropic key is set, else the rule parser.
   const claude = opts.claude !== undefined ? opts.claude : pickLLM(env);
   const ctx = { core, store, claude, syncSuppliers, env };
+  // Off-server copy of the data (survives redeploys). See server/remote.js and docs/DEPLOY.md.
+  const remote = opts.remote !== undefined ? opts.remote : createRemote(env, opts.fetch);
+  const sync = remote ? attachRemote(store, remote) : null;
   ctx.services = makeServices(ctx);
   const mailer = createMailer(env, opts.fetch);
   const PUBLIC_URL = String(env.PUBLIC_URL || "https://vyaparboss.onrender.com").replace(/\/+$/, "");
@@ -51,6 +73,8 @@ function createApp(opts = {}) {
     if (hits.size > 5000) for (const [kk, v] of hits) if (!v.some(t => t > since)) hits.delete(kk);
   };
   const auth = createAuth({ store, env, fetchImpl: opts.fetch || globalThis.fetch });
+  const notify = createNotifier({ store, mailer, core, publicUrl: PUBLIC_URL });
+  store.data.messages ||= [];
   const whatsapp = createWhatsApp(ctx, { verifyToken: env.WHATSAPP_VERIFY_TOKEN, accessToken: env.WHATSAPP_TOKEN, phoneNumberId: env.WHATSAPP_PHONE_NUMBER_ID, appSecret: env.WHATSAPP_APP_SECRET, apiVersion: env.WHATSAPP_API_VERSION, send: opts.waSend });
 
   const send = (res, code, body, headers = {}) => {
@@ -113,7 +137,12 @@ function createApp(opts = {}) {
   const unsubscribed = email => store.data.outreach.unsub.includes(String(email).toLowerCase());
 
   const routes = [
-    ["GET", /^\/api\/health$/, () => ({ ok: true, app: "vyaparboss", ai: !!claude, provider: claude?.provider || null, model: claude?.model || null, whatsapp: whatsapp.configured, email: mailer.configured, ops: !!env.ADMIN_KEY })],
+    ["GET", /^\/api\/health$/, () => ({ ok: true, app: "vyaparboss", ai: !!claude, provider: claude?.provider || null, model: claude?.model || null, whatsapp: whatsapp.configured, email: mailer.configured, ops: !!env.ADMIN_KEY, storage: sync ? sync.status.kind : "disk", saved: sync ? sync.status.lastSaved : null, storageError: sync ? sync.status.lastError : null })],
+    ["GET", /^\/sitemap\.xml$/, (req, m, url, res) => {
+      const pages = ["/", "/#join/s", "/#join/b", "/privacy.html", "/terms.html", "/contact.html"];
+      res.writeHead(200, { "content-type": TYPES[".xml"], "cache-control": "public, max-age=3600" });
+      res.end(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${pages.filter(p => !p.includes("#")).map(p => `  <url><loc>${PUBLIC_URL}${p}</loc></url>`).join("\n")}\n</urlset>\n`);
+    }],
 
     // ---------- Accounts ----------
     ["GET", /^\/api\/auth\/config$/, () => auth.config()],
@@ -137,12 +166,51 @@ function createApp(opts = {}) {
       const { user, created } = await auth.oauth(req, res, b.provider, b.role === "supplier" ? "supplier" : "buyer", b);
       return { user: auth.publicUser(user), created };
     }],
+    ["POST", /^\/api\/auth\/forgot$/, async req => {
+      limit(req, "forgot", 5, 36e5, "Too many reset emails from here. Try again in an hour.");
+      const { email } = await jsonBody(req);
+      if (!core.isEmail(String(email || "").trim())) throw bad("Enter the email you signed up with");
+      if (!notify.on) throw Object.assign(new Error("Password reset by email isn't switched on yet. Use the contact page and we'll help."), { status: 503 });
+      const r = auth.startReset(email);
+      if (r) await notify.passwordReset(r.user, `${PUBLIC_URL}/#reset/${r.token}`);
+      return { ok: true }; // same answer whether or not the email has an account
+    }],
+    ["POST", /^\/api\/auth\/reset$/, async (req, m, url, res) => {
+      limit(req, "reset", 10, 36e5);
+      const b = await jsonBody(req);
+      return { user: auth.publicUser(auth.finishReset(req, res, b.token, b.password)) };
+    }],
+    ["POST", /^\/api\/auth\/password$/, async req => {
+      limit(req, "password", 10, 15 * 6e4);
+      const u = needUser(req); const b = await jsonBody(req);
+      auth.changePassword(u, b.current, b.password); return { user: auth.publicUser(u) };
+    }],
+    ["DELETE", /^\/api\/auth\/me$/, async (req, m, url, res) => {
+      const u = needUser(req); const b = await jsonBody(req);
+      if (b.confirm !== "DELETE") throw bad("Type DELETE to confirm");
+      auth.deleteUser(req, res, u); syncSuppliers(); return { ok: true };
+    }],
+    // Contact form (also used by the static pages on GitHub Pages). Stored for the team; never shown publicly.
+    ["POST", /^\/api\/contact$/, async req => {
+      limit(req, "contact", 5, 36e5, "Too many messages from here. Try again in an hour.");
+      const b = await jsonBody(req);
+      const msg = { id: "M" + Date.now().toString(36), at: Date.now(), name: String(b.name || "").trim().slice(0, 80), email: String(b.email || "").trim().toLowerCase().slice(0, 120),
+        topic: ["general", "privacy", "delete", "supplier", "buyer"].includes(b.topic) ? b.topic : "general", text: String(b.text || "").trim().slice(0, 2000) };
+      if (!core.isEmail(msg.email)) throw bad("Enter an email so we can reply");
+      if (msg.text.length < 5) throw bad("Write a short message");
+      if (b.website) return { ok: true }; // honeypot: bots fill every field
+      store.data.messages = store.data.messages.concat(msg).slice(-500); store.save();
+      if (mailer.configured && env.CONTACT_TO) mailer.send({ to: env.CONTACT_TO, subject: `[VyaparBoss ${msg.topic}] ${msg.name || msg.email}`, text: `${msg.text}\n\nFrom: ${msg.name} <${msg.email}>` }).catch(e => console.warn("contact mail:", e.message));
+      return { ok: true };
+    }],
+    ["GET", /^\/api\/admin\/messages$/, req => (admin(req), { messages: store.data.messages.slice().reverse() })],
     ["POST", /^\/api\/auth\/logout$/, (req, m, url, res) => { auth.endSession(req, res); store.save(); return { ok: true }; }],
     ["PATCH", /^\/api\/auth\/me$/, async req => {
       const u = needUser(req); const b = await jsonBody(req);
       const { ok, a, errors } = core.normalizeAccount({ ...auth.publicUser(u), ...b, role: u.role, email: u.email || b.email });
       if (!ok) throw bad(errors.join(". "));
       Object.assign(u, { name: a.name, business: a.business, phone: a.phone, city: a.city });
+      if (typeof b.notify === "boolean") u.notify = b.notify;
       if (!u.email && a.email) u.email = a.email;
       store.save(); return { user: auth.publicUser(u) };
     }],
@@ -170,7 +238,7 @@ function createApp(opts = {}) {
       r.invites ||= [];
       let i = r.invites.find(x => x.sid === u.supplierId);
       if (!i) { i = { sid: u.supplierId, sname: sup?.name || "", token: crypto.randomBytes(12).toString("base64url"), at: Date.now(), via: "app" }; r.invites.push(i); }
-      i.quote = q; store.save(); return { ok: true, quote: q };
+      i.quote = q; store.save(); notify.quoteReceived(r, u.supplierId); return { ok: true, quote: q };
     }],
 
     // ---------- Public: sign-up and supplier quote links ----------
@@ -205,7 +273,7 @@ function createApp(opts = {}) {
       const s = core.getSMAP()[i.sid], o = s?.offers.find(x => x.p === r.productId);
       const { ok, q, errors } = core.normalizeLiveQuote(await jsonBody(req), o ? core.tierPrice(o, r.qty) : null);
       if (!ok) throw bad(errors.join(". "));
-      i.quote = q; store.save(); return { ok: true, quote: q };
+      i.quote = q; store.save(); notify.quoteReceived(r, i.sid); return { ok: true, quote: q };
     }],
     // Someone opened their personal sign-up link from an outreach email or WhatsApp. Counts only; no personal data.
     ["POST", /^\/api\/track$/, async req => {
@@ -334,7 +402,8 @@ function createApp(opts = {}) {
       const body = await jsonBody(req);
       const u = auth.ensureUser(req, res);
       if (u.role === "supplier") throw Object.assign(new Error("Supplier accounts can't place buy requests. Log in as a buyer."), { status: 403 });
-      return ctx.services.createRfq({ ...body, ownerId: u.id });
+      const rec = ctx.services.createRfq({ ...body, ownerId: u.id });
+      notify.newRequest(rec); return rec;
     }],
     ["PATCH", /^\/api\/rfqs\/(.+)$/, async (req, m) => {
       const rec = store.data.rfqs.find(r => r.id === m[1]); if (!rec) throw notFound("RFQ");
@@ -342,7 +411,7 @@ function createApp(opts = {}) {
       if (!isAdmin(req) && !(u && rec.ownerId === u.id)) throw notFound("RFQ");
       const p = await jsonBody(req);
       for (const k of ["productId", "qty", "city", "deadline", "quotes", "status", "wonBy"]) if (k in p) rec[k] = p[k];
-      store.save(); return rec;
+      notify.newRequest(rec); store.save(); return rec;
     }],
 
     ["POST", /^\/api\/orders$/, async (req, m, url, res) => {
@@ -351,7 +420,7 @@ function createApp(opts = {}) {
       const u = auth.ensureUser(req, res);
       if (u.role === "supplier") throw Object.assign(new Error("Supplier accounts can't place orders. Log in as a buyer."), { status: 403 });
       const rec = order.rfqId && store.data.rfqs.find(r => r.id === order.rfqId);
-      if (isAdmin(req)) return ctx.services.createOrder({ ...order, ownerId: order.ownerId || u.id }, rfqPatch);
+      if (isAdmin(req)) { const o = ctx.services.createOrder({ ...order, ownerId: order.ownerId || u.id }, rfqPatch); if (!o.sample) notify.orderPlaced(o); return o; }
       // Buyers can't set prices: rebuild the order from their own request and the supplier's rates or own quote.
       if (!rec || rec.ownerId !== u.id) throw bad("Place orders from one of your own requests");
       if (rec.status === "ordered") throw Object.assign(new Error("This request already has an order"), { status: 409 });
@@ -364,7 +433,8 @@ function createApp(opts = {}) {
       const neg = asked > 0 && asked < q0.list ? { [order.sid]: { price: Math.max(floor, asked) } } : {};
       const qres = core.discover(r, neg, live), q = qres.eligible.find(x => x.s.id === order.sid);
       const clean = plainJ(core.orderRecord(r, qres, q, { ownerId: u.id, source: "web" }));
-      return ctx.services.createOrder(clean, { status: "ordered", wonBy: q.s.id, quotes: plainJ(core.quoteSummary(qres)) });
+      const placed = ctx.services.createOrder(clean, { status: "ordered", wonBy: q.s.id, quotes: plainJ(core.quoteSummary(qres)) });
+      notify.orderPlaced(placed); return placed;
     }],
     ["PATCH", /^\/api\/orders\/(.+)$/, async (req, m) => {
       const o = store.data.orders.find(x => x.po === m[1]); if (!o) throw notFound("Order");
@@ -375,7 +445,7 @@ function createApp(opts = {}) {
       if (Array.isArray(p.history)) o.history = p.history.slice(0, 5);
       if ("issue" in p) o.issue = p.issue ? String(p.issue).slice(0, 200) : null;
       store.save();
-      if (o.stage !== before[0] || (o.issue && o.issue !== before[1])) whatsapp.notifyOrder(o);
+      if (o.stage !== before[0] || (o.issue && o.issue !== before[1])) { whatsapp.notifyOrder(o); if (!o.sample) notify.orderStage(o, auth.userOf(req)?.id); }
       return o;
     }],
     ["DELETE", /^\/api\/samples$/, req => {
@@ -463,30 +533,59 @@ function createApp(opts = {}) {
     res.end(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>VyaparBoss</title><body style="font:17px/1.5 system-ui,sans-serif;max-width:520px;margin:12vh auto;padding:0 20px;color:#1E1F25;background:#FBF7EF"><h1 style="font-size:24px">${ok ? "You're unsubscribed" : "This link didn't work"}</h1><p>${ok ? "VyaparBoss won't email this address again. Sorry for the trouble." : "Reply to the email with \"unsubscribe\" and we'll remove you by hand."}</p><p style="color:#6b6b6b;font-size:14px">VyaparBoss, House of 24 Pvt. Ltd.</p></body>`);
   }
 
-  function serveStatic(url, res) {
-    let rel = decodeURIComponent(url.pathname);
+  // Static files: ETag + revalidation (no build hashes, so browsers always check), gzip for text, branded 404.
+  const fileCache = new Map();
+  function loadFile(file, cb) {
+    fs.stat(file, (err, st) => {
+      if (err || !st.isFile()) return cb(err || new Error("not a file"));
+      const hit = fileCache.get(file);
+      if (hit && hit.mtime === st.mtimeMs) return cb(null, hit);
+      fs.readFile(file, (err2, buf) => {
+        if (err2) return cb(err2);
+        const type = TYPES[path.extname(file)] || "application/octet-stream";
+        const entry = { mtime: st.mtimeMs, buf, type, etag: `"${crypto.createHash("sha1").update(buf).digest("base64url").slice(0, 20)}"`, gz: ZIP.test(type) && buf.length > 1024 ? zlib.gzipSync(buf, { level: 9 }) : null };
+        if (fileCache.size > 200) fileCache.clear();
+        fileCache.set(file, entry); cb(null, entry);
+      });
+    });
+  }
+  function serveStatic(req, url, res) {
+    let rel;
+    try { rel = decodeURIComponent(url.pathname); } catch { res.writeHead(400).end(); return; }
     if (rel.endsWith("/")) rel += "index.html";
     const file = path.normalize(path.join(STATIC_DIR, rel));
-    if (!file.startsWith(STATIC_DIR)) { res.writeHead(403).end(); return; }
-    fs.readFile(file, (err, buf) => {
-      if (err) { res.writeHead(404, { "content-type": "text/plain" }).end("Not found"); return; }
-      res.writeHead(200, { "content-type": TYPES[path.extname(file)] || "application/octet-stream", "cache-control": "no-cache" });
-      res.end(buf);
+    if (!file.startsWith(STATIC_DIR + path.sep)) { res.writeHead(403).end(); return; }
+    loadFile(file, (err, f) => {
+      if (err) return loadFile(path.join(STATIC_DIR, "404.html"), (e2, nf) => {
+        if (e2) { res.writeHead(404, { "content-type": "text/plain" }).end("Not found"); return; }
+        res.writeHead(404, { "content-type": nf.type, "cache-control": "no-cache" }); res.end(req.method === "HEAD" ? undefined : nf.buf);
+      });
+      const isImg = /^image\/(png|x-icon)/.test(f.type);
+      const headers = { "content-type": f.type, etag: f.etag, "cache-control": isImg ? "public, max-age=86400" : "no-cache", vary: "accept-encoding" };
+      if (req.headers["if-none-match"] === f.etag) { res.writeHead(304, headers).end(); return; }
+      const gz = f.gz && /\bgzip\b/.test(String(req.headers["accept-encoding"] || ""));
+      if (gz) headers["content-encoding"] = "gzip";
+      const body = gz ? f.gz : f.buf;
+      headers["content-length"] = body.length;
+      res.writeHead(200, headers); res.end(req.method === "HEAD" ? undefined : body);
     });
   }
 
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, "http://localhost");
+    for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.setHeader(k, v);
+    res.setHeader("content-security-policy", CSP);
+    if (String(req.headers["x-forwarded-proto"] || "").includes("https")) res.setHeader("strict-transport-security", "max-age=31536000; includeSubDomains");
     // The static copy on GitHub Pages posts sign-ups and supplier quotes here.
     const origin = req.headers.origin;
-    if (origin && ORIGINS.includes(origin) && /^\/api\/(join|quote\/|health|track)/.test(url.pathname)) {
+    if (origin && ORIGINS.includes(origin) && /^\/api\/(join|quote\/|health|track|contact)/.test(url.pathname)) {
       res.setHeader("access-control-allow-origin", origin); res.setHeader("vary", "origin");
       if (req.method === "OPTIONS") { res.writeHead(204, { "access-control-allow-methods": "GET, POST", "access-control-allow-headers": "content-type", "access-control-max-age": "86400" }).end(); return; }
     }
     const route = routes.find(([m, re]) => m === req.method && re.test(url.pathname));
     if (!route) {
       if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/webhooks/")) return send(res, 404, { error: "No such endpoint" });
-      if (req.method === "GET" || req.method === "HEAD") return serveStatic(url, res);
+      if (req.method === "GET" || req.method === "HEAD") return serveStatic(req, url, res);
       return send(res, 405, { error: "Method not allowed" });
     }
     try {
@@ -498,7 +597,7 @@ function createApp(opts = {}) {
       if (!res.headersSent) send(res, e.status || 500, { error: e.status ? e.message : "Server error" });
     }
   });
-  return { server, store, ctx, mailer };
+  return { server, store, ctx, mailer, sync };
 }
 
 function pickLLM(env) {
@@ -543,12 +642,24 @@ function makeServices({ core, store, claude }) {
 if (require.main === module) {
   loadEnv();
   const port = Number(process.env.PORT) || 5173;
-  const { ctx, server } = createApp();
-  server.listen(port, () => {
-    console.log(`VyaparBoss running at http://localhost:${port}`);
-    console.log(`  AI parsing: ${ctx.claude ? `${ctx.claude.provider} (${ctx.claude.model})` : "rule parser (set GEMINI_API_KEY or ANTHROPIC_API_KEY in .env)"}`);
-    console.log(`  WhatsApp:   ${process.env.WHATSAPP_TOKEN ? "configured" : "not configured (see docs/WHATSAPP_SETUP.md)"}`);
-  });
+  (async () => {
+    // With UPSTASH_* set, bring the saved database onto this (possibly fresh) disk before anything reads it.
+    const remote = createRemote(process.env);
+    const dataFile = process.env.DATA_FILE || path.join(ROOT, "data", "db.json");
+    let pulled = null;
+    if (remote) pulled = await pullSnapshot(remote, dataFile);
+    const { ctx, server, store, sync } = createApp({ remote, dataFile });
+    if (pulled === "empty") store.save(); // first run with remote storage: push what we have
+    server.listen(port, () => {
+      console.log(`VyaparBoss running at http://localhost:${port}`);
+      console.log(`  AI parsing: ${ctx.claude ? `${ctx.claude.provider} (${ctx.claude.model})` : "rule parser (set GEMINI_API_KEY or ANTHROPIC_API_KEY in .env)"}`);
+      console.log(`  WhatsApp:   ${process.env.WHATSAPP_TOKEN ? "configured" : "not configured (see docs/WHATSAPP_SETUP.md)"}`);
+      console.log(`  Storage:    ${remote ? `disk + Upstash copy (${pulled})` : "disk only (data/db.json; set UPSTASH_REDIS_REST_URL to keep data across redeploys)"}`);
+    });
+    // Render sends SIGTERM before a redeploy: push the last changes, then exit.
+    const stop = async () => { try { if (sync) await sync.flush(); } finally { process.exit(0); } };
+    process.on("SIGTERM", stop); process.on("SIGINT", stop);
+  })().catch(e => { console.error(e.message); process.exit(1); });
 }
 
 module.exports = { createApp, loadEnv };

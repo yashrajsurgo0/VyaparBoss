@@ -17,7 +17,7 @@ const ctx=vm.createContext({console:{log(){},warn(){},error:(...a)=>errors.push(
   matchMedia:()=>({matches:false}),scrollTo(){},navigator:{},Date,Math,Intl,JSON,URL,Promise});
 ctx.window=ctx;
 const src=["data","util","engine","parser","repo","i18n","app","grow","roles"].map(f=>fs.readFileSync(path.join(ROOT,"src/js",f+".js"),"utf8")).join("\n;\n");
-vm.runInContext(src+"\nthis.__t={say:sayToBhai,Repo,get flow(){return flow},ACTIONS,renderAll,route,loc:location,get pub(){return pub},submitJoin,showInsightsView,showSupplierView,setLocale,get LOCALE(){return LOCALE},showAuth,get au(){return au},submitAuth,get df(){return df},set df(v){df=v},renderDirectory,role,renderRequests,renderListing,renderSOrders,showTab,navFor,get rq(){return rq}};",ctx);
+vm.runInContext(src+"\nthis.__t={say:sayToBhai,Repo,get flow(){return flow},ACTIONS,renderAll,route,loc:location,get pub(){return pub},submitJoin,showInsightsView,showSupplierView,setLocale,get LOCALE(){return LOCALE},showAuth,get au(){return au},submitAuth,get df(){return df},set df(v){df=v},renderDirectory,role,renderRequests,renderListing,renderSOrders,showTab,navFor,get rq(){return rq},renderAccount,submitRecover};",ctx);
 const T=ctx.__t,wait=ms=>new Promise(r=>setTimeout(r,ms));
 let fails=0;const check=(c,m)=>{console.log((c?"ok - ":"FAIL - ")+m);if(!c)fails++;};
 const act=(name,ds={})=>T.ACTIONS[name]({dataset:ds,disabled:false,textContent:"",classList:{add(){},remove(){}},isConnected:true});
@@ -43,6 +43,7 @@ const buy=()=>els["v-buy"].innerHTML;
   check(T.Repo.data.orders.length===before,"no order without the approval tick");
   el("okBox").checked=true;T.ACTIONS.approve({dataset:{},disabled:false});await wait(300);
   check(T.flow.stage==="done"&&T.Repo.data.orders.length===before+1,"order placed after approval: "+T.flow.po);
+  act("print-po",{po:T.flow.po});check(els.printArea.innerHTML.includes("Purchase order")&&els.printArea.innerHTML.includes(T.flow.po)&&els.printArea.innerHTML.includes("Total delivered"),"printable purchase order");
   check(buy().includes("Order placed")&&buy().includes("Track order"),"success screen");
 
   // Path 2: tap through, one question at a time
@@ -110,6 +111,7 @@ const buy=()=>els["v-buy"].innerHTML;
   check(["Google","Apple","Facebook","email"].every(p=>auth().includes("Continue with "+p))&&auth().includes("Create your supplier account"),"supplier sign-up offers Google, Apple, Facebook and email");
   act("au-provider",{v:"google"});await wait(20);check(/sign-in (works on the live app|is being set up)/.test(auth()),"unconfigured provider explains itself");
   act("au-email",{});check(auth().includes("auPass")&&auth().includes("Create supplier account"),"email form opens");
+  check(auth().includes('href="terms.html"')&&auth().includes('href="privacy.html"'),"sign-up links the terms and privacy policy");
   if(T.Repo.mode==="local"){
     el("auName").value="Mehul";el("auBiz").value="Shreeji Test Packs";el("auEmail").value="mehul@test.in";el("auPass").value="short";
     await T.submitAuth("signup");check(auth().includes("at least 8 characters"),"weak password refused");
@@ -124,7 +126,12 @@ const buy=()=>els["v-buy"].innerHTML;
     await T.Repo.myQuote("RFQ-TEST-1",{unit:13.9,lead:2,note:"ready stock"});T.renderRequests();
     check(els["v-requests"].innerHTML.includes("Quote sent")&&els["v-requests"].innerHTML.includes("Update quote"),"in-app quote is recorded");
     T.showTab("buy");check(T.flow&&!els["v-buy"].hidden===false||true,"buyer tab redirects for suppliers");
+    els["v-account"].hidden=false;T.renderAccount();check(els["v-account"].innerHTML.includes("Delete my account")&&els["v-account"].innerHTML.includes("privacy.html"),"account settings offer delete and link the policy");
     await T.Repo.logout();check(T.role()===null,"logout returns to the welcome screen");
+    T.showAuth("buyer","login");act("au-email",{});check(auth().includes("Forgot password?"),"log in offers 'Forgot password?'");
+    act("au-forgot",{});check(auth().includes("Email me a reset link")&&!auth().includes("I'm supplying"),"forgot password: just the email box");
+    el("auEmail").value="mehul@test.in";await T.submitRecover("forgot");check(auth().includes("live app"),"demo copy explains reset needs the live app");
+    act("au-mode",{v:"login"});
     T.showAuth("supplier","login");act("au-email",{});el("auEmail").value="mehul@test.in";el("auPass").value="anything12";
     T.au.role="buyer";await T.submitAuth("login");check(/supplier account/.test(els["v-auth"].innerHTML),"logging in on the wrong side says which side to use");
     T.au.role="supplier";await T.submitAuth("login");check(T.role()==="supplier","log back in as the supplier");

@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en" data-look="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Contact · VyaparBoss</title>
+<meta name="description" content="Contact VyaparBoss: questions, supplier listings, privacy requests and account deletion.">
+<link rel="icon" href="icon-192.png">
+<meta name="theme-color" content="#F1E4CC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Mukta:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="styles.css">
+<script src="js/page.js" defer></script>
+</head>
+<body class="docpage">
+<svg width="0" height="0" class="defs" aria-hidden="true"><defs>
+  <symbol id="logo" viewBox="0 0 48 48"><g transform="rotate(-45 24 24)"><path fill="#FFC21A" d="M10.5 17h10V3L45 24H7z"/><path fill="#E48A00" d="M7 24h38L20.5 45V31H3.5z"/></g></symbol>
+</defs></svg>
+<header class="top"><div class="wrap topbar">
+  <a class="brand" href="./" aria-label="VyaparBoss home"><svg class="logo"><use href="#logo"/></svg><span class="lockup"><span class="wordmark">Vyapar<span class="boss">Boss</span></span><span class="tagline">Bigger business. Smaller hassle.</span></span></a>
+  <a class="btn sm doc-back" href="./">Open the app</a>
+</div></header>
+<main class="wrap legal" id="main">
+
+<h1>Contact us</h1>
+<p class="lede">Questions about buying, listing your business, an order, or your data? Write to us here. A person reads every message.</p>
+<form class="panel pad sform contactform" id="contactForm" novalidate>
+  <div class="fields">
+    <div class="field"><label for="cName">Your name</label><input id="cName" name="name" autocomplete="name" maxlength="80"></div>
+    <div class="field"><label for="cEmail">Email (so we can reply)</label><input id="cEmail" name="email" type="email" autocomplete="email" required maxlength="120"></div>
+    <div class="field wide"><label for="cTopic">About</label>
+      <select id="cTopic" name="topic">
+        <option value="general">A general question</option>
+        <option value="buyer">Buying on VyaparBoss</option>
+        <option value="supplier">Listing my business</option>
+        <option value="privacy">My data and privacy</option>
+        <option value="delete">Delete my account and data</option>
+      </select></div>
+    <div class="field wide"><label for="cText">Message</label><textarea id="cText" name="text" rows="5" maxlength="2000" required></textarea></div>
+    <div class="hp" aria-hidden="true"><label for="cSite">Leave this empty</label><input id="cSite" name="website" tabindex="-1" autocomplete="off"></div>
+  </div>
+  <p class="hint" id="cDeleteHint" hidden>Use the email on your account. If you can still sign in, it's quicker to go to Account settings → Delete my account.</p>
+  <div class="errors" id="cErr" role="alert" hidden></div>
+  <div class="actions"><button class="btn primary" id="cSend">Send message</button></div>
+</form>
+<div class="panel pad" id="cDone" hidden><h2>Thank you!</h2><p>We've got your message and will reply by email.</p><a class="btn" href="./">Back to VyaparBoss</a></div>
+<p class="muted small">VyaparBoss is run by House of 24 Private Limited, India. See our <a href="privacy.html">privacy policy</a> and <a href="terms.html">terms</a>.</p>
+</main>
+<footer class="wrap foot"><b>VyaparBoss</b> · A House of 24 Pvt. Ltd. initiative · <a href="privacy.html">Privacy</a> · <a href="terms.html">Terms</a> · <a href="contact.html">Contact</a></footer>
+</body>
+</html>

@@ -26,6 +26,7 @@ class Store {
     const tmp = this.file + ".tmp";
     fs.writeFileSync(tmp, JSON.stringify(this.data, null, 1));
     fs.renameSync(tmp, this.file); // atomic replace so a crash never leaves half a file
+    if (this.onSave) this.onSave(); // e.g. push a copy off-server (server/remote.js)
   }
   publicState() {
     const { orders, seq, suppliers, useSamples } = this.data;

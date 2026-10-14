@@ -53,7 +53,7 @@ function renderAcct(){
   setHTML(el,summary+`<div class="rp-menu" role="menu">${body}${team}</div>`);
   el.open=open;
 }
-document.addEventListener("click",e=>{const d=document.getElementById("acctPick");if(d&&d.open&&!d.contains(e.target))d.open=false;});
+document.addEventListener("click",e=>{const d=document.getElementById("acctPick");if(d&&d.open&&(!d.contains(e.target)||e.target.closest(".rp-menu [data-action]")))d.open=false;});
 
 /* ===================== WELCOME: choose a side, then sign up or log in ===================== */
 let au={role:null,mode:"signup",email:false,err:[],busy:false,cfg:null,wrongRole:null};
@@ -93,24 +93,37 @@ function renderAuth(){
         <div class="field wide"><label for="auPass">Password</label><input id="auPass" type="password" autocomplete="current-password"></div>
       </div>
       <button class="btn primary big" ${au.busy?"disabled":""}>${au.busy?"Logging in…":"Log in"}</button>
+      <p class="hint"><button type="button" class="link" data-action="au-forgot">Forgot password?</button></p>
     </form>`;
   const errs=au.err.length?`<div class="errors" role="alert">${au.err.map(esc).join("<br>")}${au.wrongRole?`<br><button class="link" data-action="au-role" data-v="${au.wrongRole}">Switch to ${au.wrongRole==="supplier"?"I'm supplying":"I'm buying"}</button>`:""}</div>`:"";
-  const panel=!r?"":`<div class="card authcard">
+  const legal=signup?`<p class="hint consent">By continuing you agree to the <a href="terms.html" target="_blank" rel="noopener">Terms</a> and <a href="privacy.html" target="_blank" rel="noopener">Privacy policy</a>.</p>`:"";
+  const recover=au.mode==="forgot"?`<div class="card authcard">
+      <p class="q-title">Reset your password</p>
+      ${au.sent?`<p>If <b>${esc(au.sent)}</b> has a VyaparBoss account, we've emailed a link to choose a new password. It works for one hour. Check spam too.</p>`
+        :`<form class="authform" data-form="au-forgot" novalidate><div class="fields"><div class="field wide"><label for="auEmail">Email you signed up with</label><input id="auEmail" type="email" autocomplete="email"></div></div>
+        <button class="btn primary big" ${au.busy?"disabled":""}>${au.busy?"Sending…":"Email me a reset link"}</button></form>`}
+      ${errs}<p class="hint"><button class="link" data-action="au-mode" data-v="login">Back to log in</button></p></div>`
+    :au.mode==="reset"?`<div class="card authcard">
+      <p class="q-title">Choose a new password</p>
+      <form class="authform" data-form="au-reset" novalidate><div class="fields"><div class="field wide"><label for="auPass">New password</label><input id="auPass" type="password" autocomplete="new-password" minlength="8" placeholder="At least 8 characters"></div></div>
+        <button class="btn primary big" ${au.busy?"disabled":""}>${au.busy?"Saving…":"Save and log in"}</button></form>
+      ${errs}<p class="hint">This signs you out on other devices.</p></div>`:"";
+  const panel=recover||(!r?"":`<div class="card authcard">
       <div class="seg" role="tablist" aria-label="Sign up or log in"><button data-action="au-mode" data-v="signup" aria-selected="${signup}">Sign up</button><button data-action="au-mode" data-v="login" aria-selected="${!signup}">Log in</button></div>
       <p class="q-title">${signup?(sup?"Create your supplier account":"Create your buyer account"):(sup?"Log in as a supplier":"Log in as a buyer")}</p>
-      ${providers}${emailForm}${errs}
+      ${providers}${emailForm}${errs}${legal}
       ${cfg.demo?`<p class="hint">This demo copy keeps your account in this browser only. Google, Apple and Facebook work on the live app once they're switched on.</p>`:""}
       <p class="hint authalt">${sup?`Prefer a call? <a href="#join/s">Leave your number</a> and we'll set you up.`:`Just looking? <button class="link" data-action="au-guest">Explore without an account</button>`}</p>
-    </div>`;
-  const h1=!r?"Welcome to VyaparBoss.":sup?"Get orders you can actually serve.":"Buy smarter, delivered.";
-  const lede=!r?`${t("tagline")} Are you here to buy, or to supply?`:sup?"List free. Get only requests that fit what you make and where you deliver. Pay a small fee only when an order closes."
+    </div>`);
+  const h1=au.mode==="reset"||au.mode==="forgot"?"Let's get you back in.":!r?"Welcome to VyaparBoss.":sup?"Get orders you can actually serve.":"Buy smarter, delivered.";
+  const lede=recover?"It happens to everyone.":!r?`${t("tagline")} Are you here to buy, or to supply?`:sup?"List free. Get only requests that fit what you make and where you deliver. Pay a small fee only when an order closes."
     :"Tell Bhai what you need. Compare verified suppliers on the full delivered price. Nothing is ordered until you approve.";
   // Keep what someone already typed when this screen redraws.
   const keep={};["auName","auBiz","auEmail","auPass","auPhone","auCity"].forEach(id=>{const i=document.getElementById(id);if(i)keep[id]=i.value;});
   el.innerHTML=`<div class="pubwrap welcomewrap">
     <section class="pubhero"><div><p class="hello">${esc(t("hello"))}</p><h1>${esc(h1)}</h1><p class="lede">${esc(lede)}</p></div>
       <svg class="bhai-l" role="img" aria-label="Bhai"><use href="#bhai"/></svg></section>
-    <div class="roles">${roleBtn("buyer","I'm buying","Factories, exporters, traders, shops","art-truck")}${roleBtn("supplier","I'm supplying","Manufacturers, distributors, wholesalers","art-shop")}</div>
+    ${recover?"":`<div class="roles">${roleBtn("buyer","I'm buying","Factories, exporters, traders, shops","art-truck")}${roleBtn("supplier","I'm supplying","Manufacturers, distributors, wholesalers","art-shop")}</div>`}
     ${panel}</div>`;
   Object.entries(keep).forEach(([id,v])=>{const i=document.getElementById(id);if(i)i.value=v;});
   if(r&&cfg.google)mountGoogle();
@@ -166,6 +179,19 @@ async function submitAuth(kind){
     catch(e){au.busy=false;au.err=[e.message];au.wrongRole=e.status===409?(e.role||(au.role==="supplier"?"buyer":"supplier")):null;renderAuth();}
   }
 }
+async function submitRecover(kind){
+  const g=id=>document.getElementById(id)?.value??"";au.err=[];
+  if(kind==="forgot"){
+    const email=g("auEmail").trim();if(!isEmail(email)){au.err=["Enter the email you signed up with"];renderAuth();return;}
+    au.busy=true;renderAuth();
+    try{await Repo.forgot(email);au.busy=false;au.sent=email;renderAuth();}catch(e){au.busy=false;au.err=[e.message];renderAuth();}
+  }else{
+    const pw=g("auPass");if(pw.length<8){au.err=["Use a password of at least 8 characters"];renderAuth();return;}
+    au.busy=true;renderAuth();
+    try{const u=await Repo.resetPassword(au.token,pw);au.busy=false;au.token=null;au.mode="login";au.role=u.role;onSignedIn(u,false);toast("Password changed. You're logged in.");}
+    catch(e){au.busy=false;au.err=[e.message];renderAuth();}
+  }
+}
 function onSignedIn(u,created){
   Repo.setGuest(false);document.body.classList.remove("welcome");
   au={...au,email:false,err:[],busy:false};
@@ -191,9 +217,24 @@ function renderAccount(){
         <div class="field"><label for="acPhone">Mobile</label><input id="acPhone" value="${esc(me.phone)}" inputmode="tel"></div>
         <div class="field"><label for="acCity">City</label><input id="acCity" value="${esc(me.city)}" list="acCities"><datalist id="acCities">${Object.keys(CITIES).sort().map(c=>`<option value="${c}">`).join("")}</datalist></div>
       </div>
+      ${me.demo?"":`<div class="field checks"><label class="toggle"><input type="checkbox" id="acNotify" ${me.notify!==false?"checked":""}> Email me about my ${me.role==="supplier"?"new requests and orders":"quotes and orders"}</label></div>`}
       <p class="hint">Signs in with: ${[me.hasPassword||me.demo?"email and password":null,...(me.providers||[]).map(p=>p[0].toUpperCase()+p.slice(1))].filter(Boolean).join(", ")||"email"}.</p>
       <div class="actions"><button class="btn primary">Save</button><button type="button" class="btn ghost" data-action="acct-logout">Log out</button></div>
-    </form>`);
+    </form>
+    ${me.demo?"":`<details class="panel pad more acctmore"><summary>${me.hasPassword?"Change password":"Add a password"} ${ico("i-chev","")}</summary>
+      <form class="sform" data-form="acct-pass" novalidate><div class="fields">
+        ${me.hasPassword?`<div class="field"><label for="acCur">Current password</label><input id="acCur" type="password" autocomplete="current-password"></div>`:""}
+        <div class="field"><label for="acNew">New password</label><input id="acNew" type="password" autocomplete="new-password" minlength="8" placeholder="At least 8 characters"></div>
+      </div><div class="actions"><button class="btn">Save password</button></div></form>
+    </details>`}
+    <details class="panel pad more acctmore"><summary>Delete my account ${ico("i-chev","")}</summary>
+      <form class="sform" data-form="acct-delete" novalidate>
+        <p>This removes your account${me.role==="supplier"?" and your listing":""} and signs you out everywhere. Orders already placed stay as business records, without your name on them. This can't be undone.</p>
+        <div class="field narrow"><label for="acDel">Type DELETE to confirm</label><input id="acDel" autocomplete="off" autocapitalize="characters"></div>
+        <div class="actions"><button class="btn danger">Delete my account</button></div>
+      </form>
+    </details>
+    <p class="hint">See our <a href="privacy.html" target="_blank" rel="noopener">privacy policy</a> and <a href="terms.html" target="_blank" rel="noopener">terms</a>.</p>`);
 }
 
 /* ===================== SUPPLIER SIDE ===================== */
@@ -240,7 +281,7 @@ function renderSOrders(){
       <div class="track" aria-hidden="true">${STAGES.map((_,i)=>`<i class="${i<o.stage||o.stage===4?"on":i===o.stage?"now":""}"></i>`).join("")}</div>
       <div class="ostatus"><b>${STAGES[o.stage]}</b><span class="muted">${o.stage===4?"Delivered":`Buyer expects it by ${dstr(o.date+o.eta*864e5)}`}</span></div>
       ${o.issue?`<p class="issue">Buyer reported: ${esc(o.issue)}</p>`:""}
-      ${o.stage<4?`<div class="actions"><button class="btn sm primary" data-action="so-next" data-po="${esc(o.po)}">${NEXT_STAGE[o.stage]}</button></div>`:""}
+      <div class="actions">${o.stage<4?`<button class="btn sm primary" data-action="so-next" data-po="${esc(o.po)}">${NEXT_STAGE[o.stage]}</button>`:""}<button class="btn sm ghost" data-action="print-po" data-po="${esc(o.po)}">Print PO</button></div>
     </div>`;}).join(""):`<div class="panel empty">${ico("art-truck","")}<h2>No orders yet</h2><p>When a buyer approves your quote, the purchase order shows up here.</p><button class="btn" data-action="go" data-tab="requests">See requests</button></div>`}</div>`);
 }
 function renderListing(){
@@ -387,10 +428,17 @@ function renderRoleViews(){
   if(vis("v-account"))renderAccount();
   if(vis("v-team"))showTeamView(teamView,!$("#teamGate").innerHTML&&document.getElementById(teamView==="apps"?"s-apps":"i-outreach")?.innerHTML!=="");
 }
+/* #reset/<token> from a password-reset email. The token leaves the address bar straight away. */
+function resetRoute(){
+  const m=(location.hash||"").match(/^#reset\/([\w-]{20,})$/);if(!m)return false;
+  au.token=m[1];history.replaceState(null,"",location.pathname+location.search);showAuth(null,"reset");return true;
+}
+window.addEventListener("hashchange",resetRoute);
 function goHome(){const r=role();if(!r){showAuth();return;}showTab(navFor()[0][0]);}
 function rolesBoot(){
   renderNav();renderAcct();
   if(/^#(join|quote)/.test(location.hash)){growBoot();return;}
+  if(resetRoute())return;
   if(!role()){showAuth();return;}
   let t=null;try{t=localStorage.getItem(KEY+".tab");}catch(e){}
   showTab(t||navFor()[0][0]);
@@ -398,9 +446,10 @@ function rolesBoot(){
 Object.assign(ACTIONS,{
   home:()=>goHome(),
   "au-role":a=>{au.role=a.dataset.v;au.err=[];au.wrongRole=null;renderAuth();},
-  "au-mode":a=>{au.mode=a.dataset.v;au.err=[];au.wrongRole=null;renderAuth();},
+  "au-mode":a=>{au.mode=a.dataset.v;au.err=[];au.wrongRole=null;au.sent=null;renderAuth();},
   "au-email":()=>{au.email=!au.email;renderAuth();if(au.email)setTimeout(()=>document.getElementById(au.mode==="signup"?"auName":"auEmail")?.focus(),30);},
   "au-provider":a=>startProvider(a.dataset.v),
+  "au-forgot":()=>{const e=document.getElementById("auEmail")?.value||"";au.mode="forgot";au.sent=null;au.err=[];renderAuth();const i=document.getElementById("auEmail");if(i){i.value=e;i.focus();}},
   "au-guest":()=>{Repo.setGuest(true);document.body.classList.remove("welcome");renderNav();renderAcct();showTab("buy");},
   "acct-auth":a=>{const d=document.getElementById("acctPick");if(d)d.open=false;showAuth(role()||null,a.dataset.v);},
   "acct-logout":async()=>{const d=document.getElementById("acctPick");if(d)d.open=false;await Repo.logout();flow=freshFlow();au={...au,role:null,mode:"login",email:false};toast("Logged out");showAuth();},
@@ -420,8 +469,15 @@ Object.assign(ACTIONS,{
 document.addEventListener("submit",e=>{
   const f=e.target.closest("form[data-form]");if(!f)return;const k=f.dataset.form;
   if(k==="au-signup"||k==="au-login"){e.preventDefault();submitAuth(k==="au-signup"?"signup":"login");}
+  if(k==="au-forgot"||k==="au-reset"){e.preventDefault();submitRecover(k==="au-forgot"?"forgot":"reset");}
+  if(k==="acct-pass"){e.preventDefault();const cur=document.getElementById("acCur")?.value||"",nw=document.getElementById("acNew")?.value||"";
+    if(nw.length<8){fail(new Error("Use a password of at least 8 characters"));return;}
+    Repo.changePassword(cur,nw).then(()=>{toast("Password saved");$("#v-account")._html=null;document.activeElement?.blur?.();renderAccount();}).catch(fail);}
+  if(k==="acct-delete"){e.preventDefault();if((document.getElementById("acDel")?.value||"").trim().toUpperCase()!=="DELETE"){fail(new Error("Type DELETE to confirm"));return;}
+    Repo.deleteMe().then(()=>{flow=freshFlow();au={...au,role:null,mode:"signup",email:false};toast("Your account is deleted");showAuth();}).catch(fail);}
   if(k==="account"){e.preventDefault();const g=id=>document.getElementById(id)?.value??"";
-    Repo.updateMe({name:g("acName"),business:g("acBiz"),email:g("acEmail"),phone:g("acPhone"),city:g("acCity")}).then(()=>{toast("Saved");$("#v-account")._html=null;document.activeElement?.blur?.();renderAccount();renderAcct();}).catch(fail);}
+    const nt=document.getElementById("acNotify");
+    Repo.updateMe({name:g("acName"),business:g("acBiz"),email:g("acEmail"),phone:g("acPhone"),city:g("acCity"),...(nt?{notify:nt.checked}:{})}).then(()=>{toast("Saved");$("#v-account")._html=null;document.activeElement?.blur?.();renderAccount();renderAcct();}).catch(fail);}
   if(k==="myquote"){e.preventDefault();const id=f.dataset.rfq,g=s=>document.getElementById(`mq-${s}-${id}`)?.value??"";
     const btn=f.querySelector("button");if(btn)btn.disabled=true;
     Repo.myQuote(id,{unit:g("u"),lead:g("l"),note:g("n")}).then(()=>{toast("Quote sent. The buyer sees it with GST and freight added.");document.activeElement?.blur?.();renderRequests();}).catch(err=>{if(btn)btn.disabled=false;fail(err);});}

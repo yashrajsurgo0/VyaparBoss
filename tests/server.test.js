@@ -340,6 +340,126 @@ const { createApp } = require("../server");
         assert.strictEqual((await sup("PUT", "/api/admin/suppliers/new", { name: "X" })).status, 401, "suppliers can't edit the network");
       } finally { s4.close(); }
     });
+    await test("web hardening: security headers, gzip, ETag, branded 404, sitemap", async () => {
+      const r = await fetch(base + "/js/engine.js", { headers: { "accept-encoding": "gzip" } });
+      assert.strictEqual(r.status, 200);
+      assert.match(r.headers.get("content-security-policy"), /default-src 'self'/);
+      assert.deepStrictEqual([r.headers.get("x-content-type-options"), r.headers.get("x-frame-options")], ["nosniff", "SAMEORIGIN"]);
+      assert.ok(r.headers.get("etag"));
+      assert.ok((await r.text()).includes("function discover"), "fetch decodes the gzip body");
+      const r2 = await fetch(base + "/js/engine.js", { headers: { "if-none-match": r.headers.get("etag") } });
+      assert.strictEqual(r2.status, 304);
+      const nf = await fetch(base + "/no-such-page");
+      assert.strictEqual(nf.status, 404); assert.match(await nf.text(), /VyaparBoss/);
+      const sm = await fetch(base + "/sitemap.xml").then(x => x.text());
+      assert.match(sm, /<loc>https:\/\/vyaparboss\.onrender\.com\/privacy\.html<\/loc>/);
+      for (const f of ["/robots.txt", "/privacy.html", "/terms.html", "/contact.html"]) assert.strictEqual((await fetch(base + f)).status, 200, f);
+    });
+    await test("remote storage: pulls on boot, pushes after changes, never starts empty on a failed read", async () => {
+      const { createRemote, pullSnapshot, attachRemote } = require("../server/remote");
+      const kv = {}; let down = false; const seen = [];
+      const fakeUpstash = async (url, init) => {
+        assert.strictEqual(init.headers.authorization, "Bearer tok");
+        const [cmd, key, val] = JSON.parse(init.body); seen.push(cmd + " " + key);
+        if (down) return { ok: false, status: 500, json: async () => ({ error: "down" }) };
+        if (cmd === "SET") kv[key] = val;
+        return { ok: true, json: async () => ({ result: cmd === "GET" ? (kv[key] ?? null) : "OK" }) };
+      };
+      assert.strictEqual(createRemote({}), null, "off unless both env vars are set");
+      const remote = createRemote({ UPSTASH_REDIS_REST_URL: "https://x.upstash.io/", UPSTASH_REDIS_REST_TOKEN: "tok" }, fakeUpstash);
+      const f1 = path.join(dir, "r1", "db.json");
+      assert.strictEqual(await pullSnapshot(remote, f1), "empty");
+      const a1 = createApp({ dataFile: f1, claude: null, remote, env: { ADMIN_KEY: "" } });
+      a1.store.data.suppliers.push({ id: "keep-me" }); a1.store.save();
+      await a1.sync.flush();
+      assert.ok(kv["vyaparboss:db"].includes("keep-me"), "pushed to the remote");
+      assert.ok(Object.keys(kv).some(k => k.startsWith("vyaparboss:db:day:")), "daily copy kept");
+      // A fresh disk (redeploy) gets the data back.
+      const f2 = path.join(dir, "r2", "db.json");
+      assert.strictEqual(await pullSnapshot(remote, f2), "restored");
+      assert.ok(createApp({ dataFile: f2, claude: null, remote: null }).store.data.suppliers.some(x => x.id === "keep-me"));
+      // Remote unreachable on boot: refuse to start rather than overwrite good data with a fresh seed.
+      down = true;
+      await assert.rejects(pullSnapshot(remote, path.join(dir, "r3", "db.json"), { tries: 2, waitMs: 1 }), /Not starting/);
+      // A failed push is retried once the remote is back.
+      a1.store.data.suppliers.push({ id: "later" }); a1.store.save(); await a1.sync.flush();
+      assert.ok(a1.sync.status.lastError); down = false; a1.store.save(); await a1.sync.flush();
+      assert.ok(kv["vyaparboss:db"].includes("later") && !a1.sync.status.lastError);
+      const h = await (async () => { const { server: s6 } = a1; await new Promise(r => s6.listen(0, r)); try { return await fetch(`http://127.0.0.1:${s6.address().port}/api/health`).then(x => x.json()); } finally { s6.close(); } })();
+      assert.strictEqual(h.storage, "upstash");
+    });
+    await test("account emails: reset password, updates to the right side, opt-out, delete account, contact", async () => {
+      const mails = [];
+      const fakeMail = async (url, init) => { if (String(url).includes("resend")) { const b = JSON.parse(init.body); mails.push({ to: b.to[0], subject: b.subject, text: b.text }); } return { ok: true, json: async () => ({}), text: async () => "" }; };
+      const { server: s5, store: st5 } = createApp({ dataFile: path.join(dir, "db5.json"), claude: null, fetch: fakeMail,
+        env: { ADMIN_KEY: "k5", EMAIL_PROVIDER: "resend", EMAIL_API_KEY: "re_x", OUTREACH_FROM_EMAIL: "bhai@vyaparboss.test", PUBLIC_URL: "https://vb.test", CONTACT_TO: "team@vyaparboss.test" } });
+      await new Promise(r => s5.listen(0, r));
+      const b5 = `http://127.0.0.1:${s5.address().port}`;
+      const agent = () => { let cookie = ""; return async (method, p, body) => {
+        const r = await fetch(b5 + p, { method, headers: { "content-type": "application/json", ...(cookie ? { cookie } : {}) }, body: body ? JSON.stringify(body) : undefined });
+        const sc = r.headers.get("set-cookie"); if (sc) cookie = sc.split(";")[0];
+        return { status: r.status, body: await r.json() }; }; };
+      const tick = () => new Promise(r => setTimeout(r, 30));
+      try {
+        // Supplier with a listing that fits box3 to Pune.
+        const sup = agent();
+        await sup("POST", "/api/auth/signup", { role: "supplier", name: "Asha", business: "Asha Packaging", email: "asha@sup.in", password: "longenough1" });
+        const sid = (await sup("PUT", "/api/my/listing", { name: "Asha Packaging", city: "Chakan", gstin: "27AAPFU0939F1ZV", lead: 3, coverage: 400, offers: [{ p: "box3", tiersText: "500:14.5, 5000:14", cap: 50000 }] })).body.id;
+        assert.ok(sid);
+        const buyer = agent();
+        await buyer("POST", "/api/auth/signup", { role: "buyer", name: "Ravi", business: "Ravi Exports", email: "ravi@buy.in", password: "longenough1" });
+        const rfq = (await buyer("POST", "/api/rfqs", { productId: "box3", qty: 5000, city: "Pune", quotes: [{ sid, unit: 14, landed: 85000, eta: 3, meets: true }, { sid: "s1", unit: 15, landed: 90000, eta: 4, meets: true }] })).body;
+        await tick();
+        const nr = mails.filter(m => m.to === "asha@sup.in");
+        assert.strictEqual(nr.length, 1, "the supplier whose listing fits gets one email"); assert.match(nr[0].subject, /New request/);
+        assert.ok(!nr[0].text.includes("ravi@buy.in") && !nr[0].text.includes("90000"), "no buyer contact or rival price");
+        await buyer("PATCH", "/api/rfqs/" + rfq.id, { quotes: rfq.quotes }); await tick();
+        assert.strictEqual(mails.filter(m => m.to === "asha@sup.in").length, 1, "sent once per request");
+        // Supplier quotes in the app → buyer hears about it.
+        assert.strictEqual((await sup("POST", "/api/my/quotes", { rfqId: rfq.id, unit: 13.5, lead: 3 })).status, 200); await tick();
+        assert.ok(mails.some(m => m.to === "ravi@buy.in" && /sent a price/.test(m.subject)));
+        // Order → supplier; supplier dispatches → buyer; buyer marks received → supplier.
+        const ord = (await buyer("POST", "/api/orders", { order: { productId: "box3", sid, rfqId: rfq.id } })).body; await tick();
+        assert.ok(mails.some(m => m.to === "asha@sup.in" && m.subject.includes(ord.po)));
+        await sup("PATCH", "/api/orders/" + ord.po, { stage: 2 }); await tick();
+        assert.ok(mails.some(m => m.to === "ravi@buy.in" && /Dispatched/.test(m.subject)));
+        await buyer("PATCH", "/api/orders/" + ord.po, { stage: 4 }); await tick();
+        assert.ok(mails.some(m => m.to === "asha@sup.in" && /received/.test(m.subject)));
+        // Opt-out stops updates.
+        assert.strictEqual((await buyer("PATCH", "/api/auth/me", { notify: false })).body.user.notify, false);
+        const before = mails.length; await sup("PATCH", "/api/orders/" + ord.po, { stage: 3 }); await tick();
+        assert.ok(!mails.slice(before).some(m => m.to === "ravi@buy.in"), "no email after opting out");
+        // Forgot password: same answer for unknown emails; a real one gets a one-hour link.
+        assert.deepStrictEqual((await agent()("POST", "/api/auth/forgot", { email: "nobody@x.in" })).body, { ok: true });
+        assert.deepStrictEqual((await agent()("POST", "/api/auth/forgot", { email: "ravi@buy.in" })).body, { ok: true });
+        const link = mails.filter(m => m.to === "ravi@buy.in" && /Reset/.test(m.subject)).pop();
+        const token = link.text.match(/#reset\/([\w-]+)/)[1];
+        const other = agent();
+        assert.strictEqual((await other("POST", "/api/auth/reset", { token, password: "short" })).status, 400);
+        const rs = await other("POST", "/api/auth/reset", { token, password: "brandnew123" });
+        assert.deepStrictEqual([rs.status, rs.body.user.email], [200, "ravi@buy.in"]);
+        assert.strictEqual((await agent()("POST", "/api/auth/reset", { token, password: "again12345" })).status, 400, "a link works once");
+        assert.strictEqual((await buyer("GET", "/api/auth/me")).body.user, null, "old sessions are signed out");
+        assert.strictEqual((await agent()("POST", "/api/auth/login", { role: "buyer", email: "ravi@buy.in", password: "brandnew123" })).status, 200);
+        // Change password needs the current one.
+        assert.strictEqual((await other("POST", "/api/auth/password", { current: "wrong-one", password: "another123" })).status, 401);
+        assert.strictEqual((await other("POST", "/api/auth/password", { current: "brandnew123", password: "another123" })).status, 200);
+        // Delete account: needs confirmation; signs out; orders stay but are unlinked.
+        assert.strictEqual((await other("DELETE", "/api/auth/me", {})).status, 400);
+        assert.strictEqual((await other("DELETE", "/api/auth/me", { confirm: "DELETE" })).status, 200);
+        assert.strictEqual((await other("GET", "/api/auth/me")).body.user, null);
+        assert.ok(!st5.data.users.some(u => u.email === "ravi@buy.in"));
+        assert.strictEqual(st5.data.orders.find(o => o.po === ord.po).ownerId, null);
+        // Contact form: validated, honeypot, stored for the team, forwarded.
+        assert.strictEqual((await agent()("POST", "/api/contact", { email: "bad", text: "hello there" })).status, 400);
+        assert.strictEqual((await agent()("POST", "/api/contact", { name: "Meena", email: "meena@x.in", topic: "privacy", text: "Please delete my data" })).status, 200);
+        await tick();
+        const msgs = await fetch(b5 + "/api/admin/messages", { headers: { "x-admin-key": "k5" } }).then(r => r.json());
+        assert.strictEqual(msgs.messages[0].email, "meena@x.in");
+        assert.strictEqual((await agent()("GET", "/api/admin/messages")).status, 401);
+        assert.ok(mails.some(m => m.to === "team@vyaparboss.test"));
+      } finally { s5.close(); }
+    });
     await test("unknown API path is a JSON 404", async () => {
       const { status, body } = await call("GET", "/api/nope");
       assert.deepStrictEqual([status, body.error], [404, "No such endpoint"]);

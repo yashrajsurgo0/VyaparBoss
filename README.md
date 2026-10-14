@@ -55,7 +55,13 @@ The app checks for `api/health` on load and picks the mode by itself.
 | GET / POST | `/api/quote/:token` | Supplier quote link: see the request, send a price |
 | GET / POST | `/unsubscribe` | Signed unsubscribe link from outreach emails |
 | * | `/api/admin/*` | Team only (`x-admin-key`): sign-ups, leads, outreach, quote links |
-| DELETE | `/api/samples` | Remove sample orders |
+| DELETE | `/api/samples` | Remove sample orders (team only) |
+| POST | `/api/auth/signup`, `/login`, `/oauth`, `/logout` | Buyer and supplier accounts (email + password, Google, Apple, Facebook) |
+| GET / PATCH / DELETE | `/api/auth/me` | Who's signed in; edit details and email preferences; delete the account |
+| POST | `/api/auth/forgot`, `/api/auth/reset`, `/api/auth/password` | Password reset by email (one-hour link), change password |
+| PUT / POST | `/api/my/listing`, `/api/my/quotes` | Supplier's own listing and in-app quotes |
+| POST | `/api/contact` | Contact page (rate-limited, honeypot); team reads them in Sign-ups |
+| GET | `/sitemap.xml`, `/robots.txt` | For search engines |
 
 ## What's in the prototype
 
@@ -85,6 +91,9 @@ server/
   index.js          HTTP server: static files + JSON API (no dependencies)
   core.js           loads src/js engine into Node so server and browser share one engine
   store.js          JSON-file database (data/db.json)
+  remote.js         optional Upstash copy so data survives redeploys on a temporary disk
+  auth.js           accounts, sessions, Google/Apple/Facebook token checks, password reset
+  notify.js         account emails: reset links, new requests, quotes, order updates
   gemini.js         Google Gemini API client
   anthropic.js      Anthropic Messages API client
   whatsapp.js       WhatsApp Cloud API: webhook, conversation state, APPROVE flow, order updates
@@ -101,6 +110,8 @@ src/
   js/repo.js        storage: server API when available, otherwise localStorage
   js/app.js         UI rendering and event wiring
   js/grow.js        sign-up and quote pages, sign-ups, outreach, quote links
+  js/roles.js       welcome/sign-in, buyer and supplier tabs, directory filters, account settings
+  js/page.js        privacy, terms, contact and 404 pages
 tests/            engine.test.js, server.test.js, ui.smoke.js (drives the Buy flow in a fake DOM)
 docs/               PROJECT_BRIEF.md, DEPLOY.md, WHATSAPP_SETUP.md
 ```
@@ -132,8 +143,8 @@ AI reads buyer messages and drafts supplier replies. It never sets prices or pic
 ## Roadmap (next)
 
 1. Onboard the first 10–15 real suppliers and hide the samples.
-2. Connect the WhatsApp number (code ready; needs a Meta business admin) and upgrade Render to Starter + disk before real orders.
+2. Connect the WhatsApp number (code ready; needs a Meta business admin).
 3. WhatsApp message templates for dispatch updates after 24 hours.
-4. Buyer and supplier logins; move from `db.json` to Postgres.
+4. Move from `db.json` (+ Upstash copy) to Postgres once there are many concurrent users.
 5. Live freight quotes from a 3PL partner; GST rates by HSN from a maintained table.
 6. Payments through a licensed gateway; e-invoice generation.

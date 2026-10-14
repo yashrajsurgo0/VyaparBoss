@@ -1,6 +1,7 @@
 # Render blueprint: render.com → New → Blueprint → pick this repo.
-# FREE plan: data resets on every restart/redeploy (fine for demos and testing).
-# For the pilot with real orders, switch to a paid plan with a disk:
+# FREE plan: the disk resets on every restart/redeploy. Set UPSTASH_REDIS_REST_URL and
+# UPSTASH_REDIS_REST_TOKEN (free Upstash database, docs/DEPLOY.md) and data survives anyway.
+# Or switch to a paid plan with a disk:
 #   plan: starter
 #   disk: { name: vyaparboss-data, mountPath: /var/data, sizeGB: 1 }
 #   and set DATA_FILE to /var/data/db.json
@@ -42,6 +43,12 @@ services:
         sync: false
       - key: OUTREACH_DAILY_CAP
         value: "30"
+      - key: UPSTASH_REDIS_REST_URL
+        sync: false
+      - key: UPSTASH_REDIS_REST_TOKEN
+        sync: false
+      - key: CONTACT_TO
+        sync: false
       - key: GOOGLE_CLIENT_ID
         sync: false
       - key: APPLE_CLIENT_ID

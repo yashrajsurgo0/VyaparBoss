@@ -67,7 +67,7 @@ function createAuth({ store, env, fetchImpl = globalThis.fetch, now = () => Date
     return g;
   }
   const publicUser = u => u && ({ id: u.id, role: u.role, guest: !!u.guest, name: u.name || "", business: u.business || "", email: u.email || "",
-    phone: u.phone || "", city: u.city || "", providers: Object.keys(u.providers || {}), hasPassword: !!u.pass, supplierId: u.supplierId || null });
+    phone: u.phone || "", city: u.city || "", providers: Object.keys(u.providers || {}), hasPassword: !!u.pass, supplierId: u.supplierId || null, notify: u.notify !== false });
 
   // ---------- accounts ----------
   const byEmail = e => e && store.data.users.find(u => !u.guest && u.email === String(e).toLowerCase());
@@ -132,6 +132,8 @@ function createAuth({ store, env, fetchImpl = globalThis.fetch, now = () => Date
     return { sub: String(me.id), email: me.email || null, name: me.name || "", unverifiedEmail: true };
   }
 
+  const dropSessions = uid => { for (const [k, s] of Object.entries(store.data.sessions)) if (s.uid === uid) delete store.data.sessions[k]; };
+
   return {
     providers, userOf, ensureUser, publicUser, startSession, endSession,
     config: () => ({ email: true, google: providers.google, apple: providers.apple, facebook: providers.facebook && { appId: providers.facebook.appId } }),
@@ -147,6 +149,37 @@ function createAuth({ store, env, fetchImpl = globalThis.fetch, now = () => Date
       if (u.role !== role) throw wrongRole(u, role);
       adoptGuest(req, u); startSession(req, res, u.id); store.save();
       return u;
+    },
+    /** Password reset, step 1: returns {user, token} for a known email (the caller emails the link), or null. */
+    startReset(email) {
+      const u = byEmail(String(email || "").trim()); if (!u) return null;
+      const token = crypto.randomBytes(24).toString("base64url");
+      u.reset = { h: sha(token), exp: now() + 36e5 }; store.save();
+      return { user: u, token };
+    },
+    /** Step 2: a valid, unexpired token sets the new password, signs out every device, and signs in here. */
+    finishReset(req, res, token, password) {
+      if (String(password || "").length < 8) throw Object.assign(new Error("Use a password of at least 8 characters"), { status: 400 });
+      const h = sha(String(token || ""));
+      const u = store.data.users.find(x => x.reset && x.reset.h === h);
+      if (!u || u.reset.exp < now()) throw Object.assign(new Error("This reset link has expired or was already used. Ask for a new one."), { status: 400 });
+      u.pass = hashPassword(password); delete u.reset;
+      dropSessions(u.id); startSession(req, res, u.id); store.save();
+      return u;
+    },
+    changePassword(u, current, next) {
+      if (u.pass && !checkPassword(current, u.pass)) throw Object.assign(new Error("Your current password is wrong"), { status: 401 });
+      if (String(next || "").length < 8) throw Object.assign(new Error("Use a password of at least 8 characters"), { status: 400 });
+      if (!u.email) throw Object.assign(new Error("Add an email to your account first"), { status: 400 });
+      u.pass = hashPassword(next); store.save();
+    },
+    /** Deletes the account and signs out everywhere. Requests and orders stay as business records, unlinked. */
+    deleteUser(req, res, u) {
+      for (const r of store.data.rfqs) if (r.ownerId === u.id) r.ownerId = null;
+      for (const o of store.data.orders) if (o.ownerId === u.id) o.ownerId = null;
+      if (u.supplierId) store.data.suppliers = store.data.suppliers.filter(s => !(s.id === u.supplierId && s.ownerId === u.id));
+      store.data.users = store.data.users.filter(x => x.id !== u.id);
+      dropSessions(u.id); endSession(req, res); store.save();
     },
     async oauth(req, res, provider, role, p) {
       const id = await identify(provider, p);
