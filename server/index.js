@@ -74,6 +74,8 @@ function createApp(opts = {}) {
   };
   const auth = createAuth({ store, env, fetchImpl: opts.fetch || globalThis.fetch });
   const notify = createNotifier({ store, mailer, core, publicUrl: PUBLIC_URL });
+  // Sends the confirm-your-email link (only when email sending is set up). Never blocks the request.
+  const sendVerify = u => { if (!notify.on) return; const tok = auth.startVerify(u); if (tok) notify.verifyEmail(u, `${PUBLIC_URL}/#verify/${tok}`).catch(() => {}); };
   store.data.messages ||= [];
   const whatsapp = createWhatsApp(ctx, { verifyToken: env.WHATSAPP_VERIFY_TOKEN, accessToken: env.WHATSAPP_TOKEN, phoneNumberId: env.WHATSAPP_PHONE_NUMBER_ID, appSecret: env.WHATSAPP_APP_SECRET, apiVersion: env.WHATSAPP_API_VERSION, send: opts.waSend });
 
@@ -145,14 +147,16 @@ function createApp(opts = {}) {
     }],
 
     // ---------- Accounts ----------
-    ["GET", /^\/api\/auth\/config$/, () => auth.config()],
+    ["GET", /^\/api\/auth\/config$/, () => ({ ...auth.config(), emailOn: notify.on })],
     ["GET", /^\/api\/auth\/me$/, req => ({ user: auth.publicUser(auth.userOf(req)) })],
     ["POST", /^\/api\/auth\/signup$/, async (req, m, url, res) => {
       limit(req, "signup", 10, 36e5, "Too many sign-ups from here. Try again in an hour.");
       const b = await jsonBody(req);
       const { ok, a, errors } = core.normalizeAccount(b);
       if (!ok) throw bad(errors.join(". "));
-      return { user: auth.publicUser(auth.signup(req, res, a, b.password)) };
+      const nu = auth.signup(req, res, a, b.password);
+      sendVerify(nu);
+      return { user: auth.publicUser(nu) };
     }],
     ["POST", /^\/api\/auth\/login$/, async (req, m, url, res) => {
       limit(req, "login", 12, 15 * 6e4, "Too many tries. Wait 15 minutes, then try again.");
@@ -174,6 +178,20 @@ function createApp(opts = {}) {
       const r = auth.startReset(email);
       if (r) await notify.passwordReset(r.user, `${PUBLIC_URL}/#reset/${r.token}`);
       return { ok: true }; // same answer whether or not the email has an account
+    }],
+    ["POST", /^\/api\/auth\/verify$/, async req => {
+      limit(req, "verify", 20, 36e5);
+      const u = auth.finishVerify((await jsonBody(req)).token);
+      const me = auth.userOf(req);
+      return { ok: true, user: me && me.id === u.id ? auth.publicUser(u) : null };
+    }],
+    ["POST", /^\/api\/auth\/verify\/resend$/, req => {
+      limit(req, "verifyresend", 3, 36e5, "We've sent a few already. Check spam, or try again in an hour.");
+      const u = needUser(req);
+      if (u.emailVerified) return { ok: true, already: true };
+      if (!notify.on) throw Object.assign(new Error("Email sending isn't switched on yet."), { status: 503 });
+      if (!u.email) throw bad("Add an email to your account first");
+      sendVerify(u); return { ok: true };
     }],
     ["POST", /^\/api\/auth\/reset$/, async (req, m, url, res) => {
       limit(req, "reset", 10, 36e5);
@@ -202,6 +220,25 @@ function createApp(opts = {}) {
       store.data.messages = store.data.messages.concat(msg).slice(-500); store.save();
       if (mailer.configured && env.CONTACT_TO) mailer.send({ to: env.CONTACT_TO, subject: `[VyaparBoss ${msg.topic}] ${msg.name || msg.email}`, text: `${msg.text}\n\nFrom: ${msg.name} <${msg.email}>` }).catch(e => console.warn("contact mail:", e.message));
       return { ok: true };
+    }],
+    // What's switched on, for the Team → Setup checklist. Says whether keys are set, never their values.
+    ["GET", /^\/api\/admin\/setup$/, req => {
+      admin(req);
+      const users = (store.data.users || []).filter(u => !u.guest);
+      const real = store.data.orders.filter(o => !o.sample);
+      return {
+        publicUrl: PUBLIC_URL,
+        storage: { kind: sync ? sync.status.kind : "disk", lastSaved: sync ? sync.status.lastSaved : null, error: sync ? sync.status.lastError : null, dataFile: !!env.DATA_FILE && env.DATA_FILE !== "./data/db.json" },
+        admin: true,
+        email: { on: mailer.configured, provider: mailer.provider, from: mailer.from, contactTo: !!env.CONTACT_TO },
+        signIn: { email: true, google: !!auth.providers.google, apple: !!auth.providers.apple, facebook: !!auth.providers.facebook },
+        ai: claude ? `${claude.provider} (${claude.model})` : null,
+        whatsapp: whatsapp.configured,
+        counts: { buyers: users.filter(u => u.role === "buyer").length, suppliers: users.filter(u => u.role === "supplier").length,
+          verifiedEmails: users.filter(u => u.emailVerified).length, listings: store.data.suppliers.filter(x => x.selfListed).length,
+          verifiedListings: store.data.suppliers.filter(x => x.verified).length, requests: store.data.rfqs.filter(r => !r.sample).length, orders: real.length,
+          samplesShown: !!store.data.useSamples, messages: (store.data.messages || []).length, signups: store.data.applications.length },
+      };
     }],
     ["GET", /^\/api\/admin\/messages$/, req => (admin(req), { messages: store.data.messages.slice().reverse() })],
     ["POST", /^\/api\/auth\/logout$/, (req, m, url, res) => { auth.endSession(req, res); store.save(); return { ok: true }; }],

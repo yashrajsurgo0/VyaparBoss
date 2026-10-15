@@ -27,6 +27,16 @@ The whole database is one value, so this suits the pilot (thousands of records).
 
 Every push to `main` redeploys automatically.
 
+## Automatic deploys (recommended)
+
+Every push to `main` runs the tests on GitHub. When they pass, the workflow publishes `src/` to GitHub Pages and, if you've added the hook below, redeploys Render. No more Manual Deploy clicks.
+
+1. Render → vyaparboss → **Settings → Deploy Hook** → copy the URL. Treat it like a password: anyone with it can trigger a deploy.
+2. GitHub → VyaparBoss → **Settings → Secrets and variables → Actions → New repository secret**. Name `RENDER_DEPLOY_HOOK`, paste the URL, save.
+3. Push anything to `main`. GitHub → Actions shows "test" then "deploy"; Render shows a new deploy a few seconds later.
+
+If a test fails, nothing is deployed.
+
 ## Option B: any VPS (DigitalOcean, AWS Lightsail, Hetzner)
 
 ```bash

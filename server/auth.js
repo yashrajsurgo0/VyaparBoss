@@ -67,7 +67,7 @@ function createAuth({ store, env, fetchImpl = globalThis.fetch, now = () => Date
     return g;
   }
   const publicUser = u => u && ({ id: u.id, role: u.role, guest: !!u.guest, name: u.name || "", business: u.business || "", email: u.email || "",
-    phone: u.phone || "", city: u.city || "", providers: Object.keys(u.providers || {}), hasPassword: !!u.pass, supplierId: u.supplierId || null, notify: u.notify !== false });
+    phone: u.phone || "", city: u.city || "", providers: Object.keys(u.providers || {}), hasPassword: !!u.pass, supplierId: u.supplierId || null, notify: u.notify !== false, emailVerified: !!u.emailVerified });
 
   // ---------- accounts ----------
   const byEmail = e => e && store.data.users.find(u => !u.guest && u.email === String(e).toLowerCase());
@@ -157,6 +157,20 @@ function createAuth({ store, env, fetchImpl = globalThis.fetch, now = () => Date
       u.reset = { h: sha(token), exp: now() + 36e5 }; store.save();
       return { user: u, token };
     },
+    /** Email confirmation: a 7-day link. Returns the token to email, or null if there's nothing to confirm. */
+    startVerify(u) {
+      if (!u || !u.email || u.emailVerified) return null;
+      const token = crypto.randomBytes(24).toString("base64url");
+      u.verify = { h: sha(token), exp: now() + 7 * 864e5 }; store.save();
+      return token;
+    },
+    finishVerify(token) {
+      const h = sha(String(token || ""));
+      const u = store.data.users.find(x => x.verify && x.verify.h === h);
+      if (!u || u.verify.exp < now()) throw Object.assign(new Error("This link has expired or was already used. Log in and ask for a new one in Account settings."), { status: 400 });
+      u.emailVerified = true; delete u.verify; store.save();
+      return u;
+    },
     /** Step 2: a valid, unexpired token sets the new password, signs out every device, and signs in here. */
     finishReset(req, res, token, password) {
       if (String(password || "").length < 8) throw Object.assign(new Error("Use a password of at least 8 characters"), { status: 400 });
@@ -164,6 +178,7 @@ function createAuth({ store, env, fetchImpl = globalThis.fetch, now = () => Date
       const u = store.data.users.find(x => x.reset && x.reset.h === h);
       if (!u || u.reset.exp < now()) throw Object.assign(new Error("This reset link has expired or was already used. Ask for a new one."), { status: 400 });
       u.pass = hashPassword(password); delete u.reset;
+      u.emailVerified = true; // the reset link arrived in their inbox
       dropSessions(u.id); startSession(req, res, u.id); store.save();
       return u;
     },
@@ -188,12 +203,13 @@ function createAuth({ store, env, fetchImpl = globalThis.fetch, now = () => Date
       if (u) {
         if (u.role !== role) throw wrongRole(u, role);
         u.providers = { ...u.providers, [provider]: id.sub };
+        if (id.email && !id.unverifiedEmail && u.email === String(id.email).toLowerCase()) u.emailVerified = true;
         adoptGuest(req, u); startSession(req, res, u.id); store.save();
         return { user: u, created: false };
       }
       const name = String(p.profile?.name || id.name || "").trim().slice(0, 80);
       u = create(req, res, { role, name, business: String(p.profile?.business || "").trim().slice(0, 100), email: (id.email || "").toLowerCase(),
-        phone: "", city: String(p.profile?.city || "").trim().slice(0, 60), providers: { [provider]: id.sub } });
+        phone: "", city: String(p.profile?.city || "").trim().slice(0, 60), providers: { [provider]: id.sub }, emailVerified: !!(id.email && !id.unverifiedEmail) });
       return { user: u, created: true };
     },
   };

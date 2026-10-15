@@ -26,6 +26,9 @@ function createNotifier({ store, mailer, core, publicUrl, log = console }) {
     passwordReset(u, link) {
       return mail(u, "Reset your VyaparBoss password", `Namaste${u.name ? " " + u.name.split(/\s+/)[0] : ""},\n\nSomeone (hopefully you) asked to reset the password for this VyaparBoss account. Open this link within one hour to choose a new one:\n\n${link}\n\nIf it wasn't you, ignore this email; your password stays the same.\n\n— VyaparBoss`, { force: true });
     },
+    verifyEmail(u, link) {
+      return mail(u, "Confirm your email for VyaparBoss", `Namaste${u.name ? " " + u.name.split(/\s+/)[0] : ""},\n\nPlease confirm this is your email by opening this link (it works for 7 days):\n\n${link}\n\nConfirmed emails get order and quote updates, and can reset a forgotten password.\n\nDidn't make a VyaparBoss account? Ignore this email.\n\n— VyaparBoss`, { force: true });
+    },
     /** A buyer request that a supplier's listing qualifies for. Sent once per request. */
     newRequest(rfq) {
       if (!rfq || rfq.sample || rfq.notified || !Array.isArray(rfq.quotes) || !rfq.quotes.length) return;

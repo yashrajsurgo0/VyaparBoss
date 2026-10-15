@@ -5,7 +5,7 @@ B2B procurement MVP for Indian MSMEs. Founder: Yashraj Surgoniwar (House of 24 P
 ## Commands
 - `npm test` — engine, parser and API tests. Run after any change in `src/js/` or `server/`.
 - `npm start` — app + API on :5173 (reads `.env`). No build step, no framework, no npm dependencies.
-- `npm run deploy:pages` — publish `src/` to GitHub Pages (live demo: https://yashrajsurgo0.github.io/VyaparBoss/). Run after UI changes are pushed to main.
+- Deploys: pushing to main runs `.github/workflows/test.yml`; after tests pass it publishes `src/` to GitHub Pages (https://yashrajsurgo0.github.io/VyaparBoss/) and, when the `RENDER_DEPLOY_HOOK` secret is set, redeploys Render. `npm run deploy:pages` still works by hand.
 - Live server: https://vyaparboss.onrender.com (Render, free plan, connected by public repo URL, so redeploy via Render → Manual Deploy → Deploy latest commit). On the free plan a redeploy wipes `data/` unless `UPSTASH_REDIS_REST_URL`/`_TOKEN` are set (`server/remote.js`: pulled before listen, pushed ~1s after each `store.save()`, flushed on SIGTERM; `/api/health` shows `storage`). Without Upstash, back up first (Team → Outreach → Back up, or `GET /api/admin/backup`) and restore after.
 - `npm run build:single` — single-file build in `dist/` (gitignored).
 
@@ -32,7 +32,8 @@ B2B procurement MVP for Indian MSMEs. Founder: Yashraj Surgoniwar (House of 24 P
 - Taglines: company "Vyapar bada, jhanjhat chhota!" (English: "Bigger business. Smaller hassle."); Bhai "Tu business badha, jugaad mera!" (English: "You grow the business. I'll handle the buying."). Bhai is an original character: don't base him on film characters or real people.
 - The assistant is called **Bhai** everywhere (UI, AI prompts, WhatsApp). Voice: warm, short, Hinglish-friendly; never promises price or availability.
 - Buy flow is progressive: show one question at a time (`nextField()`), keep details behind `<details>` expanders. Don't put everything on screen at once.
-- After UI changes: `npm test` (includes `tests/ui.smoke.js`), push, `npm run deploy:pages`, and redeploy Render.
+- After UI changes: `npm test` (includes `tests/ui.smoke.js`), check phone widths, then push; CI deploys. Team → Setup (`/api/admin/setup`) shows which keys are set (never their values).
+- Email confirmation: sign-up sends a 7-day `#verify/<token>` link when email is on; Google/Apple verified emails and password resets count as confirmed. It doesn't block anything yet.
 - Accounts (`server/auth.js`): buyer or supplier, one email per side; email+password (scrypt) and Google/Apple/Facebook via verified ID tokens / Graph API when their env keys are set (docs/SIGN_IN_SETUP.md). Sessions: HttpOnly cookie, hashed in the store. `/api/state` is scoped per person (`stateFor`): buyers see own + sample records, suppliers see only requests they qualified for (own quote + rank, never rivals' prices) and orders placed with them, team sees all. Never expose supplier `contact` or `ownerId` to others. Network edits (`/api/admin/suppliers`, settings, delete samples) are team-only; suppliers edit only their own listing (`/api/my/listing`) and quote via `/api/my/quotes`.
 - Ops routes (`/api/admin/*`) need `ADMIN_KEY` (header `x-admin-key`); without it set they stay closed. Sign-ups and leads never go in `/api/state`; quote-link tokens are stripped from it.
 - Supplier quotes come only from the supplier's own quote link (`normalizeLiveQuote`) or their rate card. Bhai never invents a price.

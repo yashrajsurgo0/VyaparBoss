@@ -410,11 +410,11 @@ const { createApp } = require("../server");
         await buyer("POST", "/api/auth/signup", { role: "buyer", name: "Ravi", business: "Ravi Exports", email: "ravi@buy.in", password: "longenough1" });
         const rfq = (await buyer("POST", "/api/rfqs", { productId: "box3", qty: 5000, city: "Pune", quotes: [{ sid, unit: 14, landed: 85000, eta: 3, meets: true }, { sid: "s1", unit: 15, landed: 90000, eta: 4, meets: true }] })).body;
         await tick();
-        const nr = mails.filter(m => m.to === "asha@sup.in");
+        const nr = mails.filter(m => m.to === "asha@sup.in" && /New request/.test(m.subject));
         assert.strictEqual(nr.length, 1, "the supplier whose listing fits gets one email"); assert.match(nr[0].subject, /New request/);
         assert.ok(!nr[0].text.includes("ravi@buy.in") && !nr[0].text.includes("90000"), "no buyer contact or rival price");
         await buyer("PATCH", "/api/rfqs/" + rfq.id, { quotes: rfq.quotes }); await tick();
-        assert.strictEqual(mails.filter(m => m.to === "asha@sup.in").length, 1, "sent once per request");
+        assert.strictEqual(mails.filter(m => m.to === "asha@sup.in" && /New request/.test(m.subject)).length, 1, "sent once per request");
         // Supplier quotes in the app → buyer hears about it.
         assert.strictEqual((await sup("POST", "/api/my/quotes", { rfqId: rfq.id, unit: 13.5, lead: 3 })).status, 200); await tick();
         assert.ok(mails.some(m => m.to === "ravi@buy.in" && /sent a price/.test(m.subject)));
@@ -429,6 +429,22 @@ const { createApp } = require("../server");
         assert.strictEqual((await buyer("PATCH", "/api/auth/me", { notify: false })).body.user.notify, false);
         const before = mails.length; await sup("PATCH", "/api/orders/" + ord.po, { stage: 3 }); await tick();
         assert.ok(!mails.slice(before).some(m => m.to === "ravi@buy.in"), "no email after opting out");
+        // Email confirmation: sign-up sends a link; it confirms once; resend is for signed-in people.
+        const vm = mails.find(m => m.to === "asha@sup.in" && /Confirm your email/.test(m.subject));
+        assert.ok(vm, "sign-up sends a confirmation link");
+        assert.strictEqual((await sup("GET", "/api/auth/me")).body.user.emailVerified, false);
+        const vtok = vm.text.match(/#verify\/([\w-]+)/)[1];
+        const vr = await sup("POST", "/api/auth/verify", { token: vtok });
+        assert.deepStrictEqual([vr.status, vr.body.user.emailVerified], [200, true]);
+        assert.strictEqual((await agent()("POST", "/api/auth/verify", { token: vtok })).status, 400, "a confirm link works once");
+        assert.deepStrictEqual((await sup("POST", "/api/auth/verify/resend")).body, { ok: true, already: true });
+        assert.strictEqual((await agent()("POST", "/api/auth/verify/resend")).status, 401);
+        assert.strictEqual((await agent()("GET", "/api/auth/config")).body.emailOn, true);
+        // Team setup checklist: needs the admin key, reports what's on without revealing values.
+        assert.strictEqual((await agent()("GET", "/api/admin/setup")).status, 401);
+        const setup = await fetch(b5 + "/api/admin/setup", { headers: { "x-admin-key": "k5" } }).then(r => r.json());
+        assert.deepStrictEqual([setup.email.on, setup.email.contactTo, setup.storage.kind, setup.counts.buyers, setup.counts.suppliers, setup.counts.listings], [true, true, "disk", 1, 1, 1]);
+        assert.ok(!JSON.stringify(setup).includes("re_x"), "never returns key values");
         // Forgot password: same answer for unknown emails; a real one gets a one-hour link.
         assert.deepStrictEqual((await agent()("POST", "/api/auth/forgot", { email: "nobody@x.in" })).body, { ok: true });
         assert.deepStrictEqual((await agent()("POST", "/api/auth/forgot", { email: "ravi@buy.in" })).body, { ok: true });

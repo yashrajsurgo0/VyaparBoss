@@ -195,6 +195,9 @@ const Repo={
   /* Ops tools (server + admin key). Leads also work in the static copy, kept in this browser. */
   get ops(){return this.mode==="server";},
   async adminCheck(){return this.api("GET","api/admin/check");},
+  async setup(){return this.api("GET","api/admin/setup");},
+  async verifyEmail(token){const j=await this.api("POST","api/auth/verify",{token},this.publicBase);if(j.user)this.data.me=j.user;return j;},
+  async resendVerify(){return this.api("POST","api/auth/verify/resend");},
   async messages(){return (await this.api("GET","api/admin/messages")).messages;},
   async applications(){return (await this.api("GET","api/admin/applications")).applications;},
   async updateApplication(id,patch){return this.api("PATCH","api/admin/applications/"+encodeURIComponent(id),patch);},

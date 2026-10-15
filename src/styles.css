@@ -632,3 +632,19 @@ body.docpage{padding-bottom:0}
 .acctmore{margin-top:12px}
 .acctmore>summary{cursor:pointer;font-weight:600}
 .hint a{color:var(--brand-text);font-weight:600}
+
+/* ===== Team → Setup checklist ===== */
+.setup{list-style:none;margin:0 0 18px;padding:0;display:grid;gap:10px;max-width:860px}
+.setup-i{display:grid;grid-template-columns:32px minmax(0,1fr) auto;gap:12px;align-items:start;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px}
+.setup-i b{font-family:var(--f-display);font-size:18px;color:var(--ink)}
+.setup-i p{font-size:15px;color:var(--muted);margin-top:2px;overflow-wrap:anywhere}
+.setup-i .setup-do{color:var(--ink)}
+.setup-i code{background:var(--sunk);padding:1px 6px;border-radius:6px;font-size:.88em}
+.setup-i a{color:var(--brand-text);font-weight:600}
+.setup-dot{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font-weight:800;background:var(--sunk);color:var(--muted)}
+.setup-i.ok .setup-dot{background:var(--good-tint);color:var(--good)}
+.setup-i.must .setup-dot{background:var(--bad-tint);color:var(--bad)}
+.setup-i.must{border-color:var(--bad)}
+@media(max-width:560px){.setup-i{grid-template-columns:28px minmax(0,1fr)}.setup-i .pill{grid-column:2;justify-self:start}}
+.verifynote{margin-bottom:14px}
+.toast{border-radius:18px;text-align:center;width:max-content;line-height:1.35}

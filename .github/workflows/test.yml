@@ -12,3 +12,29 @@ jobs:
         with:
           node-version: 22
       - run: npm test
+
+  # Runs only after the tests pass on main.
+  deploy:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # Static copy on GitHub Pages: the src/ folder, published to the gh-pages branch.
+      - name: Publish src/ to GitHub Pages
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git push origin "$(git subtree split --prefix src HEAD)":refs/heads/gh-pages --force
+      # Live server: Render → vyaparboss → Settings → Deploy Hook. Save that URL as the
+      # repository secret RENDER_DEPLOY_HOOK (GitHub → Settings → Secrets and variables → Actions).
+      - name: Redeploy Render
+        env:
+          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$HOOK" ]; then echo "RENDER_DEPLOY_HOOK not set; skipping. Deploy from the Render dashboard instead."; exit 0; fi
+          curl -fsS -X POST "$HOOK" > /dev/null && echo "Render deploy started"
