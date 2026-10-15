@@ -200,7 +200,8 @@ function onSignedIn(u,created){
   if(u.role==="supplier")showTab(Repo.myListing?"requests":"listing");
   else if(created&&!u.business)showTab("account");
   else showTab("buy");
-  toast(created?(u.role==="supplier"?`Welcome${first?", "+first:""}! Add your listing to start getting requests.`:`Welcome${first?", "+first:""}!`):`Welcome back${first?", "+first:""}`);
+  const confirm=created&&u.email&&!u.emailVerified&&Repo._cfg?.emailOn?" We've emailed you a link to confirm your address.":"";
+  toast((created?(u.role==="supplier"?`Welcome${first?", "+first:""}! Add your listing to start getting requests.`:`Welcome${first?", "+first:""}!`):`Welcome back${first?", "+first:""}`)+confirm);
 }
 
 /* ===================== ACCOUNT ===================== */
@@ -208,7 +209,9 @@ function renderAccount(){
   const el=$("#v-account");const me=Repo.me;
   if(!signedIn()){setHTML(el,`<div class="panel empty">${ico("art-shop","")}<h2>You're browsing as a guest</h2><p>Create an account to keep your requests and orders, and to log in from any device.</p><div class="actions" style="justify-content:center"><button class="btn primary" data-action="acct-auth" data-v="signup">Create an account</button><button class="btn" data-action="acct-auth" data-v="login">Log in</button></div></div>`);return;}
   if(el.contains(document.activeElement))return;
+  const unconfirmed=!me.demo&&me.email&&!me.emailVerified&&Repo._cfg?.emailOn;
   setHTML(el,`<div class="pagehead"><div><h1>Your account</h1><p class="muted">${ROLE_NAME[me.role]} account${me.demo?" (demo, saved in this browser)":""}</p></div></div>
+    ${unconfirmed?`<div class="note verifynote"><b>Confirm your email.</b> We sent a link to ${esc(me.email)}. Confirmed emails get order updates and can reset a password. <button class="link" data-action="acct-verify">Send it again</button></div>`:""}
     <form class="panel pad sform" data-form="account" novalidate>
       <div class="fields">
         <div class="field"><label for="acName">Your name</label><input id="acName" value="${esc(me.name)}" autocomplete="name"></div>
@@ -411,13 +414,45 @@ function showTeamView(v,quiet){
   if(locked){gate.innerHTML=`<div class="panel pad gate"><h3>Team only</h3><p class="muted">Enter the admin key set on the server (ADMIN_KEY) to manage suppliers, sign-ups and outreach.</p>
       <form class="warow" data-form="admin-key"><input id="adminKey" type="password" autocomplete="current-password" placeholder="Admin key" aria-label="Admin key"><button class="btn primary">Unlock</button></form></div>`;}
   else gate.innerHTML="";
-  const show={network:"s-network",apps:"s-apps",outreach:"i-outreach",desk:"s-desk",wa:"t-wa"};
+  const show={setup:"s-setup",network:"s-network",apps:"s-apps",outreach:"i-outreach",desk:"s-desk",wa:"t-wa"};
   Object.entries(show).forEach(([k,id])=>{const e=document.getElementById(id);if(e)e.hidden=locked||k!==v;});
   if(locked)return;
+  if(v==="setup"&&!quiet)renderSetup();
   if(v==="network")renderSuppliers();if(v==="desk")renderDesk();if(v==="wa")renderWhatsApp();
   if(!quiet){if(v==="apps")renderApps();if(v==="outreach")renderOutreachView();}
 }
-function onTeamUnlocked(){Repo.refresh().then(()=>{renderNav();renderAcct();showTab("team");showTeamView(teamView);}).catch(fail);}
+/* Team → Setup: what's switched on, and the one thing to do for each item that isn't. */
+async function renderSetup(){
+  const el=document.getElementById("s-setup");if(!el)return;
+  if(Repo.mode!=="server"){setHTML(el,`<div class="panel empty">${ico("art-shop","")}<h2>Setup lives on the live app</h2><p>Open VyaparBoss on its server to see which keys are set.</p></div>`);return;}
+  if(!el.innerHTML)el.innerHTML=`<p class="muted">Checking the server…</p>`;
+  let s;try{s=await Repo.setup();}catch(e){el.innerHTML=`<div class="errors">${esc(e.message)}</div>`;el._html=null;return;}
+  const c=s.counts,ago=t=>t?`${Math.max(1,Math.round((Date.now()-t)/6e4))} min ago`:"not yet";
+  const item=(ok,title,detail,todo,must)=>`<li class="setup-i ${ok?"ok":must?"must":"opt"}"><span class="setup-dot" aria-hidden="true">${ok?"✓":must?"!":"·"}</span><div><b>${title}</b><p>${detail}</p>${ok||!todo?"":`<p class="setup-do">${todo}</p>`}</div><span class="pill ${ok?"good":must?"bad":""}">${ok?"On":must?"Do this first":"Optional"}</span></li>`;
+  const st=s.storage,keep=st.kind!=="disk"||st.dataFile;
+  const html=`<p class="muted lede-sm">Everything below is set in Render → vyaparboss → Environment. After saving, Render restarts the app and this page updates.</p>
+    <ol class="setup">
+      ${item(keep&&!st.error,"Data survives redeploys",st.kind==="upstash"?(st.error?`Saving to Upstash failed: ${esc(st.error)}`:`Saved to Upstash ${ago(st.lastSaved)}.`):st.dataFile?"Saved on a permanent disk (DATA_FILE).":"Data is on a temporary disk. A redeploy erases accounts and orders.",
+        `Create a free Redis database at <a href="https://upstash.com" target="_blank" rel="noopener">upstash.com</a> (Mumbai region), then add <code>UPSTASH_REDIS_REST_URL</code> and <code>UPSTASH_REDIS_REST_TOKEN</code>.`,true)}
+      ${item(true,"Team tools","The admin key is set; you're using it now.")}
+      ${item(s.email.on,"Email",s.email.on?`Sending through ${esc(s.email.provider)} as ${esc(s.email.from)}.${s.email.contactTo?" Contact messages are forwarded.":" Add <code>CONTACT_TO</code> to get contact messages by email."}`:"Off: no password resets, email confirmation, order emails or outreach.",
+        `Free Brevo account → SMTP &amp; API → API key. Add <code>EMAIL_API_KEY</code>, <code>OUTREACH_FROM_EMAIL</code> (a sender verified in Brevo) and <code>CONTACT_TO</code>.`,true)}
+      ${item(s.signIn.google,"Sign in with Google",s.signIn.google?"On.":"Off: people sign in with email and password.",`Google Cloud → APIs &amp; Services → Credentials → OAuth client (Web), origin <code>${esc(s.publicUrl)}</code>. Add <code>GOOGLE_CLIENT_ID</code>. Steps in docs/SIGN_IN_SETUP.md.`)}
+      ${item(s.signIn.apple,"Sign in with Apple",s.signIn.apple?"On.":"Off.","Needs the Apple Developer Program (US$99 a year). Add <code>APPLE_CLIENT_ID</code>.")}
+      ${item(s.signIn.facebook,"Sign in with Facebook",s.signIn.facebook?"On.":"Off.","Needs a Meta developer app. Add <code>FACEBOOK_APP_ID</code> and <code>FACEBOOK_APP_SECRET</code>.")}
+      ${item(!!s.ai,"Bhai's AI",s.ai?`Reading requests with ${esc(s.ai)}.`:"Off: Bhai uses the built-in rule reader.","Add <code>GEMINI_API_KEY</code> from aistudio.google.com.")}
+      ${item(s.whatsapp,"WhatsApp",s.whatsapp?"Connected.":"Not connected.","Needs a Meta business account. Steps in docs/WHATSAPP_SETUP.md.")}
+      ${item(!c.samplesShown,"Real suppliers only",c.samplesShown?`The 15 example suppliers still show to buyers. ${c.listings} supplier${c.listings===1?"":"s"} listed themselves.`:"Example suppliers are hidden.","Once you have real suppliers for your first category, hide the examples in Network.")}
+    </ol>
+    <div class="kpis setup-k">
+      <div class="panel kpi"><span>Buyers</span><b>${c.buyers}</b><small>${c.verifiedEmails} confirmed emails in all</small></div>
+      <div class="panel kpi"><span>Suppliers</span><b>${c.suppliers}</b><small>${c.listings} listed, ${c.verifiedListings} verified</small></div>
+      <div class="panel kpi"><span>Real requests</span><b>${c.requests}</b><small>${c.orders} order${c.orders===1?"":"s"}</small></div>
+      <div class="panel kpi"><span>Inbox</span><b>${c.signups+c.messages}</b><small>${c.signups} sign-ups, ${c.messages} messages</small></div>
+    </div>`;
+  setHTML(el,html);
+}
+function onTeamUnlocked(){teamView="setup";Repo.refresh().then(()=>{renderNav();renderAcct();showTab("team");showTeamView(teamView);}).catch(fail);}
 
 /* ===================== RENDER + EVENTS ===================== */
 function renderRoleViews(){
@@ -430,6 +465,10 @@ function renderRoleViews(){
 }
 /* #reset/<token> from a password-reset email. The token leaves the address bar straight away. */
 function resetRoute(){
+  const v=(location.hash||"").match(/^#verify\/([\w-]{20,})$/);
+  if(v){history.replaceState(null,"",location.pathname+location.search);
+    Repo.verifyEmail(v[1]).then(j=>{toast("Email confirmed. Thank you!");if(j.user){renderAcct();$("#v-account")._html=null;renderRoleViews();}}).catch(e=>toast(e.message));
+    if(!role())showAuth(null,"login");return true;}
   const m=(location.hash||"").match(/^#reset\/([\w-]{20,})$/);if(!m)return false;
   au.token=m[1];history.replaceState(null,"",location.pathname+location.search);showAuth(null,"reset");return true;
 }
@@ -437,6 +476,7 @@ window.addEventListener("hashchange",resetRoute);
 function goHome(){const r=role();if(!r){showAuth();return;}showTab(navFor()[0][0]);}
 function rolesBoot(){
   renderNav();renderAcct();
+  if(Repo.mode==="server")Repo.authConfig().then(()=>{if(!document.getElementById("v-account")?.hidden){$("#v-account")._html=null;renderAccount();}}).catch(()=>{});
   if(/^#(join|quote)/.test(location.hash)){growBoot();return;}
   if(resetRoute())return;
   if(!role()){showAuth();return;}
@@ -449,6 +489,7 @@ Object.assign(ACTIONS,{
   "au-mode":a=>{au.mode=a.dataset.v;au.err=[];au.wrongRole=null;au.sent=null;renderAuth();},
   "au-email":()=>{au.email=!au.email;renderAuth();if(au.email)setTimeout(()=>document.getElementById(au.mode==="signup"?"auName":"auEmail")?.focus(),30);},
   "au-provider":a=>startProvider(a.dataset.v),
+  "acct-verify":()=>Repo.resendVerify().then(j=>toast(j.already?"Your email is already confirmed":"Sent. Check your inbox and spam folder.")).catch(fail),
   "au-forgot":()=>{const e=document.getElementById("auEmail")?.value||"";au.mode="forgot";au.sent=null;au.err=[];renderAuth();const i=document.getElementById("auEmail");if(i){i.value=e;i.focus();}},
   "au-guest":()=>{Repo.setGuest(true);document.body.classList.remove("welcome");renderNav();renderAcct();showTab("buy");},
   "acct-auth":a=>{const d=document.getElementById("acctPick");if(d)d.open=false;showAuth(role()||null,a.dataset.v);},
