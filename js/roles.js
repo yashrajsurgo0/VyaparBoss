@@ -341,6 +341,7 @@ function renderSOrders(){
       ${shipmentHTML(o)}${receiptHTML(o)}
       ${supplierNext(o)}
       ${disputeHTML(o,"supplier")}
+      ${moneyHTML(o,"supplier")}
       <div class="actions"><button class="btn sm ghost" data-action="print-po" data-po="${esc(o.po)}">Print PO</button></div>
     </div>`;}).join(""):`<div class="panel empty">${ico("art-truck","")}<h2>No orders yet</h2><p>When a buyer approves your quote, the purchase order shows up here.</p><button class="btn" data-action="go" data-tab="requests">See requests</button></div>`}</div>`);
 }

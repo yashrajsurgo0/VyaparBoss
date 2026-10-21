@@ -719,3 +719,12 @@ details.schedlist>summary{color:var(--ink)}
 .invitelink .btn{align-self:flex-start}
 .invform{padding:0;margin:0}
 .invform .btn{align-self:flex-start}
+
+/* ===== Payments and invoices on order cards ===== */
+.moneybox{border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;display:flex;flex-direction:column;gap:8px;background:var(--bg)}
+.paylist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;font-size:15px}
+.paylist li{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 0;border-bottom:1px dashed var(--line)}
+.paylist li:last-child{border-bottom:0}
+.paylist li>span:last-child{display:flex;gap:6px;flex-wrap:wrap}
+.po.inv .po-head>div:first-child b{font-size:20px}
+.po.inv .po-head>div:first-child p{margin:4px 0 0;text-align:left}

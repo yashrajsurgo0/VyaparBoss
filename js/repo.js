@@ -123,6 +123,10 @@ const Repo={
     const o=await this.api("PATCH","api/orders/"+encodeURIComponent(po),{action:approve?"approve":"reject",note});
     const i=this.data.orders.findIndex(x=>x.po===po);if(i>=0)this.data.orders[i]=o;this.refresh().catch(()=>{});return o;
   },
+  async payLink(po){return this.api("POST","api/orders/"+encodeURIComponent(po)+"/paylink");},
+  async teamOrder(po,patch){const o=await this.api("PATCH","api/admin/orders/"+encodeURIComponent(po),patch);const i=this.data.orders.findIndex(x=>x.po===po);if(i>=0)this.data.orders[i]=o;return o;},
+  async setFeeTerms(sid,feeAgreed,feeRatePct){const out=await this.api("PATCH","api/admin/suppliers/"+encodeURIComponent(sid),{feeAgreed,feeRatePct});const s=this.data.suppliers.find(x=>x.id===sid);if(s)Object.assign(s,{feeAgreed:out.feeAgreed,feeRate:out.feeRate});return out;},
+  async setFeeRate(ratePct){return this.api("PUT","api/admin/fees",{ratePct});},
   /* Named order actions (confirm, dispatch, deliver, review, dispute, reply, cancel…). Same rules offline via applyOrderAction. */
   async orderAction(po,body,who){
     if(this.mode==="server"){

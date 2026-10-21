@@ -336,6 +336,52 @@ function disputeHTML(o,side){
       ${side==="buyer"?`<p class="hint">Sorted out? <button class="link" data-action="oact" data-act="withdraw" data-po="${esc(o.po)}" data-side="buyer">Close the problem</button>. Otherwise the VyaparBoss team steps in within a working day.</p>`:`<p class="hint">The VyaparBoss team reads this thread and closes the problem once you and the buyer agree.</p>`}`:""}
   </div>`;
 }
+/* Money on an order: invoice, payments recorded by either side, online payment for the buyer. */
+const PAY_PILL={paid:["good","Paid"],part:["gold","Part paid"],claimed:["gold","Payment to confirm"],unpaid:["","Unpaid"]};
+function moneyHTML(o,side){
+  if(o.cancelled||o.approval?.status==="pending"||o.sample&&side==="team")return "";
+  const k=okey(o.po),po=esc(o.po),st=payStatus(o),[pc,pl]=PAY_PILL[st],due=dueOf(o),pays=o.payments||[];
+  const list=pays.length?`<ul class="paylist">${pays.map(p=>`<li><span>${inr(p.amount)} · ${esc(PAY_METHODS[p.method]||p.method)}${p.ref?` · <span class="num">${esc(p.ref)}</span>`:""} · ${fdate(p.at)}</span>
+      <span>${p.status==="confirmed"?`<span class="pill good">${p.method==="razorpay"?(p.test?"Paid online (test)":"Paid online"):"Confirmed"}</span>`:p.status==="not_received"?`<span class="pill bad">Not received</span>`:side==="supplier"?`<button class="btn sm primary" data-action="oact" data-act="payconfirm" data-id="${esc(p.id)}" data-po="${po}" data-side="supplier">Received</button><button class="btn sm ghost" data-action="oact" data-act="paynotreceived" data-id="${esc(p.id)}" data-po="${po}" data-side="supplier">Not received</button>`:`<span class="pill gold">Waiting for supplier</span>`}</span></li>`).join("")}</ul>`:"";
+  const inv=o.invoice?`<p class="hint">Tax invoice <b class="num">${esc(o.invoice.no)}</b>, ${fdate(o.invoice.date)} · <button class="link" data-action="print-inv" data-po="${po}">View or print</button></p>`:"";
+  const payForm=due>0?`<details class="more sub"><summary>${side==="supplier"?"Record a payment you received":"Record a payment you made"} ${ico("i-chev","")}</summary><div>
+    <form class="oform" data-form="oact" data-act="pay" data-po="${po}" data-side="${side}" novalidate><div class="fields">
+      <div class="field"><label for="pa-${k}">Amount (₹)</label><input id="pa-${k}" name="amount" type="number" min="1" step="0.01" inputmode="decimal" value="${due}"></div>
+      <div class="field"><label for="pm-${k}">How</label><select id="pm-${k}" name="method">${Object.entries(PAY_METHODS).filter(([v])=>v!=="razorpay").map(([v,l])=>`<option value="${v}">${l}</option>`).join("")}</select></div>
+      <div class="field"><label for="pr-${k}">Reference (UTR, cheque no.)</label><input id="pr-${k}" name="ref" maxlength="40" class="num"></div>
+    </div>${side==="buyer"?`<p class="hint">The supplier confirms once it reaches them.</p>`:""}<button class="btn sm">Save payment</button></form></div></details>`:"";
+  const online=side==="buyer"&&due>0&&store().payOnline?`<button class="btn sm primary" data-action="pay-online" data-po="${po}">Pay ${inr(due)} online</button>`:"";
+  const invForm=side==="supplier"&&!o.invoice&&o.stage>=2?`<details class="more sub"><summary>Issue tax invoice ${ico("i-chev","")}</summary><div>
+    <form class="oform" data-form="oact" data-act="invoice" data-po="${po}" data-side="supplier" novalidate><div class="fields">
+      <div class="field"><label for="in-${k}">Your invoice number</label><input id="in-${k}" name="number" maxlength="16" class="num" placeholder="e.g. AP/26-27/0042"></div>
+      <div class="field"><label for="id-${k}">Invoice date</label><input id="id-${k}" name="date" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
+    </div><p class="hint">Bhai fills in the GST split, HSN and the buyer's billing details from the order. Check it before you send it.</p><button class="btn sm">Create invoice</button></form></div></details>`:"";
+  const fee=side==="supplier"&&o.fee?`<p class="hint">VyaparBoss fee on this order: ${inr(o.fee.amount)} (${(o.fee.rate*100).toFixed(1)}% of goods, as agreed) · ${esc(o.fee.status)}</p>`:"";
+  return `<div class="moneybox"><div class="ohead"><b>Payment</b><span class="pill ${pc}">${pl}</span></div>
+    <p class="hint">${inr(paidOf(o))} paid of ${inr(o.landed)}${due>0?` · <b>${inr(due)} due</b>`:""}</p>${list}${online?`<div class="actions">${online}</div>`:""}${payForm}${inv}${invForm}${fee}</div>`;
+}
+/* Printable GST tax invoice, issued by the supplier from the order. */
+function invoiceHTML(o){
+  const s=SMAP[o.sid]||{},p=PMAP[o.productId],L=invoiceLines(o,s),b=o.billTo||{},fmt=t=>new Date(t).toLocaleDateString("en-IN",{day:"numeric",month:"long",year:"numeric"});
+  const st=c=>STATE_NAMES[c]||c||"";
+  return `<div class="po inv">
+    <div class="po-head"><div><b>${esc(s.name||o.sname||"")}</b><p>${esc(s.area?s.area+", ":"")}${esc(s.city||o.scity||"")}, ${esc(st(L.fromState))}${s.gstin?`<br>GSTIN ${esc(s.gstin)}`:""}</p></div><div><h1>Tax invoice</h1><p><b>${esc(o.invoice?.no||"")}</b><br>${o.invoice?fmt(o.invoice.date):""}</p></div></div>
+    <div class="po-parties"><div><small>Bill to</small><p><b>${esc(b.business||"Buyer")}</b>${b.address?`<br>${esc(b.address)}`:""}${b.gstin?`<br>GSTIN ${esc(b.gstin)}`:""}</p></div>
+      <div><small>Ship to</small><p>${esc(b.address||o.city)}${b.address?`<br>${esc(o.city)}`:""}</p></div><div><small>Order</small><p>${esc(o.po)}<br>Place of supply: ${esc(st(L.toState))}${o.shipment?.lr?`<br>LR ${esc(o.shipment.lr)}`:""}</p></div></div>
+    <table class="po-lines"><thead><tr><th>Item</th><th>HSN</th><th>Quantity</th><th>Rate</th><th>Taxable value</th></tr></thead>
+      <tbody><tr><td><b>${esc(p.name)}</b><br><small>${esc(p.spec||"")}</small></td><td>${esc(L.hsn)}</td><td>${qfmt(o.qty)} ${p.unit}</td><td>${inr(o.unit??o.subtotal/o.qty,2)}</td><td>${inr(L.taxable)}</td></tr></tbody>
+      <tfoot>${L.intra?`<tr><td colspan="4">CGST ${L.rate/2}%</td><td>${inr(L.cgst,2)}</td></tr><tr><td colspan="4">SGST ${L.rate/2}%</td><td>${inr(L.sgst,2)}</td></tr>`:`<tr><td colspan="4">IGST ${L.rate}%</td><td>${inr(L.igst,2)}</td></tr>`}
+      <tr><td colspan="4">Freight</td><td>${inr(L.freight)}</td></tr><tr class="tot"><td colspan="4">Total</td><td>${inr(L.total)}</td></tr></tfoot></table>
+    <p><small>Amount in words</small><br>${esc(rupeesInWords(L.total))}</p>
+    ${s.terms?`<p><small>Payment terms</small><br>${esc(s.terms)}</p>`:""}
+    <p class="po-fine">Issued by ${esc(s.name||o.sname||"the supplier")} through VyaparBoss for order ${esc(o.po)}. The supplier is responsible for this invoice and its GST filing.${o.sample?" Example only.":""}</p>
+  </div>`;
+}
+function printInvoice(po){
+  const o=store().orders.find(x=>x.po===po);if(!o||!o.invoice)return;
+  let el=document.getElementById("printArea");if(!el){el=document.createElement("div");el.id="printArea";document.body.appendChild(el);}
+  el.innerHTML=invoiceHTML(o);if(typeof window.print==="function")window.print();
+}
 /* Buyer: what to do next with this order. One clear step at a time. */
 function buyerNext(o,sname){
   const k=okey(o.po),po=esc(o.po);
@@ -399,6 +445,7 @@ function renderOrders(){
       ${shipmentHTML(o)}${receiptHTML(o)}
       ${buyerNext(o,sname)}
       ${disputeHTML(o,"buyer")}
+      ${o.sample?"":moneyHTML(o,"buyer")}
       <details class="more"><summary>Details ${ico("i-chev","")}</summary><div>
         <p class="hint">Purchase order <b class="num">${po}</b>, placed ${dstr(o.date)}</p>
         <table class="breakdown"><tbody><tr><td>Goods</td><td>${inr(o.subtotal)}</td></tr><tr><td>GST</td><td>${inr(o.gst)}</td></tr><tr><td>Freight</td><td>${inr(o.freight)}</td></tr><tr class="tot"><td>Total</td><td>${inr(o.landed)}</td></tr></tbody></table>
@@ -425,7 +472,8 @@ function renderOrders(){
 /* Submits any order action form (buyer or supplier) through the same rules as the server. */
 const ACT_DONE={confirm:"Order confirmed. The buyer can see it.",dispatch:"Marked dispatched. The buyer has the LR number.",shipment:"Shipment details updated",transit:"Marked on the way",
   deliver:"Thanks! Delivery recorded.",deliver_issue:"Recorded. The supplier and VyaparBoss team have been told.",review:"Thanks for rating",dispute:"Sent. The supplier and the VyaparBoss team will reply here.",
-  reply:"Sent",withdraw:"Problem closed",resolve:"Problem resolved",cancel:"Order cancelled"};
+  reply:"Sent",withdraw:"Problem closed",resolve:"Problem resolved",cancel:"Order cancelled",
+  invoice:"Invoice created. The buyer can view it.",pay:"Payment recorded",payconfirm:"Marked as received",paynotreceived:"Marked as not received. The buyer will check."};
 function readOrderForm(f){
   const body={};
   (f.querySelectorAll?f.querySelectorAll("[name]"):[]).forEach(i=>{if(i.type==="radio"){if(i.checked)body[i.name]=i.value;}else body[i.name]=i.value;});
@@ -693,7 +741,9 @@ const ACTIONS={
   "sched-del":a=>Repo.deleteSchedule(a.dataset.id).then(()=>{toast("Repeat order removed");renderOrders();}).catch(fail),
   "decide-no":a=>{const note=document.getElementById("dn-"+okey(a.dataset.po))?.value||"";a.disabled=true;
     Repo.decideOrder(a.dataset.po,false,note).then(()=>{toast("Declined. They'll get an email.");renderAll();}).catch(e=>{a.disabled=false;fail(e);});},
-  oact:a=>orderAct(a.dataset.po,a.dataset.act,a.dataset.side,{},a),
+  oact:a=>orderAct(a.dataset.po,a.dataset.act,a.dataset.side,a.dataset.id?{id:a.dataset.id}:{},a),
+  "print-inv":a=>printInvoice(a.dataset.po),
+  "pay-online":a=>{a.disabled=true;Repo.payLink(a.dataset.po).then(l=>{a.disabled=false;try{window.open(l.url,"_blank","noopener");}catch(e){}toast(l.test?"Opened Razorpay (test mode, no real money)":"Opened Razorpay");}).catch(e=>{a.disabled=false;fail(e);});},
   locale:a=>setLocale(a.dataset.v),
   theme:a=>{setTheme(a.dataset.v);toast(a.dataset.v==="dark"?"Dark look":"Beige look");},
   go:a=>showTab(a.dataset.tab),
