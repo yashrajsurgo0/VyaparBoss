@@ -110,6 +110,7 @@ function renderAuth(){
       ${errs}<p class="hint">This signs you out on other devices.</p></div>`:"";
   const panel=recover||(!r?"":`<div class="card authcard">
       <div class="seg" role="tablist" aria-label="Sign up or log in"><button data-action="au-mode" data-v="signup" aria-selected="${signup}">Sign up</button><button data-action="au-mode" data-v="login" aria-selected="${!signup}">Log in</button></div>
+      ${au.inviteNote&&!sup?`<p class="note">You've been invited to buy for a team on VyaparBoss. Sign up or log in as a buyer to accept.</p>`:""}
       <p class="q-title">${signup?(sup?"Create your supplier account":"Create your buyer account"):(sup?"Log in as a supplier":"Log in as a buyer")}</p>
       ${providers}${emailForm}${errs}${legal}
       ${cfg.demo?`<p class="hint">This demo copy keeps your account in this browser only. Google, Apple and Facebook work on the live app once they're switched on.</p>`:""}
@@ -193,6 +194,7 @@ async function submitRecover(kind){
   }
 }
 function onSignedIn(u,created){
+  au.inviteNote=false;if(pendingInvite&&u.role==="buyer")setTimeout(joinPending,50);
   Repo.setGuest(false);document.body.classList.remove("welcome");
   au={...au,email:false,err:[],busy:false};
   renderNav();renderAcct();
@@ -210,6 +212,7 @@ function renderAccount(){
   if(!signedIn()){setHTML(el,`<div class="panel empty">${ico("art-shop","")}<h2>You're browsing as a guest</h2><p>Create an account to keep your requests and orders, and to log in from any device.</p><div class="actions" style="justify-content:center"><button class="btn primary" data-action="acct-auth" data-v="signup">Create an account</button><button class="btn" data-action="acct-auth" data-v="login">Log in</button></div></div>`);return;}
   if(el.contains(document.activeElement))return;
   const unconfirmed=!me.demo&&me.email&&!me.emailVerified&&Repo._cfg?.emailOn;
+  const before=el._html;
   setHTML(el,`<div class="pagehead"><div><h1>Your account</h1><p class="muted">${ROLE_NAME[me.role]} account${me.demo?" (demo, saved in this browser)":""}</p></div></div>
     ${unconfirmed?`<div class="note verifynote"><b>Confirm your email.</b> We sent a link to ${esc(me.email)}. Confirmed emails get order updates and can reset a password. <button class="link" data-action="acct-verify">Send it again</button></div>`:""}
     <form class="panel pad sform" data-form="account" novalidate>
@@ -219,11 +222,16 @@ function renderAccount(){
         <div class="field"><label for="acEmail">Email</label><input id="acEmail" type="email" value="${esc(me.email)}" ${me.email?"readonly":""}></div>
         <div class="field"><label for="acPhone">Mobile</label><input id="acPhone" value="${esc(me.phone)}" inputmode="tel"></div>
         <div class="field"><label for="acCity">City</label><input id="acCity" value="${esc(me.city)}" list="acCities"><datalist id="acCities">${Object.keys(CITIES).sort().map(c=>`<option value="${c}">`).join("")}</datalist></div>
+        <div class="field"><label for="acGstin">GSTIN (for tax invoices)</label><input id="acGstin" value="${esc(me.gstin||"")}" maxlength="15" autocapitalize="characters" class="num" placeholder="Optional"></div>
+        <div class="field wide"><label for="acAddr">${me.role==="supplier"?"Business address":"Billing and delivery address"}</label><input id="acAddr" value="${esc(me.address||"")}" maxlength="300" autocomplete="street-address" placeholder="Shown on invoices"></div>
+        ${me.role==="buyer"&&!me.org?.member?`<div class="field"><label for="acBudget">Monthly buying budget (₹)</label><input id="acBudget" type="number" min="0" step="1000" inputmode="numeric" value="${me.org?.budget||""}" placeholder="Optional"><span class="hint">Bhai warns you before an order goes over it.</span></div>`:""}
       </div>
       ${me.demo?"":`<div class="field checks"><label class="toggle"><input type="checkbox" id="acNotify" ${me.notify!==false?"checked":""}> Email me about my ${me.role==="supplier"?"new requests and orders":"quotes and orders"}</label></div>`}
       <p class="hint">Signs in with: ${[me.hasPassword||me.demo?"email and password":null,...(me.providers||[]).map(p=>p[0].toUpperCase()+p.slice(1))].filter(Boolean).join(", ")||"email"}.</p>
       <div class="actions"><button class="btn primary">Save</button><button type="button" class="btn ghost" data-action="acct-logout">Log out</button></div>
     </form>
+    ${me.role==="buyer"?`<section class="panel pad acctteam" id="teamBox">${me.org?.member?`<h2 class="sub">Your team</h2><p>You buy for <b>${esc(me.org.name)}</b>. ${me.org.limit==null?"You can place orders of any size.":me.org.limit===0?`Every order goes to ${esc(me.org.ownerName)} for approval first.`:`Orders above ${inr(me.org.limit)} go to ${esc(me.org.ownerName)} for approval first.`}</p><div class="actions"><button class="btn sm ghost" data-action="team-leave">Leave this team</button></div>`
+      :`<h2 class="sub">Your team</h2><p class="muted">${me.demo?"Teams work on the live app.":"Loading…"}</p>`}</section>`:""}
     ${me.demo?"":`<details class="panel pad more acctmore"><summary>${me.hasPassword?"Change password":"Add a password"} ${ico("i-chev","")}</summary>
       <form class="sform" data-form="acct-pass" novalidate><div class="fields">
         ${me.hasPassword?`<div class="field"><label for="acCur">Current password</label><input id="acCur" type="password" autocomplete="current-password"></div>`:""}
@@ -238,6 +246,27 @@ function renderAccount(){
       </form>
     </details>
     <p class="hint">See our <a href="privacy.html" target="_blank" rel="noopener">privacy policy</a> and <a href="terms.html" target="_blank" rel="noopener">terms</a>.</p>`);
+  if(el._html!==before&&me.role==="buyer"&&!me.org?.member&&!me.demo)loadTeam();
+}
+
+/* Account → Your team (owner): invite people, set each person's approval limit, remove them. */
+let lastInvite=null;
+async function loadTeam(){
+  const box=document.getElementById("teamBox");if(!box)return;
+  let o;try{o=await Repo.org();}catch(e){box.innerHTML=`<h2 class="sub">Your team</h2><p class="muted">${esc(e.message)}</p>`;return;}
+  if(o.member)return;
+  const lim=v=>v==null?"No limit":v===0?"Every order":"Above "+inr(v);
+  box.innerHTML=`<h2 class="sub">Your team</h2>
+    <p class="muted">Let colleagues place orders for ${esc(Repo.me.business||"your business")}. Orders above their limit, or past your monthly budget, wait for your approval before the supplier sees them.</p>
+    ${o.pending?`<p class="note">${o.pending} order${o.pending>1?"s are":" is"} waiting for your approval. <button class="link" data-action="go" data-tab="orders">Review</button></p>`:""}
+    ${o.members.length?`<ul class="memberlist">${o.members.map(m=>`<li><div><b>${esc(m.name||m.email)}</b><small>${esc(m.email)} · needs approval: ${lim(m.limit)}</small></div>
+      <form class="replyrow" data-form="team-limit" data-id="${esc(m.id)}" novalidate><label class="sr" for="ml-${esc(m.id)}">Approval limit (₹)</label><input id="ml-${esc(m.id)}" type="number" min="0" step="1000" inputmode="numeric" value="${m.limit??""}" placeholder="No limit"><button class="btn sm">Save</button><button class="btn sm ghost" type="button" data-action="team-remove" data-id="${esc(m.id)}">Remove</button></form></li>`).join("")}</ul>`:""}
+    ${o.invites.length?`<ul class="memberlist">${o.invites.map(i=>`<li><div><b>${esc(i.email)}</b><small>Invited · needs approval: ${lim(i.limit)} · expires ${fdate(i.exp)}</small></div><button class="btn sm ghost" data-action="team-uninvite" data-id="${esc(i.id)}">Cancel invite</button></li>`).join("")}</ul>`:""}
+    ${lastInvite?`<div class="note invitelink"><b>Invite link for ${esc(lastInvite.email)}</b>${lastInvite.emailed?" (also emailed to them)":" (email isn't set up, so send this on WhatsApp)"}<input readonly value="${esc(lastInvite.link)}" id="invLink" aria-label="Invite link"><button class="btn sm" data-action="team-copy">Copy link</button></div>`:""}
+    <form class="sform invform" data-form="team-invite" novalidate><div class="fields">
+      <div class="field"><label for="tiEmail">Colleague's email</label><input id="tiEmail" type="email" autocomplete="off"></div>
+      <div class="field"><label for="tiLimit">Needs your approval above (₹)</label><input id="tiLimit" type="number" min="0" step="1000" inputmode="numeric" placeholder="Empty = no limit, 0 = every order"></div>
+    </div><button class="btn">Invite</button></form>`;
 }
 
 /* ===================== SUPPLIER SIDE ===================== */
@@ -273,18 +302,46 @@ function renderRequests(){
     </div>
     <div class="desklist">${list.length?list.map(card).join(""):`<div class="panel empty">${ico("art-truck","")}<h2>${all.length?"Nothing here":"No requests yet"}</h2><p>${all.length?"Try another filter.":"When a buyer needs something you sell, in a quantity and place you can serve, it shows up here. Keep your rates current in My listing."}</p></div>`}</div>`);
 }
-const NEXT_STAGE=["Confirm order","Mark dispatched","Mark in transit","Mark delivered"];
+/* Supplier: each order shows the one next step (confirm → dispatch with LR number → on the way), then the buyer's receipt and rating. */
+function supplierNext(o){
+  const k=okey(o.po),po=esc(o.po),sh=o.shipment||{};
+  if(o.cancelled)return `<p class="issue">Cancelled by ${o.cancelled.by==="supplier"?"you":o.cancelled.by==="buyer"?"the buyer":"the VyaparBoss team"}${o.cancelled.reason?`: ${esc(o.cancelled.reason)}`:""}.</p>`;
+  const shipForm=(act,label)=>`<form class="oform" data-form="oact" data-act="${act}" data-po="${po}" data-side="supplier" novalidate><div class="fields">
+      <div class="field"><label for="tr-${k}">Transporter or courier</label><input id="tr-${k}" name="transporter" maxlength="80" value="${esc(sh.transporter||"")}" placeholder="e.g. VRL Logistics"></div>
+      <div class="field"><label for="lr-${k}">LR / AWB / docket no.</label><input id="lr-${k}" name="lr" maxlength="40" value="${esc(sh.lr||"")}" class="num"></div>
+      <div class="field"><label for="vh-${k}">Vehicle no. (optional)</label><input id="vh-${k}" name="vehicle" maxlength="20" value="${esc(sh.vehicle||"")}" placeholder="MH 12 AB 1234"></div>
+      <div class="field"><label for="ed-${k}">Expected delivery (optional)</label><input id="ed-${k}" name="eta" type="date" value="${sh.eta?new Date(sh.eta).toISOString().slice(0,10):""}"></div>
+      <div class="field wide"><label for="sn-${k}">Note for the buyer (optional)</label><input id="sn-${k}" name="note" maxlength="200" value="${esc(sh.note||"")}" placeholder="e.g. 24 cartons, 2 bundles"></div>
+    </div><button class="btn primary sm">${label}</button></form>`;
+  if(o.stage===0)return `<div class="actions"><button class="btn sm primary" data-action="oact" data-act="confirm" data-po="${po}" data-side="supplier">Confirm order</button></div>
+    <details class="more sub"><summary>Can't take this order? ${ico("i-chev","")}</summary><div><form class="oform replyrow" data-form="oact" data-act="cancel" data-po="${po}" data-side="supplier" novalidate>
+      <label class="sr" for="dc-${k}">Reason</label><input id="dc-${k}" name="reason" maxlength="200" placeholder="Reason, e.g. no stock this week"><button class="btn sm danger">Decline</button></form>
+      <p class="hint">Declining before you confirm is fine; the buyer picks another supplier. Declining after you confirm hurts your record.</p></div></details>`;
+  if(o.stage===1)return `<details class="more nextstep" open><summary>Dispatch details ${ico("i-chev","")}</summary><div>${shipForm("dispatch","Mark dispatched")}<p class="hint">The buyer gets the LR number straight away, so they can track it with the transporter.</p></div></details>`;
+  if(o.stage<4)return `${o.stage===2?`<div class="actions"><button class="btn sm primary" data-action="oact" data-act="transit" data-po="${po}" data-side="supplier">Mark on the way</button></div>`:`<p class="hint">Waiting for the buyer to confirm it arrived.</p>`}
+    <details class="more sub"><summary>Change shipment details ${ico("i-chev","")}</summary><div>${shipForm("shipment","Save")}</div></details>`;
+  return o.review?`<p class="hint">The buyer rated this order ${stars(o.review.stars)}${o.review.text?` “${esc(o.review.text)}”`:""}</p>`:`<p class="hint">Delivered. The buyer hasn't rated it yet.</p>`;
+}
 function renderSOrders(){
   const el=$("#v-sorders"),me=Repo.myListing;
   if(!me){setHTML(el,`<div class="pagehead"><div><h1>Orders</h1></div></div>`+needListing("orders buyers place with you show up here"));return;}
+  const ae=document.activeElement;if(el.contains(ae)&&/^(INPUT|TEXTAREA|SELECT)$/.test(ae?.tagName||""))return;
   const list=store().orders.filter(o=>o.sid===me.id);
-  setHTML(el,`<div class="pagehead"><div><h1>Orders</h1><p class="muted">Purchase orders buyers placed with you. Move each one along so the buyer can see where it is.</p></div></div>
-    <div class="olist">${list.length?list.map(o=>{const p=PMAP[o.productId];return `<div class="panel ocard">
-      <div class="ohead"><div><h3>${qfmt(o.qty)} ${p.unit} ${esc(p.name)}</h3><p class="meta">To a buyer in ${esc(o.city)} · PO ${esc(o.po)} · ${dstr(o.date)}</p></div><div class="amt num">${inr(o.subtotal)}<small style="color:var(--muted)">goods, before GST</small></div></div>
-      <div class="track" aria-hidden="true">${STAGES.map((_,i)=>`<i class="${i<o.stage||o.stage===4?"on":i===o.stage?"now":""}"></i>`).join("")}</div>
-      <div class="ostatus"><b>${STAGES[o.stage]}</b><span class="muted">${o.stage===4?"Delivered":`Buyer expects it by ${dstr(o.date+o.eta*864e5)}`}</span></div>
-      ${o.issue?`<p class="issue">Buyer reported: ${esc(o.issue)}</p>`:""}
-      <div class="actions">${o.stage<4?`<button class="btn sm primary" data-action="so-next" data-po="${esc(o.po)}">${NEXT_STAGE[o.stage]}</button>`:""}<button class="btn sm ghost" data-action="print-po" data-po="${esc(o.po)}">Print PO</button></div>
+  const t=me.track;
+  const rec=t?.delivered?`<div class="kpis trackk">
+      <div class="panel kpi"><span>On time</span><b>${me.onTime}%</b><small>${t.onTime} of ${t.delivered} delivered by the promised date</small></div>
+      <div class="panel kpi"><span>Buyer rating</span><b>${me.rating!=null?me.rating:"–"}</b><small>${t.rated?`from ${t.rated} rating${t.rated>1?"s":""}`:"no ratings yet"}</small></div>
+      <div class="panel kpi"><span>Problems</span><b>${t.disputes}</b><small>raised by buyers</small></div></div>
+    <p class="hint">Buyers see these numbers, and Bhai uses them to rank suppliers. They come only from real orders and can't be edited.</p>`:"";
+  setHTML(el,`<div class="pagehead"><div><h1>Orders</h1><p class="muted">Purchase orders buyers placed with you. Confirm, dispatch with the LR number, and the buyer can follow it.</p></div></div>${rec}
+    <div class="olist">${list.length?list.map(o=>{const p=PMAP[o.productId];return `<div class="panel ocard${o.cancelled?" cancelled":""}">
+      <div class="ohead"><div><h3>${qfmt(o.qty)} ${p.unit} ${esc(p.name)}</h3><p class="meta">To a buyer in ${esc(o.city)} · PO ${esc(o.po)} · ${dstr(o.date)}${o.sample?" · example":""}</p></div><div class="amt num">${inr(o.subtotal)}<small style="color:var(--muted)">goods, before GST</small></div></div>
+      ${o.cancelled?"":`<div class="track" aria-hidden="true">${STAGES.map((_,i)=>`<i class="${i<o.stage||o.stage===4?"on":i===o.stage?"now":""}"></i>`).join("")}</div>`}
+      <div class="ostatus"><b>${o.cancelled?"Cancelled":STAGES[o.stage]}</b><span class="muted">${o.stage===4?`Delivered ${fdate(o.history?.[4]||Date.now())}${o.history?.[4]>promisedBy(o)+432e5?' <span class="pill warn">Late</span>':' <span class="pill good">On time</span>'}`:o.cancelled?"":`You promised ${fdate(promisedBy(o))}${isLate(o)?' <span class="pill bad">Running late</span>':""}`}</span></div>
+      ${shipmentHTML(o)}${receiptHTML(o)}
+      ${supplierNext(o)}
+      ${disputeHTML(o,"supplier")}
+      <div class="actions"><button class="btn sm ghost" data-action="print-po" data-po="${esc(o.po)}">Print PO</button></div>
     </div>`;}).join(""):`<div class="panel empty">${ico("art-truck","")}<h2>No orders yet</h2><p>When a buyer approves your quote, the purchase order shows up here.</p><button class="btn" data-action="go" data-tab="requests">See requests</button></div>`}</div>`);
 }
 function renderListing(){
@@ -464,7 +521,16 @@ function renderRoleViews(){
   if(vis("v-team"))showTeamView(teamView,!$("#teamGate").innerHTML&&document.getElementById(teamView==="apps"?"s-apps":"i-outreach")?.innerHTML!=="");
 }
 /* #reset/<token> from a password-reset email. The token leaves the address bar straight away. */
+let pendingInvite=null;
+function joinPending(){
+  if(!pendingInvite)return;const tok=pendingInvite;pendingInvite=null;
+  Repo.joinTeam(tok).then(u=>{toast(`You've joined ${u.org?.name||"the team"}`);renderAcct();showTab("orders");}).catch(e=>toast(e.message));
+}
 function resetRoute(){
+  const ti=(location.hash||"").match(/^#team-invite\/([\w-]{20,})$/);
+  if(ti){history.replaceState(null,"",location.pathname+location.search);pendingInvite=ti[1];
+    if(signedIn()&&Repo.me.role==="buyer"){joinPending();return false;}
+    au.inviteNote=true;showAuth("buyer","signup");return true;}
   const v=(location.hash||"").match(/^#verify\/([\w-]{20,})$/);
   if(v){history.replaceState(null,"",location.pathname+location.search);
     Repo.verifyEmail(v[1]).then(j=>{toast("Email confirmed. Thank you!");if(j.user){renderAcct();$("#v-account")._html=null;renderRoleViews();}}).catch(e=>toast(e.message));
@@ -489,6 +555,10 @@ Object.assign(ACTIONS,{
   "au-mode":a=>{au.mode=a.dataset.v;au.err=[];au.wrongRole=null;au.sent=null;renderAuth();},
   "au-email":()=>{au.email=!au.email;renderAuth();if(au.email)setTimeout(()=>document.getElementById(au.mode==="signup"?"auName":"auEmail")?.focus(),30);},
   "au-provider":a=>startProvider(a.dataset.v),
+  "team-remove":a=>Repo.removeMember(a.dataset.id).then(()=>{toast("Removed from your team");loadTeam();}).catch(fail),
+  "team-uninvite":a=>Repo.cancelInvite(a.dataset.id).then(()=>{toast("Invite cancelled");loadTeam();}).catch(fail),
+  "team-copy":()=>{const i=document.getElementById("invLink");if(!i)return;const ok=()=>toast("Link copied");try{navigator.clipboard.writeText(i.value).then(ok,()=>{i.select();toast("Press Ctrl+C to copy");});}catch(e){i.select();}},
+  "team-leave":()=>Repo.removeMember(Repo.me.id).then(()=>Repo.refresh()).then(()=>{toast("You left the team");$("#v-account")._html=null;renderAccount();}).catch(fail),
   "acct-verify":()=>Repo.resendVerify().then(j=>toast(j.already?"Your email is already confirmed":"Sent. Check your inbox and spam folder.")).catch(fail),
   "au-forgot":()=>{const e=document.getElementById("auEmail")?.value||"";au.mode="forgot";au.sent=null;au.err=[];renderAuth();const i=document.getElementById("auEmail");if(i){i.value=e;i.focus();}},
   "au-guest":()=>{Repo.setGuest(true);document.body.classList.remove("welcome");renderNav();renderAcct();showTab("buy");},
@@ -496,8 +566,6 @@ Object.assign(ACTIONS,{
   "acct-logout":async()=>{const d=document.getElementById("acctPick");if(d)d.open=false;await Repo.logout();flow=freshFlow();au={...au,role:null,mode:"login",email:false};toast("Logged out");showAuth();},
   "team-open":()=>{if(Repo.mode!=="server")try{localStorage.setItem(KEY+".team","1");}catch(e){}renderNav();renderAcct();showTab("team");showTeamView(teamView);},
   "rq-status":a=>{rq.status=a.dataset.v;renderRequests();},
-  "so-next":a=>{const o=store().orders.find(x=>x.po===a.dataset.po);if(!o||o.stage>=4)return;const history=o.history.slice();history[o.stage+1]=Date.now();
-    Repo.updateOrder(o.po,{stage:o.stage+1,history}).then(()=>{toast(`${STAGES[o.stage]}`);renderSOrders();}).catch(fail);renderSOrders();},
   "listing-edit":()=>{const me=Repo.myListing;if(!me)return;$("#v-listing").innerHTML=`<div class="pagehead"><div><h1>My listing</h1></div></div><div id="listingForm"></div>`;$("#v-listing")._html=null;openSupplierForm(me,"listingForm");},
   "df-toggle":()=>{df.open=!df.open;renderDirectory();},
   "df-cat":a=>{df.cat=a.dataset.v;if(df.product&&df.cat!=="all"&&PMAP[df.product].cat!==df.cat){df.product="";df.maxPrice=0;if(df.sort==="price")df.sort="best";}renderDirectory();},
@@ -511,14 +579,18 @@ document.addEventListener("submit",e=>{
   const f=e.target.closest("form[data-form]");if(!f)return;const k=f.dataset.form;
   if(k==="au-signup"||k==="au-login"){e.preventDefault();submitAuth(k==="au-signup"?"signup":"login");}
   if(k==="au-forgot"||k==="au-reset"){e.preventDefault();submitRecover(k==="au-forgot"?"forgot":"reset");}
+  if(k==="team-invite"){e.preventDefault();const em=document.getElementById("tiEmail")?.value||"",lim=document.getElementById("tiLimit")?.value??"";
+    Repo.invite(em,lim).then(j=>{lastInvite={email:em.trim().toLowerCase(),link:j.link,emailed:j.emailed};toast("Invite created");loadTeam();}).catch(fail);}
+  if(k==="team-limit"){e.preventDefault();const v=document.getElementById("ml-"+f.dataset.id)?.value??"";
+    Repo.setMemberLimit(f.dataset.id,v).then(()=>{toast("Limit saved");document.activeElement?.blur?.();loadTeam();}).catch(fail);}
   if(k==="acct-pass"){e.preventDefault();const cur=document.getElementById("acCur")?.value||"",nw=document.getElementById("acNew")?.value||"";
     if(nw.length<8){fail(new Error("Use a password of at least 8 characters"));return;}
     Repo.changePassword(cur,nw).then(()=>{toast("Password saved");$("#v-account")._html=null;document.activeElement?.blur?.();renderAccount();}).catch(fail);}
   if(k==="acct-delete"){e.preventDefault();if((document.getElementById("acDel")?.value||"").trim().toUpperCase()!=="DELETE"){fail(new Error("Type DELETE to confirm"));return;}
     Repo.deleteMe().then(()=>{flow=freshFlow();au={...au,role:null,mode:"signup",email:false};toast("Your account is deleted");showAuth();}).catch(fail);}
   if(k==="account"){e.preventDefault();const g=id=>document.getElementById(id)?.value??"";
-    const nt=document.getElementById("acNotify");
-    Repo.updateMe({name:g("acName"),business:g("acBiz"),email:g("acEmail"),phone:g("acPhone"),city:g("acCity"),...(nt?{notify:nt.checked}:{})}).then(()=>{toast("Saved");$("#v-account")._html=null;document.activeElement?.blur?.();renderAccount();renderAcct();}).catch(fail);}
+    const nt=document.getElementById("acNotify"),bd=document.getElementById("acBudget");
+    Repo.updateMe({name:g("acName"),business:g("acBiz"),email:g("acEmail"),phone:g("acPhone"),city:g("acCity"),gstin:g("acGstin"),address:g("acAddr"),...(nt?{notify:nt.checked}:{}),...(bd?{budgetMonthly:bd.value}:{})}).then(()=>{toast("Saved");$("#v-account")._html=null;document.activeElement?.blur?.();renderAccount();renderAcct();}).catch(fail);}
   if(k==="myquote"){e.preventDefault();const id=f.dataset.rfq,g=s=>document.getElementById(`mq-${s}-${id}`)?.value??"";
     const btn=f.querySelector("button");if(btn)btn.disabled=true;
     Repo.myQuote(id,{unit:g("u"),lead:g("l"),note:g("n")}).then(()=>{toast("Quote sent. The buyer sees it with GST and freight added.");document.activeElement?.blur?.();renderRequests();}).catch(err=>{if(btn)btn.disabled=false;fail(err);});}

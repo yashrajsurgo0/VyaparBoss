@@ -29,8 +29,23 @@ const Repo={
     else{this.data={...buildSampleData(),suppliers:[],useSamples:true};this.saveLocal();}
     let me=null;try{me=JSON.parse(localStorage.getItem(KEY+".me")||"null");}catch(e){}
     this.data.me=me;this.data.team=false;
+    this.data.schedules||=[];
     this.dropSamples();
     setSuppliers(this.data.suppliers,this.data.useSamples);
+    this.runLocalSchedules();
+  },
+  /* Offline demo: due repeat orders make a fresh request here, the same way the server does. Never an order. */
+  runLocalSchedules(now=Date.now()){
+    let changed=false;
+    for(const sc of this.data.schedules||[]){
+      if(!sc.active||sc.nextAt>now)continue;changed=true;
+      while(sc.nextAt<=now)sc.nextAt=nextRun(sc.nextAt,sc.every);
+      const prev=sc.lastRfq&&this.data.rfqs.find(r=>r.id===sc.lastRfq);if(prev&&prev.status==="open")continue;
+      const r={productId:sc.productId,qty:sc.qty,city:sc.city,deadline:sc.deadline||null};
+      const rec=rfqRecord(r,discover(r),{id:rfqIdFor(++this.data.seq.rfq),source:"schedule",scheduleId:sc.id});
+      this.data.rfqs.unshift(rec);sc.lastRfq=rec.id;sc.lastRunAt=now;sc.runs=(sc.runs||0)+1;
+    }
+    if(changed)this.saveLocal();return changed;
   },
   saveLocal(){try{const {me,team,...d}=this.data;localStorage.setItem(KEY,JSON.stringify(d));}catch(e){}},
   adminKey:(()=>{try{return sessionStorage.getItem(KEY+".admin")||"";}catch(e){return "";}})(),
@@ -47,9 +62,11 @@ const Repo={
     if(this.mode!=="server")return false;
     const headers=this.adminKey?{"x-admin-key":this.adminKey}:{};
     const r=await fetch("api/state",{headers});const j=await r.json();
-    const sig=d=>JSON.stringify([d.rfqs.length,d.orders.length,d.suppliers.length,d.me?.id||"",!!d.team,d.rfqs.map(x=>x.myQuote?.unit||0)]);
+    // Redraw when anything a person would notice changed: counts, quotes, order progress, problems, approvals, repeat orders.
+    const sig=d=>JSON.stringify([d.rfqs.length,d.orders.length,d.suppliers.length,d.me?.id||"",!!d.team,d.rfqs.map(x=>[x.status,x.myQuote?.unit||0]),
+      d.orders.map(o=>[o.stage,!!o.cancelled,o.approval?.status||"",o.dispute?.status||"",o.dispute?.msgs?.length||0,o.review?.stars||0,o.shipment?.lr||""]),(d.schedules||[]).map(x=>[x.active,x.nextAt])]);
     const before=sig(this.data);
-    Object.assign(this.data,{me:null,team:false},j);this.dropSamples();setSuppliers(this.data.suppliers,this.data.useSamples);
+    Object.assign(this.data,{me:null,team:false,schedules:[]},j);this.dropSamples();setSuppliers(this.data.suppliers,this.data.useSamples);
     return before!==sig(this.data);
   },
 
@@ -75,6 +92,50 @@ const Repo={
   async updateOrder(po,patch){
     const o=this.data.orders.find(x=>x.po===po);if(o)Object.assign(o,patch);
     if(this.mode==="server")await this.api("PATCH","api/orders/"+encodeURIComponent(po),patch);else this.saveLocal();
+  },
+  /* Repeat orders */
+  async createSchedule(x){
+    if(this.mode==="server"){const sc=await this.api("POST","api/schedules",x);this.data.schedules=(this.data.schedules||[]).concat(sc);return sc;}
+    const {ok,s,errors}=normalizeSchedule(x);if(!ok)throw new Error(errors.join(". "));
+    this.data.seq.sched=(this.data.seq.sched||0)+1;
+    const sc={...s,id:"REP-"+String(this.data.seq.sched).padStart(4,"0"),active:true,createdAt:Date.now(),runs:0};
+    this.data.schedules=(this.data.schedules||[]).concat(sc);this.saveLocal();return sc;
+  },
+  async updateSchedule(id,patch){
+    if(this.mode==="server"){const sc=await this.api("PATCH","api/schedules/"+encodeURIComponent(id),patch);this.data.schedules=this.data.schedules.map(x=>x.id===id?sc:x);return sc;}
+    const sc=this.data.schedules.find(x=>x.id===id);if(!sc)throw new Error("Repeat order not found");
+    if("active" in patch){sc.active=!!patch.active;if(sc.active&&sc.nextAt<Date.now())sc.nextAt=nextRun(Date.now(),sc.every);}
+    this.saveLocal();return sc;
+  },
+  async deleteSchedule(id){
+    if(this.mode==="server")await this.api("DELETE","api/schedules/"+encodeURIComponent(id));
+    this.data.schedules=(this.data.schedules||[]).filter(x=>x.id!==id);if(this.mode!=="server")this.saveLocal();
+  },
+  /* Buyer teams (live app only): members, approval limits, invites. */
+  teamOnly(){if(this.mode!=="server")throw new Error("Teams work on the live app. This demo copy keeps one account in this browser.");},
+  async org(){this.teamOnly();return this.api("GET","api/org");},
+  async invite(email,limit){this.teamOnly();return this.api("POST","api/org/invites",{email,limit});},
+  async cancelInvite(id){return this.api("DELETE","api/org/invites/"+encodeURIComponent(id));},
+  async setMemberLimit(id,limit){return this.api("PATCH","api/org/members/"+encodeURIComponent(id),{limit});},
+  async removeMember(id){return this.api("DELETE","api/org/members/"+encodeURIComponent(id));},
+  async joinTeam(token){this.teamOnly();const j=await this.api("POST","api/org/join",{token});this.data.me=j.user;await this.refresh();return j.user;},
+  async decideOrder(po,approve,note){
+    const o=await this.api("PATCH","api/orders/"+encodeURIComponent(po),{action:approve?"approve":"reject",note});
+    const i=this.data.orders.findIndex(x=>x.po===po);if(i>=0)this.data.orders[i]=o;this.refresh().catch(()=>{});return o;
+  },
+  /* Named order actions (confirm, dispatch, deliver, review, dispute, reply, cancel…). Same rules offline via applyOrderAction. */
+  async orderAction(po,body,who){
+    if(this.mode==="server"){
+      const o=await this.api("PATCH","api/orders/"+encodeURIComponent(po),{...body,as:who});
+      const i=this.data.orders.findIndex(x=>x.po===po);if(i>=0)this.data.orders[i]=o;
+      this.refresh().catch(()=>{});return o;
+    }
+    const o=this.data.orders.find(x=>x.po===po);if(!o)throw new Error("Order not found");
+    const r=applyOrderAction(o,body,who);if(r.error)throw Object.assign(new Error(r.error),{status:409});
+    if(r.ev==="cancel"){const rec=this.data.rfqs.find(x=>x.id===o.rfqId);if(rec&&rec.wonBy===o.sid){rec.status="open";rec.wonBy=null;}}
+    const s=this.data.suppliers.find(x=>x.id===o.sid);
+    if(s&&!o.sample){applyTrack(s,trackRecord(this.data.orders,o.sid));setSuppliers(this.data.suppliers,this.data.useSamples);}
+    this.saveLocal();return o;
   },
   async clearSamples(){
     const n=this.data.orders.filter(o=>o.sample).length;
@@ -137,7 +198,10 @@ const Repo={
   async updateMe(patch){
     if(this.mode==="server"){const j=await this.api("PATCH","api/auth/me",patch);this.data.me=j.user;return j.user;}
     const {ok,a,errors}=normalizeAccount({...this.data.me,...patch});if(!ok)throw new Error(errors.join(". "));
-    Object.assign(this.data.me,{name:a.name,business:a.business,phone:a.phone,city:a.city});this.saveLocalMe();return this.data.me;
+    Object.assign(this.data.me,{name:a.name,business:a.business,phone:a.phone,city:a.city});
+    if("budgetMonthly" in patch){const v=Math.round(Number(patch.budgetMonthly));this.data.me.org={member:false,budget:v>0?v:null};}
+    if("gstin" in patch)this.data.me.gstin=String(patch.gstin||"").trim().toUpperCase();if("address" in patch)this.data.me.address=String(patch.address||"").trim();
+    this.saveLocalMe();return this.data.me;
   },
   async forgot(email){
     if(this.mode!=="server")throw new Error("Password reset works on the live app. This demo copy keeps your account in this browser only.");
