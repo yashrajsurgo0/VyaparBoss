@@ -95,8 +95,9 @@ async function approve(btn){
   try{
     const o=await Repo.createOrder(orderRecord(r,res,q),{status:"ordered",wonBy:q.s.id,quotes:quoteSummary(res)});
     flow.po=o.po;flow.stage="done";flow.newCard=true;
-    bhai(t("placed",{po:o.po,name:q.s.name}));
-    renderBuy();renderOrders();toast(`Order placed: ${o.po}`);
+    if(o.approval?.status==="pending"){bhai(`Sent to ${Repo.me?.org?.ownerName||"the account owner"} for approval (${o.approval.why.toLowerCase()}). ${q.s.name} gets the order once it's approved.`);toast("Sent for approval");}
+    else{bhai(t("placed",{po:o.po,name:q.s.name}));toast(`Order placed: ${o.po}`);}
+    renderBuy();renderOrders();
   }catch(e){fail(e);btn.disabled=false;}
 }
 function negotiateNow(){
@@ -174,8 +175,12 @@ function askCard(){
 function trustPills(s){
   const t=[];
   t.push(s.sample?`<span class="pill good">${ico("i-shield","")}GST verified</span>`:s.selfListed&&!s.verified?`<span class="pill warn">Not yet verified</span>`:s.verified?`<span class="pill good">${ico("i-shield","")}Verified by VyaparBoss</span>`:s.gstOk?`<span class="pill good">${ico("i-shield","")}GSTIN checked</span>`:`<span class="pill warn">GSTIN not checked</span>`);
-  if(s.onTime!=null)t.push(`<span class="pill">${s.onTime}% on time</span>`,`<span class="pill gold">${ico("i-star","")}${s.rating}</span>`);
+  if(s.track?.delivered){
+    t.push(`<span class="pill" title="Delivered by the promised date on VyaparBoss">${s.onTime}% on time · ${s.track.delivered} order${s.track.delivered>1?"s":""}</span>`);
+    if(s.rating!=null)t.push(`<span class="pill gold">${ico("i-star","")}${s.rating} (${s.track.rated})</span>`);
+  }else if(s.onTime!=null)t.push(`<span class="pill">${s.onTime}% on time</span>`,`<span class="pill gold">${ico("i-star","")}${s.rating}</span>`);
   else t.push(`<span class="pill brand">New supplier</span>`);
+  if(s.track?.disputes>=2&&s.track.disputes/Math.max(1,s.orders||1)>=0.25)t.push(`<span class="pill warn">${s.track.disputes} problems reported</span>`);
   if(s.audit)t.push(`<span class="pill warn">${esc(s.audit)}</span>`);
   return t.join("");
 }
@@ -233,6 +238,20 @@ function quotesCard(){
   html+=typeof liveQuotesHTML==="function"?liveQuotesHTML(res):"";
   return html+`</div>`;
 }
+/* Budgets and team limits: shown before the buyer approves. They never block; over-limit orders go to the owner. */
+const myOrg=()=>Repo.me?.org||{};
+const spentThisMonth=()=>monthSpend(store().orders);
+function needsOwner(amount){const o=myOrg();if(!o.member)return "";
+  if(o.limit!=null&&amount>o.limit)return `It's above your limit of ${inr(o.limit)} per order`;
+  if(o.budget&&spentThisMonth()+amount>o.budget)return `It takes this month's spend past the ${inr(o.budget)} budget`;return "";}
+function budgetNote(amount){
+  const o=myOrg(),why=needsOwner(amount);
+  if(why)return `<p class="note">${esc(why)}, so it goes to ${esc(o.ownerName||"the account owner")} for approval first. The supplier sees it only once it's approved.</p>`;
+  if(o.budget){const left=o.budget-spentThisMonth();
+    if(amount>left)return `<p class="note">This takes your spend this month to ${inr(o.budget-left+amount)}, which is ${inr(amount-left)} over your ${inr(o.budget)} budget.</p>`;
+    return `<p class="hint">Budget this month: ${inr(Math.max(0,left-amount))} left after this order.</p>`;}
+  return "";
+}
 function confirmCard(){
   const r=flow.r,p=PMAP[r.productId],q=discoverNow().eligible.find(x=>x.s.id===flow.sel);
   if(!q){flow.stage="quotes";return quotesCard();}
@@ -247,16 +266,18 @@ function confirmCard(){
       <dt>Total</dt><dd class="num">${inr(q.landed)} <span class="muted" style="font-weight:400">with GST and freight${isGlobal()?`, ${usd(q.landed)}`:""}</span></dd>
     </dl>
     <details class="more"><summary>Cost breakdown ${ico("i-chev","")}</summary><div>${breakdownTable(q,p,r)}</div></details>
+    ${budgetNote(q.landed)}
     <label class="approve"><input type="checkbox" id="okBox"><span>I approve this purchase of ${qfmt(r.qty)} ${p.unit} for ${inr(q.landed)}.</span></label>
-    <div class="actions"><button class="btn primary big" id="approveBtn" data-action="approve" disabled>Place order</button><button class="btn ghost" data-action="back-quotes">Back to quotes</button></div>
+    <div class="actions"><button class="btn primary big" id="approveBtn" data-action="approve" disabled>${needsOwner(q.landed)?"Send for approval":"Place order"}</button><button class="btn ghost" data-action="back-quotes">Back to quotes</button></div>
   </div>`;
 }
 function doneCard(){
   const o=store().orders.find(x=>x.po===flow.po);
   return `<div class="card done${flow.newCard?" fresh":""}">${ico("art-done","art")}
-    <h2>Order placed</h2>
-    <p>Purchase order <span class="po">${esc(flow.po)}</span> is with ${esc(o?.sname||SMAP[o?.sid]?.name||"the supplier")}.<br>You can follow it under Orders.</p>
+    <h2>${o?.approval?.status==="pending"?"Sent for approval":"Order placed"}</h2>
+    <p>${o?.approval?.status==="pending"?`Order <span class="po">${esc(flow.po)}</span> is waiting for ${esc(myOrg().ownerName||"the account owner")}. You'll get an email when it's decided.`:`Purchase order <span class="po">${esc(flow.po)}</span> is with ${esc(o?.sname||SMAP[o?.sid]?.name||"the supplier")}.<br>You can follow it under Orders.`}</p>
     <div class="actions" style="justify-content:center"><button class="btn primary" data-action="go" data-tab="orders">Track order</button><button class="btn" data-action="new-req">Buy something else</button></div>
+    ${o&&!(store().schedules||[]).some(x=>x.productId===o.productId&&x.city===o.city&&x.active)?`<p class="hint">Need this regularly? ${canRepeat()?`<button class="link" data-action="sched-quick" data-po="${esc(o.po)}" data-v="month">Repeat it every month</button> or <button class="link" data-action="sched-quick" data-po="${esc(o.po)}" data-v="week">every week</button>. Bhai gets fresh prices each time and waits for your approval.`:`<button class="link" data-action="acct-auth" data-v="signup">Create an account</button> to set up repeat orders.`}</p>`:""}
   </div>`;
 }
 function renderBuy(){
@@ -289,31 +310,144 @@ function setField(f,v,said){
 }
 
 /* ===================== ORDERS ===================== */
+/* Pieces shared by the buyer's and the supplier's order cards. */
+const okey=po=>String(po).replace(/\W/g,"_");
+const fdate=t=>new Date(t).toLocaleDateString("en-IN",{day:"numeric",month:"short"});
+const stars=n=>`<span class="stars" aria-label="${n} of 5 stars">${"★".repeat(n)}<span>${"★".repeat(5-n)}</span></span>`;
+const isLate=o=>!o.cancelled&&o.stage<4&&Date.now()>promisedBy(o);
+function shipmentHTML(o){
+  const sh=o.shipment;if(!sh)return "";
+  return `<div class="shipbox"><div><small>Transporter</small>${esc(sh.transporter)}</div><div><small>LR / AWB</small><b class="num">${esc(sh.lr)}</b></div>${sh.vehicle?`<div><small>Vehicle</small><span class="num">${esc(sh.vehicle)}</span></div>`:""}${sh.eta?`<div><small>Expected</small>${fdate(sh.eta)}</div>`:""}${sh.note?`<p class="hint">${esc(sh.note)}</p>`:""}</div>`;
+}
+function receiptHTML(o){
+  if(!o.receipt)return "";
+  return `<p class="hint">${o.receipt.condition==="ok"?`${ico("i-check","")}Received in good order`:`Received with a problem: ${esc(RECEIPT_CONDITIONS[o.receipt.condition])}`} on ${fdate(o.receipt.at)}${o.receipt.note?`: “${esc(o.receipt.note)}”`:""}</p>`;
+}
+function disputeHTML(o,side){
+  const d=o.dispute;if(!d)return "";
+  const who={buyer:side==="buyer"?"You":"Buyer",supplier:side==="supplier"?"You":"Supplier",team:"VyaparBoss team"};
+  const k=okey(o.po);
+  const thread=[{by:d.by,text:d.detail||ISSUE_REASONS[d.reason],at:d.opened}].concat(d.msgs||[]);
+  return `<div class="dispute ${d.status}">
+    <div class="ohead"><b>${d.status==="open"?"Problem":"Problem resolved"}: ${esc(ISSUE_REASONS[d.reason]||"Other")}</b>${d.status==="open"?`<span class="pill bad">Open</span>`:`<span class="pill good">${esc(RESOLUTIONS[d.resolution]||"Resolved")}</span>`}</div>
+    <ul class="thread">${thread.map(m=>`<li class="${m.by}"><small>${who[m.by]||m.by} · ${fdate(m.at)}</small>${esc(m.text)}</li>`).join("")}${d.status!=="open"&&d.note?`<li class="team"><small>VyaparBoss team · ${fdate(d.resolvedAt)}</small>${esc(d.note)}</li>`:""}</ul>
+    ${d.status==="open"?`<form class="oform replyrow" data-form="oact" data-act="reply" data-po="${esc(o.po)}" data-side="${side}" novalidate>
+      <label class="sr" for="rp-${k}">Reply</label><input id="rp-${k}" name="text" maxlength="500" placeholder="${side==="supplier"?"Reply to the buyer…":"Add a message…"}"><button class="btn sm">Send</button></form>
+      ${side==="buyer"?`<p class="hint">Sorted out? <button class="link" data-action="oact" data-act="withdraw" data-po="${esc(o.po)}" data-side="buyer">Close the problem</button>. Otherwise the VyaparBoss team steps in within a working day.</p>`:`<p class="hint">The VyaparBoss team reads this thread and closes the problem once you and the buyer agree.</p>`}`:""}
+  </div>`;
+}
+/* Buyer: what to do next with this order. One clear step at a time. */
+function buyerNext(o,sname){
+  const k=okey(o.po),po=esc(o.po);
+  if(o.cancelled)return `<p class="issue">Cancelled by ${o.cancelled.by==="buyer"?"you":o.cancelled.by==="supplier"?esc(sname):"the VyaparBoss team"}${o.cancelled.reason?`: ${esc(o.cancelled.reason)}`:""}.</p>${o.cancelled.by!=="buyer"||o.approval?.status==="rejected"?`<div class="actions"><button class="btn sm primary" data-action="${store().rfqs.some(r=>r.id===o.rfqId&&r.status==="open")?"open-rfq":"reorder"}" data-rfq="${esc(o.rfqId||"")}" data-po="${po}">Pick another option</button></div>`:""}`;
+  if(o.stage<4)return `<details class="more nextstep" ${o.stage>=2?"open":""}><summary>${o.stage>=2?"Has it arrived?":"Already arrived?"} ${ico("i-chev","")}</summary><div>
+    <form class="oform" data-form="oact" data-act="deliver" data-po="${po}" data-side="buyer" novalidate>
+      <fieldset class="choice"><legend>How did it arrive?</legend>${Object.entries(RECEIPT_CONDITIONS).map(([v,l],i)=>`<label><input type="radio" name="condition" value="${v}" ${i?"":"checked"}> ${l}</label>`).join("")}</fieldset>
+      <div class="field"><label for="rn-${k}">Note (optional)</label><input id="rn-${k}" name="note" maxlength="300" placeholder="e.g. 2 cartons crushed"></div>
+      <button class="btn primary sm">Confirm receipt</button></form></div></details>`;
+  if(!o.review)return `<form class="oform rate" data-form="oact" data-act="review" data-po="${po}" data-side="buyer" novalidate>
+      <p><b>How was ${esc(sname)}?</b> Your rating helps other buyers and ranks suppliers fairly.</p>
+      <fieldset class="starpick"><legend class="sr">Stars</legend>${[5,4,3,2,1].map(n=>`<input type="radio" id="st${n}-${k}" name="stars" value="${n}"><label for="st${n}-${k}" title="${n} star${n>1?"s":""}">★</label>`).join("")}</fieldset>
+      <div class="replyrow"><label class="sr" for="rv-${k}">Comment</label><input id="rv-${k}" name="text" maxlength="300" placeholder="Anything other buyers should know? (optional)"><button class="btn sm">Save rating</button></div></form>`;
+  return `<p class="hint">You rated ${esc(sname)} ${stars(o.review.stars)}${o.review.text?` “${esc(o.review.text)}”`:""}</p>`;
+}
+const canRepeat=()=>Repo.mode!=="server"||(Repo.me&&!Repo.me.guest&&Repo.me.role==="buyer");
+/* Above the order list: what needs the buyer now (approvals, fresh requests from repeat orders), then their repeat orders. */
+function ordersTopHTML(){
+  const st=store(),me=Repo.me||{},org=me.org||{},pend=st.orders.filter(o=>o.approval?.status==="pending");
+  const parts=[];
+  if(pend.length){
+    const owner=!org.member;
+    parts.push(`<section class="topsec"><h2 class="sub">${owner?"Waiting for your approval":"Waiting for approval"}</h2>${pend.map(o=>{const p=PMAP[o.productId],k=okey(o.po);
+      return `<div class="panel ocard approvalcard"><div class="ohead"><div><h3>${qfmt(o.qty)} ${p.unit} ${esc(p.name)}</h3><p class="meta">${esc(o.approval.name||"A team member")} · ${esc(o.sname)} to ${esc(o.city)} · ${fdate(o.approval.at)}</p></div><div class="amt num">${inr(o.landed)}</div></div>
+        <p class="note">${esc(o.approval.why)}.</p>
+        ${owner?`<form class="oform replyrow" data-form="decide" data-po="${esc(o.po)}" novalidate><label class="sr" for="dn-${k}">Note (optional)</label><input id="dn-${k}" name="note" maxlength="200" placeholder="Note for ${esc(o.approval.name||"them")} (optional)"><button class="btn sm primary" name="go" value="approve">Approve</button><button class="btn sm danger" type="button" data-action="decide-no" data-po="${esc(o.po)}">Decline</button></form>`
+          :`<p class="hint">${esc(org.ownerName||"The account owner")} decides; you'll get an email. The supplier hasn't been sent anything yet.</p>`}</div>`;}).join("")}</section>`);
+  }
+  const ready=st.rfqs.filter(r=>r.status==="open"&&!r.sample&&(r.source==="schedule"||st.orders.some(o=>o.rfqId===r.id&&o.cancelled)));
+  if(ready.length)parts.push(`<section class="topsec"><h2 class="sub">Ready for you to review</h2>${ready.map(r=>{const p=PMAP[r.productId],best=(r.quotes||[]).filter(q=>q.meets).sort((a,b)=>a.landed-b.landed)[0];
+    return `<div class="panel ocard"><div class="ohead"><div><h3>${qfmt(r.qty)} ${p.unit} ${esc(p.name)}</h3><p class="meta">${r.source==="schedule"?"Repeat order":"Reopened request"} ${esc(r.id)} · to ${esc(r.city)} · ${fdate(r.date)}</p></div>${best?`<div class="amt num">${inr(best.landed)}<small style="color:var(--muted)">best delivered price</small></div>`:""}</div>
+      <div class="actions"><button class="btn sm primary" data-action="open-rfq" data-rfq="${esc(r.id)}">Review quotes</button></div></div>`;}).join("")}</section>`);
+  const sch=st.schedules||[];
+  if(sch.length)parts.push(`<section class="topsec"><details class="more schedlist" ${sch.length<=3?"open":""}><summary><b>Repeat orders</b> <span class="muted">(${sch.filter(x=>x.active).length} active)</span> ${ico("i-chev","")}</summary><div>
+    <ul class="schedrows">${sch.map(x=>{const p=PMAP[x.productId];return `<li class="${x.active?"":"paused"}"><div><b>${qfmt(x.qty)} ${p.unit} ${esc(p.name)}</b><small>${esc(REPEAT_EVERY[x.every])} to ${esc(x.city)} · ${x.active?`next ${fdate(x.nextAt)}`:"paused"}</small></div>
+      <span class="actions"><button class="btn sm ghost" data-action="sched-toggle" data-id="${esc(x.id)}">${x.active?"Pause":"Resume"}</button><button class="btn sm ghost" data-action="sched-del" data-id="${esc(x.id)}" aria-label="Remove repeat order">Remove</button></span></li>`;}).join("")}</ul>
+    <p class="hint">Each repeat makes a fresh request with today's prices and emails you. Nothing is ordered until you approve.</p></div></details></section>`);
+  return parts.join("");
+}
 function renderOrders(){
   const orders=store().orders,cnt=document.getElementById("ordCount");
   if(cnt){cnt.textContent=orders.length;cnt.hidden=!orders.length;}
   const el=$("#v-orders");
-  if(!orders.length){el.innerHTML=`<div class="pagehead"><div><h1>Orders</h1></div></div><div class="panel empty">${ico("art-truck","")}<h2>No orders yet</h2><p>When you approve a quote, the order shows up here so you can follow it to your door.</p><button class="btn primary" data-action="go" data-tab="buy">Start buying</button></div>`;return;}
+  // Don't redraw under someone who's typing a note or a reply.
+  const ae=document.activeElement;if(el.contains(ae)&&/^(INPUT|TEXTAREA|SELECT)$/.test(ae?.tagName||""))return;
+  const top=ordersTopHTML();
+  if(!orders.length&&!top){el.innerHTML=`<div class="pagehead"><div><h1>Orders</h1></div></div><div class="panel empty">${ico("art-truck","")}<h2>No orders yet</h2><p>When you approve a quote, the order shows up here so you can follow it to your door.</p><button class="btn primary" data-action="go" data-tab="buy">Start buying</button></div>`;return;}
   const samples=orders.some(o=>o.sample);
-  el.innerHTML=`<div class="pagehead"><div><h1>Orders</h1><p class="muted">${orders.length} order${orders.length>1?"s":""}. Tap one for its full details.</p></div>${samples?`<button class="btn sm ghost" data-action="clear-samples">Hide example orders</button>`:""}</div>
-  <div class="olist">${orders.map(o=>{
+  const live=orders.filter(o=>o.approval?.status!=="pending");
+  el.innerHTML=`<div class="pagehead"><div><h1>Orders</h1><p class="muted">${live.length?`${live.length} order${live.length>1?"s":""}. Tap one for its full details.`:"Nothing ordered yet."}</p></div>${samples?`<button class="btn sm ghost" data-action="clear-samples">Hide example orders</button>`:""}</div>
+  ${top}
+  <div class="olist">${live.map(o=>{
     const p=PMAP[o.productId],s=SMAP[o.sid],sname=s?.name||o.sname||"Supplier",scity=s?.city||o.scity||"";
-    const due=new Date(o.date+o.eta*864e5),saved=Math.max(0,o.avg-o.landed),deliv=o.stage===4;
-    return `<div class="panel ocard">
+    const saved=Math.max(0,o.avg-o.landed),deliv=o.stage===4,po=esc(o.po);
+    const status=o.cancelled?`<b>Cancelled</b>`:`<b>${STAGES[o.stage]}</b><span class="muted">${deliv?`Delivered ${fdate(o.history?.[4]||Date.now())}${o.history?.[4]>promisedBy(o)+432e5?' <span class="pill warn">Late</span>':""}`:`Promised by ${fdate(promisedBy(o))}`}${isLate(o)?' <span class="pill bad">Running late</span>':o.deadline&&o.eta>o.deadline&&!deliv?' <span class="pill bad">After your date</span>':""}</span>`;
+    return `<div class="panel ocard${o.cancelled?" cancelled":""}">
       <div class="ohead"><div><h3>${qfmt(o.qty)} ${p.unit} ${esc(p.name)}</h3><p class="meta">${esc(sname)}${scity?`, ${scity}`:""} to ${o.city}${o.sample?' <span class="pill">Example</span>':""}${o.source==="whatsapp"?' <span class="pill good">WhatsApp</span>':""}</p></div>
-        <div class="amt num">${inr(o.landed)}${saved?`<small>You saved ${inr(saved)}</small>`:""}</div></div>
-      <div class="track" aria-hidden="true">${STAGES.map((_,i)=>`<i class="${i<o.stage||deliv?"on":i===o.stage?"now":""}"></i>`).join("")}</div>
-      <div class="ostatus"><b>${STAGES[o.stage]}</b><span class="muted">${deliv?`Delivered`:`Expected ${dstr(due)}`}${o.deadline&&o.eta>o.deadline?' <span class="pill bad">After your date</span>':""}</span></div>
-      ${o.issue?`<p class="issue">Problem reported: ${esc(o.issue)}. VyaparBoss operations will call ${esc(sname)}.</p>`:""}
+        <div class="amt num">${inr(o.landed)}${saved&&!o.cancelled?`<small>You saved ${inr(saved)}</small>`:""}</div></div>
+      ${o.cancelled?"":`<div class="track" aria-hidden="true">${STAGES.map((_,i)=>`<i class="${i<o.stage||deliv?"on":i===o.stage?"now":""}"></i>`).join("")}</div>`}
+      <div class="ostatus">${status}</div>
+      ${shipmentHTML(o)}${receiptHTML(o)}
+      ${buyerNext(o,sname)}
+      ${disputeHTML(o,"buyer")}
       <details class="more"><summary>Details ${ico("i-chev","")}</summary><div>
-        <p class="hint">Purchase order <b class="num">${esc(o.po)}</b>, placed ${dstr(o.date)}</p>
+        <p class="hint">Purchase order <b class="num">${po}</b>, placed ${dstr(o.date)}</p>
         <table class="breakdown"><tbody><tr><td>Goods</td><td>${inr(o.subtotal)}</td></tr><tr><td>GST</td><td>${inr(o.gst)}</td></tr><tr><td>Freight</td><td>${inr(o.freight)}</td></tr><tr class="tot"><td>Total</td><td>${inr(o.landed)}</td></tr></tbody></table>
-        <div class="steps">${STAGES.map((st,i)=>`<div class="${i<=o.stage?"on":""}">${st}${o.history[i]?`<br><span class="muted">${dstr(o.history[i])}</span>`:""}</div>`).join("")}</div>
-        <div class="actions"><button class="btn sm" data-action="reorder" data-po="${esc(o.po)}">Order again</button><button class="btn sm ghost" data-action="print-po" data-po="${esc(o.po)}">Print PO</button>${o.stage>=2&&o.stage<4?`<button class="btn sm" data-action="received" data-po="${esc(o.po)}">I received it</button>`:""}
-          ${o.issue?`<button class="btn sm ghost" data-action="resolve" data-po="${esc(o.po)}">Problem solved</button>`:`<button class="btn sm ghost" data-action="issue" data-po="${esc(o.po)}">Report a problem</button>`}</div>
+        <div class="steps">${STAGES.map((st,i)=>`<div class="${i<=o.stage?"on":""}">${st}${o.history?.[i]?`<br><span class="muted">${dstr(o.history[i])}</span>`:""}</div>`).join("")}</div>
+        <div class="actions"><button class="btn sm" data-action="reorder" data-po="${po}">Order again</button><button class="btn sm ghost" data-action="print-po" data-po="${po}">Print PO</button></div>
+        ${!o.sample&&canRepeat()?`<details class="more sub"><summary>Repeat this order ${ico("i-chev","")}</summary><div>
+          <form class="oform" data-form="sched-new" data-po="${po}" novalidate><div class="fields">
+            <div class="field"><label for="se-${okey(o.po)}">How often</label><select id="se-${okey(o.po)}" name="every">${Object.entries(REPEAT_EVERY).map(([v,l])=>`<option value="${v}" ${v==="month"?"selected":""}>${l}</option>`).join("")}</select></div>
+            <div class="field"><label for="ss-${okey(o.po)}">Starting</label><input id="ss-${okey(o.po)}" name="start" type="date" value="${new Date(nextRun(Date.now(),"month")).toISOString().slice(0,10)}"></div>
+          </div><p class="hint">Each time, Bhai gets fresh prices for ${qfmt(o.qty)} ${p.unit} to ${esc(o.city)} and emails you. Nothing is ordered until you approve.</p><button class="btn sm">Set up repeat order</button></form></div></details>`:""}
+        ${!o.cancelled&&!o.dispute?.status?.startsWith("open")?`<details class="more sub"><summary>Report a problem ${ico("i-chev","")}</summary><div>
+          <form class="oform" data-form="oact" data-act="dispute" data-po="${po}" data-side="buyer" novalidate>
+            <div class="field"><label for="dr-${okey(o.po)}">What went wrong?</label><select id="dr-${okey(o.po)}" name="reason">${Object.entries(ISSUE_REASONS).map(([v,l])=>`<option value="${v}">${l}</option>`).join("")}</select></div>
+            <div class="field"><label for="dd-${okey(o.po)}">Details</label><input id="dd-${okey(o.po)}" name="detail" maxlength="500" placeholder="What happened, and what would fix it?"></div>
+            <button class="btn sm">Send to supplier and VyaparBoss</button></form></div></details>`:""}
+        ${!o.cancelled&&o.stage<2?`<details class="more sub"><summary>Cancel this order ${ico("i-chev","")}</summary><div>
+          <form class="oform" data-form="oact" data-act="cancel" data-po="${po}" data-side="buyer" novalidate>
+            <div class="field"><label for="cr-${okey(o.po)}">Reason (the supplier sees this)</label><input id="cr-${okey(o.po)}" name="reason" maxlength="200" placeholder="e.g. Plan changed"></div>
+            <button class="btn sm danger">Cancel order</button></form></div></details>`:""}
       </div></details>
     </div>`;}).join("")}</div>`;
 }
+
+/* Submits any order action form (buyer or supplier) through the same rules as the server. */
+const ACT_DONE={confirm:"Order confirmed. The buyer can see it.",dispatch:"Marked dispatched. The buyer has the LR number.",shipment:"Shipment details updated",transit:"Marked on the way",
+  deliver:"Thanks! Delivery recorded.",deliver_issue:"Recorded. The supplier and VyaparBoss team have been told.",review:"Thanks for rating",dispute:"Sent. The supplier and the VyaparBoss team will reply here.",
+  reply:"Sent",withdraw:"Problem closed",resolve:"Problem resolved",cancel:"Order cancelled"};
+function readOrderForm(f){
+  const body={};
+  (f.querySelectorAll?f.querySelectorAll("[name]"):[]).forEach(i=>{if(i.type==="radio"){if(i.checked)body[i.name]=i.value;}else body[i.name]=i.value;});
+  if(f.dataset.act==="dispatch"||f.dataset.act==="shipment"){const {note,transporter,lr,vehicle,eta,...rest}=body;return {...rest,shipment:{transporter,lr,vehicle,eta,note}};}
+  return body;
+}
+function orderAct(po,act,side,body,btn){
+  if(btn)btn.disabled=true;
+  return Repo.orderAction(po,{action:act,...body},side).then(o=>{
+    toast(ACT_DONE[act==="deliver"&&o.receipt?.condition!=="ok"?"deliver_issue":act]||"Saved");
+    document.activeElement?.blur?.();renderAll();
+  }).catch(e=>{if(btn)btn.disabled=false;fail(e);});
+}
+document.addEventListener("submit",e=>{
+  const f=e.target.closest?.("form[data-form]");if(!f)return;
+  if(f.dataset.form==="sched-new"){e.preventDefault();const o=store().orders.find(x=>x.po===f.dataset.po);if(!o)return;const b=readOrderForm(f);
+    Repo.createSchedule({productId:o.productId,qty:o.qty,city:o.city,deadline:o.deadline,every:b.every,start:b.start}).then(sc=>{toast(`Repeat order set. Next request on ${fdate(sc.nextAt)}`);document.activeElement?.blur?.();renderOrders();}).catch(fail);return;}
+  if(f.dataset.form==="decide"){e.preventDefault();const btn=f.querySelector("button");if(btn)btn.disabled=true;
+    Repo.decideOrder(f.dataset.po,true,readOrderForm(f).note||"").then(()=>{toast("Approved. The supplier has the order.");document.activeElement?.blur?.();renderAll();}).catch(e2=>{if(btn)btn.disabled=false;fail(e2);});return;}
+  if(f.dataset.form!=="oact")return;e.preventDefault();
+  orderAct(f.dataset.po,f.dataset.act,f.dataset.side,readOrderForm(f),f.querySelector("button"));
+});
 
 /* ===================== SUPPLIERS ===================== */
 let scat="all";
@@ -456,7 +590,10 @@ function renderInsights(){
   const o=store().orders,gmv=o.reduce((a,x)=>a+x.landed,0),goods=o.reduce((a,x)=>a+x.subtotal,0),saved=o.reduce((a,x)=>a+Math.max(0,x.avg-x.landed),0);
   const rfqs=store().rfqs.length,conv=rfqs?store().rfqs.filter(r=>r.status==="ordered").length/rfqs:0;
   const k=[["Bought through VyaparBoss",lakh(gmv),`${o.length} order${o.length===1?"":"s"}, delivered value`],["Buyers saved",lakh(saved),"versus the average quote"],["Requests that became orders",(conv*100).toFixed(0)+"%",`${rfqs} request${rfqs===1?"":"s"} so far`],["Delivered",String(o.filter(x=>x.stage===4).length),`of ${o.length} order${o.length===1?"":"s"}`]];
-  $("#kpis").innerHTML=k.map(([a,b,c])=>`<div class="panel kpi"><span>${a}</span><b>${b}</b><small>${c}</small></div>`).join("");
+  const bud=myOrg().budget;
+  if(bud){const sp=spentThisMonth();k.unshift(["Spent this month",lakh(sp),`of your ${lakh(bud)} budget${sp>bud?" (over)":""}`]);}
+  $("#kpis").innerHTML=k.map(([a,b,c])=>`<div class="panel kpi"><span>${a}</span><b>${b}</b><small>${c}</small></div>`).join("")
+    +(bud?`<div class="panel kpi budgetbar" style="grid-column:1/-1"><span>Monthly budget</span><div class="trackb"><div class="fill${spentThisMonth()>bud?" over":""}" style="width:${Math.min(100,spentThisMonth()/bud*100).toFixed(1)}%"></div></div><small>${inr(Math.max(0,bud-spentThisMonth()))} left this month. Change it in Account settings.</small></div>`:"");
   const by={};o.forEach(x=>{const c=PMAP[x.productId].cat;by[c]=(by[c]||0)+x.landed;});const max=Math.max(1,...Object.values(by));
   $("#catBars").innerHTML=o.length?Object.keys(CATS).map(c=>`<div class="bar"><span>${CAT_INFO[c].name}</span><div class="trackb"><div class="fill" style="width:${((by[c]||0)/max*100).toFixed(1)}%"></div></div><span>${lakh(by[c]||0)}</span></div>`).join("")
     :`<div class="empty" style="padding:6px">${ico("art-chart","")}<p>Spend shows up here after the first order.</p></div>`;
@@ -546,6 +683,17 @@ function printPO(po){
 }
 const ACTIONS={
   "print-po":a=>printPO(a.dataset.po),
+  "open-rfq":a=>{const rec=store().rfqs.find(x=>x.id===a.dataset.rfq);if(!rec||!PMAP[rec.productId])return;const p=PMAP[rec.productId];
+    flow=freshFlow();flow.r={productId:rec.productId,qty:rec.qty,city:rec.city,deadline:rec.deadline??null,id:rec.id};flow.cat=p.cat;
+    me(`${rec.source==="schedule"?"Repeat order":"Request"} ${rec.id}: ${qfmt(rec.qty)} ${p.unit} ${p.name} to ${rec.city}`);showTab("buy");showQuotes();},
+  "sched-quick":a=>{const o=store().orders.find(x=>x.po===a.dataset.po);if(!o)return;
+    Repo.createSchedule({productId:o.productId,qty:o.qty,city:o.city,deadline:o.deadline,every:a.dataset.v}).then(sc=>{toast(`Repeat order set: ${REPEAT_EVERY[sc.every].toLowerCase()}, next on ${fdate(sc.nextAt)}`);renderBuy();renderOrders();}).catch(fail);},
+  "sched-toggle":a=>{const sc=(store().schedules||[]).find(x=>x.id===a.dataset.id);if(!sc)return;
+    Repo.updateSchedule(sc.id,{active:!sc.active}).then(x=>{toast(x.active?`Resumed. Next on ${fdate(x.nextAt)}`:"Paused");renderOrders();}).catch(fail);},
+  "sched-del":a=>Repo.deleteSchedule(a.dataset.id).then(()=>{toast("Repeat order removed");renderOrders();}).catch(fail),
+  "decide-no":a=>{const note=document.getElementById("dn-"+okey(a.dataset.po))?.value||"";a.disabled=true;
+    Repo.decideOrder(a.dataset.po,false,note).then(()=>{toast("Declined. They'll get an email.");renderAll();}).catch(e=>{a.disabled=false;fail(e);});},
+  oact:a=>orderAct(a.dataset.po,a.dataset.act,a.dataset.side,{},a),
   locale:a=>setLocale(a.dataset.v),
   theme:a=>{setTheme(a.dataset.v);toast(a.dataset.v==="dark"?"Dark look":"Beige look");},
   go:a=>showTab(a.dataset.tab),
@@ -571,10 +719,6 @@ const ACTIONS={
     flow=freshFlow();flow.stage="ask";flow.cat=PMAP[o.productId].cat;flow.r={productId:o.productId,qty:o.qty,city:o.city};
     me(`Same as last time: ${qfmt(o.qty)} ${PMAP[o.productId].unit} ${PMAP[o.productId].name} to ${o.city}`);
     bhai(t("reorder"));flow.newCard=true;showTab("buy");},
-  received:a=>{const o=store().orders.find(x=>x.po===a.dataset.po);if(o&&o.stage<4){const history=o.history.slice();history[4]=Date.now();Repo.updateOrder(o.po,{stage:4,history}).then(()=>toast("Marked as delivered")).catch(fail);renderOrders();}},
-  advance:a=>{const o=store().orders.find(x=>x.po===a.dataset.po);if(o&&o.stage<4){const history=o.history.slice();history[o.stage+1]=Date.now();Repo.updateOrder(o.po,{stage:o.stage+1,history}).catch(fail);renderOrders();}},
-  issue:a=>{const o=store().orders.find(x=>x.po===a.dataset.po);if(o){Repo.updateOrder(o.po,{issue:o.stage>=3?"Short quantity received":"Dispatch delayed"}).catch(fail);renderOrders();}},
-  resolve:a=>{Repo.updateOrder(a.dataset.po,{issue:null}).catch(fail);renderOrders();},
   "clear-samples":async()=>{try{const n=await Repo.clearSamples();renderAll();toast(n?`Hid ${n} example orders`:"No example orders left");}catch(e){fail(e);}},
   draft:a=>draftReply(a.dataset.rfq,a),
   copy:a=>{const ta=document.getElementById("reply-"+a.dataset.rfq);const done=()=>toast("Reply copied");try{navigator.clipboard.writeText(ta.value).then(done,()=>{ta.select();toast("Press Ctrl+C to copy");});}catch(err){ta.select();toast("Press Ctrl+C to copy");}},

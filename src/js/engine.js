@@ -6,7 +6,11 @@ function tierPrice(o,q){let p=null;for(const [t,pr] of o.tiers) if(q>=t) p=pr;re
 function freightCost(w,d){const ptl=Math.max(1200,w*(2.5+0.006*d));if(w<1000)return{cost:ptl,mode:"Part load"};const trucks=Math.ceil(w/9000);const ftl=trucks*(9000+38*d);return ftl<ptl?{cost:ftl,mode:`${trucks} × 9 t truck`}:{cost:ptl,mode:"Part load"};}
 // Suppliers without a track record yet are ranked on these neutral defaults.
 const NEW_SUPPLIER={onTime:85,rating:4.0};
-const onTimeOf=s=>s.onTime??NEW_SUPPLIER.onTime, ratingOf=s=>s.rating??NEW_SUPPLIER.rating;
+// Real records are blended with those defaults, as if every supplier started with two average orders,
+// so one late delivery doesn't sink a new supplier and one good one doesn't crown them.
+const PRIOR_ORDERS=2;
+const onTimeOf=s=>s.track?.delivered?(NEW_SUPPLIER.onTime*PRIOR_ORDERS+s.track.onTime*100)/(PRIOR_ORDERS+s.track.delivered):s.onTime??NEW_SUPPLIER.onTime;
+const ratingOf=s=>s.track?.rated?(NEW_SUPPLIER.rating*PRIOR_ORDERS+s.track.ratingSum)/(PRIOR_ORDERS+s.track.rated):s.rating??NEW_SUPPLIER.rating;
 
 function quoteFor(s,r,neg={},live={}){
   const o=s.offers.find(x=>x.p===r.productId);const p=PMAP[r.productId];
@@ -91,7 +95,7 @@ function orderRecord(r,res,q,extra={}){
   const avg=res.eligible.reduce((a,x)=>a+x.landed,0)/res.eligible.length;const now=Date.now();
   return {po:null,date:now,productId:r.productId,qty:r.qty,city:r.city,sid:q.s.id,sname:q.s.name,scity:q.s.city,unit:q.unit,list:q.list,
     subtotal:Math.round(q.subtotal),gst:Math.round(q.gst),freight:Math.round(q.freight),landed:Math.round(q.landed),avg:Math.round(avg),
-    eta:q.eta,deadline:r.deadline||null,stage:0,history:[now],issue:null,rfqId:r.id||null,...extra};
+    eta:q.eta,promisedBy:now+q.eta*864e5,deadline:r.deadline||null,stage:0,history:[now],issue:null,rfqId:r.id||null,...extra};
 }
 /* Three example orders so Orders, Supplier desk and Metrics aren't empty on first open. */
 function buildSampleData(){
@@ -101,7 +105,7 @@ function buildSampleData(){
     const t=Date.now()-daysAgo*864e5;
     const rid=rfqIdFor(++data.seq.rfq);
     data.rfqs.push(rfqRecord(r,res,{id:rid,date:t,status:"ordered",wonBy:q.s.id,sample:true}));
-    data.orders.push(orderRecord({...r,id:rid},res,q,{po:poIdFor(++data.seq.po),date:t,stage,history:Array.from({length:stage+1},(_,i)=>t+i*864e5),sample:true}));
+    data.orders.push(orderRecord({...r,id:rid},res,q,{po:poIdFor(++data.seq.po),date:t,promisedBy:t+q.eta*864e5,stage,history:Array.from({length:stage+1},(_,i)=>t+i*864e5),sample:true}));
   };
   mk("box3",8000,"Pune",7,9,4);
   mk("gloves",250,"Chennai",5,3,2);
@@ -227,4 +231,135 @@ function normalizeAccount(x){
   if(!isEmail(a.email))errors.push("Enter a valid email");
   if(a.phone){const d=String(a.phone).replace(/[^\d+]/g,"");if(!/^(\+\d{8,15}|[6-9]\d{9}|91[6-9]\d{9})$/.test(d.replace(/^\+91/,"")))errors.push("Enter a 10-digit mobile, or a number with country code");}
   return {ok:!errors.length,a,errors};
+}
+
+/* ===================== DELIVERY, DISPUTES AND TRACK RECORD ===================== */
+/* Who can do what to an order. Shared by the server and the offline demo so the rules are the same everywhere.
+   who: "buyer" | "supplier" | "team". Returns {ok, ev} or {error}. Mutates the order. */
+const ISSUE_REASONS={short:"Short quantity",damaged:"Damaged goods",wrong:"Wrong item or spec",quality:"Quality problem",late:"Late delivery",other:"Something else"};
+const RECEIPT_CONDITIONS={ok:"All good",short:"Short quantity",damaged:"Some goods damaged",wrong:"Wrong item or spec",quality:"Quality problem"};
+const RESOLUTIONS={replacement:"Replacement sent",credit:"Credit note issued",refund:"Refund",return:"Return and refund",none:"No action needed",withdrawn:"Withdrawn by the buyer"};
+const promisedBy=o=>o.promisedBy||(o.date+(o.eta||0)*864e5);
+function normalizeShipment(x){
+  x=x||{};const str=(v,n)=>String(v??"").trim().slice(0,n);const errors=[];
+  const s={transporter:str(x.transporter,80),lr:str(x.lr,40).toUpperCase(),vehicle:str(x.vehicle,20).toUpperCase().replace(/\s+/g," "),note:str(x.note,200),eta:null};
+  if(s.transporter.length<2)errors.push("Enter the transporter or courier name");
+  if(s.lr.length<3)errors.push("Enter the LR, AWB or docket number");
+  if(x.eta){const t=Date.parse(String(x.eta).slice(0,10));if(!isFinite(t))errors.push("Expected delivery date doesn't look right");else s.eta=t;}
+  return {ok:!errors.length,s,errors};
+}
+function normalizeReview(x){
+  x=x||{};const stars=Math.round(Number(x.stars));const errors=[];
+  if(!(stars>=1&&stars<=5))errors.push("Pick 1 to 5 stars");
+  return {ok:!errors.length,r:{stars:Math.min(5,Math.max(1,stars||1)),text:String(x.text??"").trim().slice(0,300)},errors};
+}
+function applyOrderAction(o,a,who,now=Date.now()){
+  a=a||{};const err=m=>({error:m});const is=(...r)=>who==="team"||r.includes(who);
+  const set=st=>{o.history=(o.history||[o.date]).slice(0,5);for(let i=1;i<st;i++)o.history[i]=o.history[i]||now;o.history[st]=now;o.stage=st;};
+  const txt=(v,n)=>String(v??"").trim().slice(0,n);
+  if(o.cancelled&&a.action!=="reply")return err("This order was cancelled");
+  if(o.approval?.status==="pending"&&a.action!=="cancel")return err("This order is waiting for approval from the account owner");
+  const openDispute=(reason,detail)=>{o.dispute={status:"open",reason,detail:txt(detail,500),opened:now,by:who,msgs:[]};};
+  let ev=a.action;
+  switch(a.action){
+    case "confirm":
+      if(!is("supplier"))return err("Only the supplier confirms an order");
+      if(o.stage!==0)return err("This order is already confirmed");
+      set(1);break;
+    case "dispatch":{
+      if(!is("supplier"))return err("Only the supplier dispatches an order");
+      if(o.stage>1)return err("This order is already dispatched");
+      const {ok,s,errors}=normalizeShipment(a.shipment);if(!ok)return err(errors.join(". "));
+      o.shipment={...s,at:now};set(2);break;}
+    case "shipment":{
+      if(!is("supplier"))return err("Only the supplier updates shipment details");
+      if(o.stage<2||o.stage>3)return err("Shipment details can change only while the goods are on the way");
+      const {ok,s,errors}=normalizeShipment(a.shipment);if(!ok)return err(errors.join(". "));
+      o.shipment={...s,at:o.shipment?.at||now,edited:now};break;}
+    case "transit":
+      if(!is("supplier"))return err("Only the supplier updates delivery progress");
+      if(o.stage!==2)return err("Mark it dispatched first");
+      set(3);break;
+    case "deliver":{
+      if(!is("buyer"))return err("Only the buyer confirms what arrived");
+      if(o.stage>=4)return err("Already marked as received");
+      const c=RECEIPT_CONDITIONS[a.condition]?a.condition:"ok";
+      o.receipt={condition:c,note:txt(a.note,300),at:now};set(4);
+      if(c!=="ok"&&o.dispute?.status!=="open")openDispute(c,a.note);
+      ev=c==="ok"?"deliver":"deliver_issue";break;}
+    case "review":{
+      if(!is("buyer"))return err("Only the buyer rates an order");
+      if(o.stage<4)return err("Rate the supplier once the goods arrive");
+      const {ok,r,errors}=normalizeReview(a);if(!ok)return err(errors.join(". "));
+      o.review={...r,at:now};break;}
+    case "dispute":
+      if(!is("buyer"))return err("Only the buyer raises a problem");
+      if(o.dispute?.status==="open")return err("There's already an open problem on this order");
+      if(!ISSUE_REASONS[a.reason])return err("Pick what went wrong");
+      openDispute(a.reason,a.detail);break;
+    case "reply":{
+      if(!o.dispute||o.dispute.status!=="open")return err("There's no open problem on this order");
+      const t=txt(a.text,500);if(t.length<2)return err("Write a short message");
+      o.dispute.msgs=(o.dispute.msgs||[]).concat({by:who,text:t,at:now}).slice(-30);break;}
+    case "withdraw":
+      if(!is("buyer"))return err("Only the buyer can withdraw a problem");
+      if(o.dispute?.status!=="open")return err("There's no open problem on this order");
+      Object.assign(o.dispute,{status:"resolved",resolution:"withdrawn",resolvedAt:now});break;
+    case "resolve":
+      if(who!=="team")return err("The VyaparBoss team closes problems");
+      if(o.dispute?.status!=="open")return err("There's no open problem on this order");
+      if(!RESOLUTIONS[a.resolution]||a.resolution==="withdrawn")return err("Pick how it was resolved");
+      Object.assign(o.dispute,{status:"resolved",resolution:a.resolution,note:txt(a.note,300),resolvedAt:now});break;
+    case "cancel":
+      if(who==="buyer"&&o.stage>=2)return err("It's already dispatched. Raise a problem instead.");
+      if(who==="supplier"&&o.stage!==0)return err("You can decline only before confirming. Talk to the VyaparBoss team.");
+      if(o.stage>=4)return err("Delivered orders can't be cancelled");
+      o.cancelled={by:who,reason:txt(a.reason,200),at:now};break;
+    default:return err("Unknown action");
+  }
+  o.issue=o.dispute?.status==="open"?ISSUE_REASONS[o.dispute.reason]||"Problem reported":null;
+  return {ok:true,ev};
+}
+/* A supplier's real record from delivered (non-sample) orders: on time = arrived by the promised date. */
+function trackRecord(orders,sid){
+  const mine=orders.filter(o=>o.sid===sid&&!o.sample&&!o.cancelled);
+  const done=mine.filter(o=>o.stage===4&&o.history?.[4]);
+  const onTime=done.filter(o=>o.history[4]<=promisedBy(o)+12*36e5).length;
+  const rated=mine.filter(o=>o.review?.stars);
+  return {orders:mine.length,delivered:done.length,onTime,pct:done.length?Math.round(onTime/done.length*100):null,
+    rated:rated.length,ratingSum:rated.reduce((a,o)=>a+o.review.stars,0),avg:rated.length?+(rated.reduce((a,o)=>a+o.review.stars,0)/rated.length).toFixed(1):null,
+    disputes:mine.filter(o=>o.dispute).length};
+}
+/* Writes the record onto a supplier: shown to buyers and used by ranking (blended with neutral defaults until there's enough history). */
+function applyTrack(s,t){s.track={delivered:t.delivered,onTime:t.onTime,rated:t.rated,ratingSum:t.ratingSum,disputes:t.disputes};s.onTime=t.pct;s.rating=t.avg;s.orders=t.orders;return s;}
+
+/* ===================== REPEAT BUYING AND BUDGETS ===================== */
+/* A repeat order makes a fresh request on schedule, with fresh prices. It never places an order by itself. */
+const REPEAT_EVERY={week:"Every week","2weeks":"Every 2 weeks",month:"Every month"};
+function nextRun(from,every){
+  const d=new Date(from);
+  if(every==="week")d.setDate(d.getDate()+7);
+  else if(every==="2weeks")d.setDate(d.getDate()+14);
+  else{const day=d.getDate();d.setDate(1);d.setMonth(d.getMonth()+1);d.setDate(Math.min(day,new Date(d.getFullYear(),d.getMonth()+1,0).getDate()));}
+  return d.getTime();
+}
+function normalizeSchedule(x,now=Date.now()){
+  x=x||{};const errors=[];
+  const s={productId:String(x.productId||""),qty:Math.round(Number(x.qty)),city:String(x.city||""),
+    deadline:x.deadline==null||x.deadline===""||+x.deadline===0?null:Math.round(Number(x.deadline)),every:REPEAT_EVERY[x.every]?x.every:"",note:String(x.note??"").trim().slice(0,100)};
+  if(!PMAP[s.productId])errors.push("Pick a product");
+  if(!(s.qty>0))errors.push("Enter the quantity");
+  if(!CITIES[s.city])errors.push("Pick the delivery city");
+  if(s.deadline!=null&&!(s.deadline>=1&&s.deadline<=60))errors.push("Needed within must be 1–60 days");
+  if(!s.every)errors.push("Pick how often");
+  let start=x.start?Date.parse(String(x.start).slice(0,10)):NaN;
+  if(x.start&&!isFinite(start))errors.push("Start date doesn't look right");
+  if(!isFinite(start)||start<now-864e5)start=null;
+  s.nextAt=start||nextRun(now,s.every||"month");
+  return {ok:!errors.length,s,errors};
+}
+/* Spend this calendar month on real, live orders (not examples, cancelled or still awaiting approval). */
+function monthSpend(orders,now=Date.now()){
+  const d=new Date(now),m0=new Date(d.getFullYear(),d.getMonth(),1).getTime();
+  return orders.filter(o=>!o.sample&&!o.cancelled&&o.date>=m0&&o.approval?.status!=="pending").reduce((a,o)=>a+(o.landed||0),0);
 }

@@ -44,7 +44,26 @@ const buy=()=>els["v-buy"].innerHTML;
   el("okBox").checked=true;T.ACTIONS.approve({dataset:{},disabled:false});await wait(300);
   check(T.flow.stage==="done"&&T.Repo.data.orders.length===before+1,"order placed after approval: "+T.flow.po);
   act("print-po",{po:T.flow.po});check(els.printArea.innerHTML.includes("Purchase order")&&els.printArea.innerHTML.includes(T.flow.po)&&els.printArea.innerHTML.includes("Total delivered"),"printable purchase order");
+  { const po=T.flow.po;
+    let err=null;try{await T.Repo.orderAction(po,{action:"review",stars:5},"buyer");}catch(e){err=e;}
+    check(err&&/arrive/.test(err.message),"can't rate before it arrives");
+    await T.Repo.orderAction(po,{action:"deliver",condition:"ok"},"buyer");T.renderAll();
+    check(els["v-orders"].innerHTML.includes("How was")&&els["v-orders"].innerHTML.includes("Save rating"),"delivered order asks for a rating");
+    await T.Repo.orderAction(po,{action:"review",stars:4,text:"Neat packing"},"buyer");T.renderAll();
+    check(els["v-orders"].innerHTML.includes("You rated")&&els["v-orders"].innerHTML.includes("Neat packing"),"rating shows on the order"); }
+
   check(buy().includes("Order placed")&&buy().includes("Track order"),"success screen");
+  if(T.Repo.mode==="local"){
+    const o=T.Repo.data.orders.find(x=>x.po===T.flow.po)||T.Repo.data.orders.find(x=>!x.sample);
+    const sc=await T.Repo.createSchedule({productId:o.productId,qty:o.qty,city:o.city,every:"week"});
+    check(sc.active&&sc.nextAt>Date.now(),"repeat order set up");
+    sc.nextAt=Date.now()-1000;T.Repo.runLocalSchedules();T.renderAll();
+    const made=T.Repo.data.rfqs.find(r=>r.scheduleId===sc.id);
+    check(made&&made.status==="open"&&els["v-orders"].innerHTML.includes("Ready for you to review")&&els["v-orders"].innerHTML.includes("Repeat orders"),"due repeat order makes a fresh request to review, not an order");
+    act("open-rfq",{rfq:made.id});await wait(100);
+    check(T.flow.stage==="quotes"&&T.flow.r.id===made.id,"reviewing it opens fresh quotes");
+    await T.Repo.deleteSchedule(sc.id);
+  }
 
   // Path 2: tap through, one question at a time
   act("new-req");check(T.flow.stage==="start","new request returns to start");

@@ -421,14 +421,21 @@ const { createApp } = require("../server");
         // Order → supplier; supplier dispatches → buyer; buyer marks received → supplier.
         const ord = (await buyer("POST", "/api/orders", { order: { productId: "box3", sid, rfqId: rfq.id } })).body; await tick();
         assert.ok(mails.some(m => m.to === "asha@sup.in" && m.subject.includes(ord.po)));
-        await sup("PATCH", "/api/orders/" + ord.po, { stage: 2 }); await tick();
-        assert.ok(mails.some(m => m.to === "ravi@buy.in" && /Dispatched/.test(m.subject)));
-        await buyer("PATCH", "/api/orders/" + ord.po, { stage: 4 }); await tick();
-        assert.ok(mails.some(m => m.to === "asha@sup.in" && /received/.test(m.subject)));
+        // Rules: the buyer can't dispatch; the supplier must give transporter and LR number.
+        assert.strictEqual((await buyer("PATCH", "/api/orders/" + ord.po, { action: "dispatch", shipment: { transporter: "VRL", lr: "123456" } })).status, 409);
+        assert.match((await sup("PATCH", "/api/orders/" + ord.po, { action: "dispatch", shipment: { transporter: "VRL" } })).body.error, /LR/);
+        assert.strictEqual((await sup("PATCH", "/api/orders/" + ord.po, { stage: 2 })).status, 400, "the old stage patch is team-only now");
+        const disp = await sup("PATCH", "/api/orders/" + ord.po, { action: "dispatch", shipment: { transporter: "VRL Logistics", lr: "vrl-889122", vehicle: "mh 12 ab 1234" } });
+        assert.deepStrictEqual([disp.status, disp.body.stage, disp.body.shipment.lr, disp.body.history.length], [200, 2, "VRL-889122", 3]);
+        await tick();
+        const dm = mails.find(m => m.to === "ravi@buy.in" && /dispatched/.test(m.subject));
+        assert.ok(dm && dm.text.includes("VRL-889122"), "buyer gets the transporter and LR number");
         // Opt-out stops updates.
         assert.strictEqual((await buyer("PATCH", "/api/auth/me", { notify: false })).body.user.notify, false);
-        const before = mails.length; await sup("PATCH", "/api/orders/" + ord.po, { stage: 3 }); await tick();
+        const before = mails.length; await sup("PATCH", "/api/orders/" + ord.po, { action: "transit" }); await tick();
         assert.ok(!mails.slice(before).some(m => m.to === "ravi@buy.in"), "no email after opting out");
+        await buyer("PATCH", "/api/orders/" + ord.po, { action: "deliver", condition: "ok" }); await tick();
+        assert.ok(mails.some(m => m.to === "asha@sup.in" && /received/.test(m.subject)));
         // Email confirmation: sign-up sends a link; it confirms once; resend is for signed-in people.
         const vm = mails.find(m => m.to === "asha@sup.in" && /Confirm your email/.test(m.subject));
         assert.ok(vm, "sign-up sends a confirmation link");
@@ -475,6 +482,159 @@ const { createApp } = require("../server");
         assert.strictEqual((await agent()("GET", "/api/admin/messages")).status, 401);
         assert.ok(mails.some(m => m.to === "team@vyaparboss.test"));
       } finally { s5.close(); }
+    });
+    await test("delivery: shipment, receipt, rating, disputes, cancellations and the supplier's real track record", async () => {
+      const { server: s7, store: st7 } = createApp({ dataFile: path.join(dir, "db7.json"), claude: null, env: { ADMIN_KEY: "k7" } });
+      await new Promise(r => s7.listen(0, r));
+      const b7 = `http://127.0.0.1:${s7.address().port}`;
+      const agent = (key) => { let cookie = ""; return async (method, p, body) => {
+        const r = await fetch(b7 + p, { method, headers: { "content-type": "application/json", ...(cookie ? { cookie } : {}), ...(key ? { "x-admin-key": key } : {}) }, body: body ? JSON.stringify(body) : undefined });
+        const sc = r.headers.get("set-cookie"); if (sc) cookie = sc.split(";")[0];
+        return { status: r.status, body: await r.json() }; }; };
+      const team = agent("k7");
+      try {
+        const sup = agent(), buyer = agent(), other = agent();
+        await sup("POST", "/api/auth/signup", { role: "supplier", name: "Asha", business: "Asha Packaging", email: "asha@p.in", password: "longenough1" });
+        const sid = (await sup("PUT", "/api/my/listing", { name: "Asha Packaging", city: "Chakan", gstin: "27AAPFU0939F1ZV", lead: 2, coverage: 400, offers: [{ p: "box3", tiersText: "500:14.5, 5000:14", cap: 50000 }] })).body.id;
+        await buyer("POST", "/api/auth/signup", { role: "buyer", name: "Ravi", business: "Ravi Exports", email: "ravi@b.in", password: "longenough1" });
+        await other("POST", "/api/auth/signup", { role: "buyer", name: "Meena", business: "Meena Traders", email: "meena@b.in", password: "longenough1" });
+        const order = async () => { const r = (await buyer("POST", "/api/rfqs", { productId: "box3", qty: 6000, city: "Pune", quotes: [{ sid, unit: 14, landed: 1, eta: 3, meets: true }] })).body;
+          return (await buyer("POST", "/api/orders", { order: { productId: "box3", sid, rfqId: r.id } })).body; };
+        const act = (who, po, body) => who("PATCH", "/api/orders/" + encodeURIComponent(po), body);
+
+        const o1 = await order();
+        assert.ok(o1.promisedBy > o1.date, "the promised date is fixed when the order is placed");
+        assert.strictEqual((await act(other, o1.po, { action: "cancel" })).status, 404, "strangers can't touch it");
+        assert.strictEqual((await act(buyer, o1.po, { action: "confirm" })).status, 409, "buyers don't confirm");
+        assert.strictEqual((await act(sup, o1.po, { action: "confirm" })).body.stage, 1);
+        await act(sup, o1.po, { action: "dispatch", shipment: { transporter: "Gati", lr: "GT-1001", eta: "2030-01-05" } });
+        assert.strictEqual((await act(buyer, o1.po, { action: "cancel" })).status, 409, "no cancelling after dispatch");
+        assert.strictEqual((await act(buyer, o1.po, { action: "review", stars: 5 })).status, 409, "rate only after it arrives");
+        const got = await act(buyer, o1.po, { action: "deliver", condition: "ok" });
+        assert.deepStrictEqual([got.body.stage, got.body.receipt.condition], [4, "ok"]);
+        assert.strictEqual((await act(buyer, o1.po, { action: "review", stars: 4, text: "Good boxes" })).body.review.stars, 4);
+        let me = st7.data.suppliers.find(s => s.id === sid);
+        assert.deepStrictEqual([me.track.delivered, me.track.onTime, me.onTime, me.rating], [1, 1, 100, 4], "on time and rated from the real order");
+
+        // A late delivery with a short quantity: dispute opens automatically, both sides talk, the team resolves.
+        const o2 = await order();
+        st7.data.orders.find(o => o.po === o2.po).promisedBy = Date.now() - 3 * 864e5; // pretend the promised date passed
+        await act(sup, o2.po, { action: "dispatch", shipment: { transporter: "Gati", lr: "GT-1002" } });
+        const short = await act(buyer, o2.po, { action: "deliver", condition: "short", note: "Got 5,600 of 6,000" });
+        assert.deepStrictEqual([short.body.dispute.status, short.body.dispute.reason, short.body.issue], ["open", "short", "Short quantity"]);
+        assert.strictEqual((await act(sup, o2.po, { action: "reply", text: "Sending the 400 balance tomorrow" })).body.dispute.msgs.length, 1);
+        assert.strictEqual((await act(sup, o2.po, { action: "resolve", resolution: "replacement" })).status, 409, "only the team closes problems");
+        const closed = await act(team, o2.po, { action: "resolve", resolution: "replacement", note: "Balance delivered" });
+        assert.deepStrictEqual([closed.body.dispute.status, closed.body.issue], ["resolved", null]);
+        me = st7.data.suppliers.find(s => s.id === sid);
+        assert.deepStrictEqual([me.track.delivered, me.track.onTime, me.onTime, me.track.disputes], [2, 1, 50, 1]);
+        // Ranking blends the record with neutral defaults: 1 of 2 on time → (85×2 + 100×1)/(2+2) = 67.5.
+        const core = require("../server/core").loadCore();
+        assert.strictEqual(core.onTimeOf(JSON.parse(JSON.stringify(me))), 67.5);
+        // Editing the listing can't reset the record.
+        await sup("PUT", "/api/my/listing", { name: "Asha Packaging", city: "Chakan", gstin: "27AAPFU0939F1ZV", lead: 2, coverage: 400, onTime: 100, rating: 5, offers: [{ p: "box3", tiersText: "500:14.5, 5000:14", cap: 50000 }] });
+        me = st7.data.suppliers.find(s => s.id === sid);
+        assert.deepStrictEqual([me.onTime, me.rating, me.track.delivered], [50, 4, 2], "track record isn't editable");
+
+        // Supplier declines a new order before confirming: the request opens again for another supplier.
+        const o3 = await order();
+        const dec = await act(sup, o3.po, { action: "cancel", reason: "No stock this week" });
+        assert.ok(dec.body.cancelled && dec.body.cancelled.by === "supplier");
+        assert.strictEqual(st7.data.rfqs.find(r => r.id === o3.rfqId).status, "open");
+        assert.strictEqual((await act(sup, o3.po, { action: "confirm" })).status, 409, "cancelled orders stay cancelled");
+        // Buyer raises a problem directly, then withdraws it.
+        const o4 = await order(); await act(sup, o4.po, { action: "confirm" });
+        assert.strictEqual((await act(buyer, o4.po, { action: "dispute", reason: "nope" })).status, 409);
+        await act(buyer, o4.po, { action: "dispute", reason: "late", detail: "Needed it yesterday" });
+        assert.strictEqual((await act(buyer, o4.po, { action: "withdraw" })).body.dispute.resolution, "withdrawn");
+        // The supplier sees the review and the conversation, never the buyer's identity.
+        const sv = (await sup("GET", "/api/state")).body.orders.find(o => o.po === o2.po);
+        assert.ok(sv.dispute.msgs.length === 1 && !("ownerId" in sv));
+      } finally { s7.close(); }
+    });
+    await test("repeat buying: scheduled requests with fresh prices, team members, approval limits and budgets", async () => {
+      const mails = [];
+      const fakeMail = async (url, init) => { if (String(url).includes("resend")) { const b = JSON.parse(init.body); mails.push({ to: b.to[0], subject: b.subject, text: b.text }); } return { ok: true, json: async () => ({}), text: async () => "" }; };
+      const { server: s8, store: st8, runSchedules } = createApp({ dataFile: path.join(dir, "db8.json"), claude: null, fetch: fakeMail, noTimers: true,
+        env: { ADMIN_KEY: "k8", EMAIL_PROVIDER: "resend", EMAIL_API_KEY: "re_x", OUTREACH_FROM_EMAIL: "bhai@vb.test", PUBLIC_URL: "https://vb.test" } });
+      await new Promise(r => s8.listen(0, r));
+      const b8 = `http://127.0.0.1:${s8.address().port}`;
+      const agent = () => { let cookie = ""; return async (method, p, body) => {
+        const r = await fetch(b8 + p, { method, headers: { "content-type": "application/json", ...(cookie ? { cookie } : {}) }, body: body ? JSON.stringify(body) : undefined });
+        const sc = r.headers.get("set-cookie"); if (sc) cookie = sc.split(";")[0];
+        return { status: r.status, body: await r.json() }; }; };
+      const tick = () => new Promise(r => setTimeout(r, 30));
+      try {
+        const owner = agent(), member = agent(), outsider = agent();
+        await owner("POST", "/api/auth/signup", { role: "buyer", name: "Ravi", business: "Ravi Exports", email: "ravi@x.in", password: "longenough1" });
+        await member("POST", "/api/auth/signup", { role: "buyer", name: "Sunil", business: "Ravi Exports", email: "sunil@x.in", password: "longenough1" });
+        await outsider("POST", "/api/auth/signup", { role: "buyer", name: "Meena", business: "Meena Co", email: "meena@x.in", password: "longenough1" });
+
+        // Repeat order: validated, then due → a fresh request with server-computed quotes, and an email. Never an order.
+        assert.strictEqual((await owner("POST", "/api/schedules", { productId: "box3", qty: 0, city: "Pune", every: "month" })).status, 400);
+        const sc = (await owner("POST", "/api/schedules", { productId: "box3", qty: 5000, city: "Pune", deadline: 7, every: "month" })).body;
+        assert.ok(sc.id && sc.nextAt > Date.now() && sc.active);
+        assert.strictEqual((await outsider("PATCH", "/api/schedules/" + sc.id, { active: false })).status, 404, "other buyers can't touch it");
+        st8.data.schedules[0].nextAt = Date.now() - 1000;
+        const ordersBefore = st8.data.orders.length;
+        const state = (await owner("GET", "/api/state")).body; await tick();
+        const made = state.rfqs.find(r => r.scheduleId === sc.id);
+        assert.ok(made && made.status === "open" && made.quotes.length > 0 && made.source === "schedule", "request made with fresh quotes");
+        assert.strictEqual(st8.data.orders.length, ordersBefore, "a schedule never places an order");
+        assert.ok(st8.data.schedules[0].nextAt > Date.now(), "next run moves forward");
+        assert.ok(mails.some(m => m.to === "ravi@x.in" && /ready to approve/.test(m.subject)));
+        // Due again while the last one is still open: a reminder, not a second request.
+        st8.data.schedules[0].nextAt = Date.now() - 1000;
+        runSchedules(); await tick();
+        assert.strictEqual(st8.data.rfqs.filter(r => r.scheduleId === sc.id).length, 1);
+        assert.ok(mails.some(m => m.to === "ravi@x.in" && /still waiting/.test(m.subject)), "reminder instead");
+        // Pause, edit and delete.
+        assert.strictEqual((await owner("PATCH", "/api/schedules/" + sc.id, { active: false })).body.active, false);
+        assert.strictEqual((await owner("PATCH", "/api/schedules/" + sc.id, { qty: 6000, every: "2weeks" })).body.every, "2weeks");
+
+        // Team: owner invites with a limit; the member joins; the member's big order waits for approval.
+        assert.strictEqual((await owner("PATCH", "/api/auth/me", { budgetMonthly: 500000 })).body.user.org.budget, 500000);
+        const inv = (await owner("POST", "/api/org/invites", { email: "sunil@x.in", limit: 50000 })).body;
+        assert.ok(inv.link.includes("#team-invite/") && inv.emailed); await tick();
+        assert.ok(mails.some(m => m.to === "sunil@x.in" && /invited you/.test(m.subject)));
+        assert.strictEqual((await member("POST", "/api/org/invites", { email: "a@b.in" })).status, 200, "a solo buyer can invite too (before joining)");
+        const token = inv.link.split("#team-invite/")[1];
+        const joined = (await member("POST", "/api/org/join", { token })).body; // an open invite of his own doesn't stop him
+        assert.deepStrictEqual([joined.user.org.member, joined.user.org.name, joined.user.org.limit], [true, "Ravi Exports", 50000]);
+        assert.strictEqual((await member("POST", "/api/org/join", { token })).status, 400, "an invite works once");
+        const org = (await owner("GET", "/api/org")).body;
+        assert.deepStrictEqual([org.members.length, org.members[0].limit], [1, 50000]);
+
+        // Member sees the team's requests (including the scheduled one) and orders from it.
+        const mstate = (await member("GET", "/api/state")).body;
+        assert.ok(mstate.rfqs.some(r => r.id === made.id), "members see the team's requests");
+        assert.ok(!(await outsider("GET", "/api/state")).body.rfqs.some(r => r.id === made.id));
+        const sid = made.quotes[0].sid;
+        const big = (await member("POST", "/api/orders", { order: { productId: "box3", sid, rfqId: made.id } })).body;
+        assert.ok(big.landed > 50000 && big.approval.status === "pending" && /limit/.test(big.approval.why));
+        await tick();
+        assert.ok(mails.some(m => m.to === "ravi@x.in" && /Approve Sunil/.test(m.subject)), "owner is asked to approve");
+        assert.ok(!mails.some(m => m.subject.includes(big.po) && /New order/.test(m.subject)), "supplier isn't told yet");
+        assert.strictEqual((await member("PATCH", "/api/orders/" + encodeURIComponent(big.po), { action: "approve" })).status, 403, "members can't approve");
+        assert.strictEqual((await member("PATCH", "/api/orders/" + encodeURIComponent(big.po), { action: "deliver" })).status, 409, "nothing moves while pending");
+        // Owner declines: the order is cancelled and the request reopens; Sunil hears about it.
+        const rej = (await owner("PATCH", "/api/orders/" + encodeURIComponent(big.po), { action: "reject", note: "Too many this month" })).body;
+        assert.ok(rej.cancelled && rej.approval.status === "rejected");
+        assert.strictEqual(st8.data.rfqs.find(r => r.id === made.id).status, "open"); await tick();
+        assert.ok(mails.some(m => m.to === "sunil@x.in" && /not approved/.test(m.subject)));
+        // Raise the limit; the next order goes straight through... unless it busts the monthly budget.
+        await owner("PATCH", "/api/org/members/" + org.members[0].id, { limit: "" });
+        await owner("PATCH", "/api/auth/me", { budgetMonthly: 1000 });
+        const over = (await member("POST", "/api/orders", { order: { productId: "box3", sid, rfqId: made.id } })).body;
+        assert.ok(over.approval?.status === "pending" && /budget/.test(over.approval.why), "past the budget needs approval");
+        const ok2 = (await owner("PATCH", "/api/orders/" + encodeURIComponent(over.po), { action: "approve" })).body;
+        assert.strictEqual(ok2.approval.status, "approved"); await tick();
+        assert.ok(ok2.promisedBy >= over.promisedBy, "the supplier's promise starts when it's approved");
+        // Member leaves the team.
+        assert.strictEqual((await member("DELETE", "/api/org/members/" + joined.user.id)).status, 200);
+        assert.strictEqual((await member("GET", "/api/auth/me")).body.user.org.member, false);
+        assert.strictEqual((await owner("DELETE", "/api/schedules/" + sc.id)).status, 200);
+      } finally { s8.close(); }
     });
     await test("unknown API path is a JSON 404", async () => {
       const { status, body } = await call("GET", "/api/nope");

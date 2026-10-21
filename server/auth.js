@@ -66,8 +66,17 @@ function createAuth({ store, env, fetchImpl = globalThis.fetch, now = () => Date
     store.data.users.push(g); startSession(req, res, g.id); store.save();
     return g;
   }
-  const publicUser = u => u && ({ id: u.id, role: u.role, guest: !!u.guest, name: u.name || "", business: u.business || "", email: u.email || "",
-    phone: u.phone || "", city: u.city || "", providers: Object.keys(u.providers || {}), hasPassword: !!u.pass, supplierId: u.supplierId || null, notify: u.notify !== false, emailVerified: !!u.emailVerified });
+  /** A buyer's team: the owner's account id. Members carry orgOwner; owners (and solo buyers) are their own org. */
+  const orgOf = u => u ? (u.orgOwner || u.id) : null;
+  const publicUser = u => {
+    if (!u) return u;
+    const owner = u.orgOwner ? store.data.users.find(x => x.id === u.orgOwner) : null;
+    return { id: u.id, role: u.role, guest: !!u.guest, name: u.name || "", business: u.business || "", email: u.email || "",
+      phone: u.phone || "", city: u.city || "", gstin: u.gstin || "", address: u.address || "",
+      providers: Object.keys(u.providers || {}), hasPassword: !!u.pass, supplierId: u.supplierId || null, notify: u.notify !== false, emailVerified: !!u.emailVerified,
+      org: owner ? { member: true, name: owner.business || owner.name || "", ownerName: owner.name || "", limit: u.memberLimit ?? null, budget: owner.budgetMonthly || null }
+        : { member: false, budget: u.budgetMonthly || null, members: store.data.users.filter(x => x.orgOwner === u.id).length } };
+  };
 
   // ---------- accounts ----------
   const byEmail = e => e && store.data.users.find(u => !u.guest && u.email === String(e).toLowerCase());
@@ -135,7 +144,7 @@ function createAuth({ store, env, fetchImpl = globalThis.fetch, now = () => Date
   const dropSessions = uid => { for (const [k, s] of Object.entries(store.data.sessions)) if (s.uid === uid) delete store.data.sessions[k]; };
 
   return {
-    providers, userOf, ensureUser, publicUser, startSession, endSession,
+    providers, userOf, ensureUser, publicUser, orgOf, startSession, endSession,
     config: () => ({ email: true, google: providers.google, apple: providers.apple, facebook: providers.facebook && { appId: providers.facebook.appId } }),
 
     signup(req, res, a, password) {
@@ -190,6 +199,8 @@ function createAuth({ store, env, fetchImpl = globalThis.fetch, now = () => Date
     },
     /** Deletes the account and signs out everywhere. Requests and orders stay as business records, unlinked. */
     deleteUser(req, res, u) {
+      for (const m of store.data.users) if (m.orgOwner === u.id) { delete m.orgOwner; delete m.memberLimit; }
+      store.data.orgInvites = (store.data.orgInvites || []).filter(i => i.orgId !== u.id);
       for (const r of store.data.rfqs) if (r.ownerId === u.id) r.ownerId = null;
       for (const o of store.data.orders) if (o.ownerId === u.id) o.ownerId = null;
       if (u.supplierId) store.data.suppliers = store.data.suppliers.filter(s => !(s.id === u.supplierId && s.ownerId === u.id));

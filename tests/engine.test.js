@@ -187,4 +187,25 @@ test("global region: international buyer numbers, English-only AI replies, ports
   assert.strictEqual(C.ruleParse("50 pallets to JNPT in 10 days").city, "Nhava Sheva");
 });
 
+test("order actions follow the roles and fill in the history", () => {
+  const t0 = Date.UTC(2026, 9, 1), o = { po: "P1", date: t0, eta: 4, stage: 0, history: [t0], sid: "x" };
+  assert.match(C.applyOrderAction(o, { action: "dispatch", shipment: { transporter: "VRL", lr: "123" } }, "buyer").error, /supplier/);
+  const r = C.applyOrderAction(o, { action: "dispatch", shipment: { transporter: "VRL", lr: "ab-123", vehicle: "mh12  ab 1" } }, "supplier", t0 + 864e5);
+  assert.deepStrictEqual([r.ev, o.stage, o.history.length, o.history[1], o.shipment.lr, o.shipment.vehicle], ["dispatch", 2, 3, t0 + 864e5, "AB-123", "MH12 AB 1"]);
+  C.applyOrderAction(o, { action: "deliver", condition: "damaged", note: "3 cartons wet" }, "buyer", t0 + 3 * 864e5);
+  assert.deepStrictEqual([o.stage, o.dispute.status, o.issue], [4, "open", "Damaged goods"]);
+  assert.match(C.applyOrderAction(o, { action: "resolve", resolution: "credit" }, "supplier").error, /team/);
+  C.applyOrderAction(o, { action: "resolve", resolution: "credit" }, "team");
+  assert.strictEqual(o.issue, null);
+  assert.match(C.applyOrderAction(o, { action: "review", stars: 9 }, "buyer").error, /1 to 5/);
+});
+test("track record: on time against the promised date, ratings averaged, samples ignored", () => {
+  const d = 864e5, mk = (late, stars, extra = {}) => ({ sid: "x", date: 0, eta: 3, promisedBy: 3 * d, stage: 4, history: [0, 1, 2, 3, late ? 5 * d : 2 * d], review: stars ? { stars } : null, ...extra });
+  const t = plain(C.trackRecord([mk(false, 5), mk(true, 3), mk(false, 0), mk(false, 5, { sample: true }), mk(false, 5, { sid: "y" })], "x"));
+  assert.deepStrictEqual([t.delivered, t.onTime, t.pct, t.rated, t.avg], [3, 2, 67, 2, 4]);
+  const s = C.applyTrack({}, t);
+  assert.strictEqual(+C.onTimeOf(s).toFixed(1), +((85 * 2 + 200) / 5).toFixed(1), "blended with two neutral orders");
+  assert.strictEqual(C.onTimeOf({ onTime: null }), 85, "new suppliers get the neutral default");
+});
+
 console.log(`\n${passed} engine tests passed`);

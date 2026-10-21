@@ -21,6 +21,9 @@ class Store {
     this.data.outreach ||= { settings: {}, log: [], unsub: [] };
     this.data.seq.lead ??= this.data.leads.length;
     this.data.seq.app ??= this.data.applications.length;
+    this.data.schedules ||= [];
+    this.data.orgInvites ||= [];
+    this.data.seq.sched ??= this.data.schedules.length;
   }
   save() {
     const tmp = this.file + ".tmp";

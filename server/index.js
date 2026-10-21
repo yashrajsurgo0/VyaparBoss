@@ -118,7 +118,7 @@ function createApp(opts = {}) {
   function stateFor(req) {
     const base = store.publicState();
     const u = auth.userOf(req), me = auth.publicUser(u);
-    if (isAdmin(req)) return { ...base, me, team: true };
+    if (isAdmin(req)) return { ...base, me, team: true, schedules: store.data.schedules };
     const strip = s => { const { contact, ownerId, ...rest } = s; return u && ownerId === u.id ? { ...rest, contact, mine: true } : rest; };
     const suppliers = base.suppliers.map(strip);
     if (u && u.role === "supplier") {
@@ -129,12 +129,67 @@ function createApp(opts = {}) {
         return { ...rest, quotes: r.quotes.filter(q => q.sid === sid), rank: ranked.findIndex(q => q.sid === sid) + 1, of: ranked.length,
           myQuote: (invites || []).find(i => i.sid === sid)?.quote || null };
       });
-      return { orders: base.orders.filter(o => sid && o.sid === sid).map(({ ownerId, ...o }) => o), rfqs, seq: base.seq, suppliers, useSamples: base.useSamples, me };
+      return { orders: base.orders.filter(o => sid && o.sid === sid && !hiddenFromSupplier(o)).map(({ ownerId, orgId, approval, ...o }) => o), rfqs, seq: base.seq, suppliers, useSamples: base.useSamples, me };
     }
-    const mine = r => r.sample || (u && r.ownerId === u.id);
-    return { orders: base.orders.filter(mine), rfqs: base.rfqs.filter(mine), seq: base.seq, suppliers, useSamples: base.useSamples, me };
+    const org = auth.orgOf(u);
+    const mine = r => r.sample || (u && (r.ownerId === u.id || (r.orgId && r.orgId === org)));
+    const schedules = u ? store.data.schedules.filter(x => x.orgId === org) : [];
+    return { orders: base.orders.filter(mine), rfqs: base.rfqs.filter(mine), seq: base.seq, suppliers, useSamples: base.useSamples, me, schedules };
   }
-  const canTouchOrder = (req, o) => isAdmin(req) || (() => { const u = auth.userOf(req); return u && (o.ownerId === u.id || (u.role === "supplier" && u.supplierId && o.sid === u.supplierId)); })();
+  const sameOrg = (u, rec) => !!(u && u.role === "buyer" && (rec.ownerId === u.id || (rec.orgId && rec.orgId === auth.orgOf(u))));
+  const hiddenFromSupplier = o => ["pending", "rejected"].includes(o.approval?.status);
+  const canTouchOrder = (req, o) => isAdmin(req) || (() => { const u = auth.userOf(req); return u && (sameOrg(u, o) || (u.role === "supplier" && u.supplierId && o.sid === u.supplierId && !hiddenFromSupplier(o))); })();
+  /** Why a team member's order needs the owner's approval, or "" if it doesn't. */
+  function approvalNeeded(u, order) {
+    if (!u?.orgOwner) return "";
+    const owner = store.data.users.find(x => x.id === u.orgOwner); if (!owner) return "";
+    if (u.memberLimit != null && order.landed > u.memberLimit) return `Above ${u.name || "this member"}'s limit of ${core.inr(u.memberLimit)} per order`;
+    if (owner.budgetMonthly) {
+      const spent = core.monthSpend(store.data.orders.filter(o => o.orgId === owner.id));
+      if (spent + order.landed > owner.budgetMonthly) return `Takes this month's spend past the ${core.inr(owner.budgetMonthly)} budget`;
+    }
+    return "";
+  }
+  /** Repeat orders: when one is due, make a fresh request with today's prices and tell the buyer. Never orders by itself. */
+  let lastScheduleRun = 0;
+  function runSchedules(now = Date.now()) {
+    lastScheduleRun = now;
+    let changed = false;
+    for (const sc of store.data.schedules) {
+      if (!sc.active || sc.nextAt > now) continue;
+      changed = true;
+      const prev = sc.lastRfq && store.data.rfqs.find(r => r.id === sc.lastRfq);
+      const owner = store.data.users.find(x => x.id === sc.ownerId);
+      while (sc.nextAt <= now) sc.nextAt = core.nextRun(sc.nextAt, sc.every);
+      if (!owner) { sc.active = false; continue; }
+      if (prev && prev.status === "open") { sc.skipped = (sc.skipped || 0) + 1; notify.scheduleReminder(owner, prev, sc); continue; } // last one still waiting: remind, don't pile up
+      const r = { productId: sc.productId, qty: sc.qty, city: sc.city, deadline: sc.deadline || null };
+      const res = core.discover(r);
+      const rec = ctx.services.createRfq(plainJ(core.rfqRecord(r, res, { ownerId: sc.ownerId, orgId: sc.orgId, source: "schedule", scheduleId: sc.id })));
+      sc.lastRunAt = now; sc.lastRfq = rec.id; sc.runs = (sc.runs || 0) + 1;
+      notify.newRequest(rec);
+      notify.scheduleReady(owner, rec, sc, res.eligible.filter(q => q.meets)[0] || res.eligible[0] || null);
+    }
+    if (changed) store.save();
+  }
+  if (!opts.noTimers) setInterval(() => { try { runSchedules(); } catch (e) { console.error("schedules:", e); } }, 15 * 6e4).unref();
+  /** Recomputes a real supplier's on-time rate and rating from their delivered orders. */
+  function refreshTrack(sid) {
+    const s = store.data.suppliers.find(x => x.id === sid); if (!s) return;
+    core.applyTrack(s, core.trackRecord(store.data.orders, sid)); syncSuppliers();
+  }
+  /** After an order action: cancelled orders reopen the request; records and emails follow. */
+  function afterOrderChange(o, ev, actorId, who) {
+    if (ev === "cancel" || ev === "cancel_quiet") {
+      const rec = store.data.rfqs.find(r => r.id === o.rfqId);
+      if (rec && rec.wonBy === o.sid) { rec.status = "open"; rec.wonBy = null; }
+    }
+    store.save();
+    if (o.sample || ev === "cancel_quiet") return;
+    if (["deliver", "deliver_issue", "review", "cancel", "dispute", "resolve", "withdraw"].includes(ev)) refreshTrack(o.sid);
+    if (["confirm", "dispatch", "transit", "deliver", "deliver_issue"].includes(ev)) whatsapp.notifyOrder(o);
+    notify.orderEvent(o, ev, actorId, who, env.CONTACT_TO);
+  }
   const findInvite = token => { for (const r of store.data.rfqs) { const i = (r.invites || []).find(x => x.token === token); if (i) return { r, i }; } return {}; };
   const unsubscribed = email => store.data.outreach.unsub.includes(String(email).toLowerCase());
 
@@ -248,6 +303,9 @@ function createApp(opts = {}) {
       if (!ok) throw bad(errors.join(". "));
       Object.assign(u, { name: a.name, business: a.business, phone: a.phone, city: a.city });
       if (typeof b.notify === "boolean") u.notify = b.notify;
+      if ("budgetMonthly" in b && u.role === "buyer" && !u.orgOwner) { const v = Math.round(Number(b.budgetMonthly)); u.budgetMonthly = v > 0 ? v : null; }
+      if ("gstin" in b) { const g = String(b.gstin || "").trim().toUpperCase(); if (g && !core.checkGstin(g).ok) throw bad(core.checkGstin(g).why); u.gstin = g; }
+      if ("address" in b) u.address = String(b.address || "").trim().slice(0, 300);
       if (!u.email && a.email) u.email = a.email;
       store.save(); return { user: auth.publicUser(u) };
     }],
@@ -260,6 +318,7 @@ function createApp(opts = {}) {
       if (!ok) throw bad(errors.join(". "));
       s.id ||= "c" + Date.now().toString(36);
       Object.assign(s, { orders: prev?.orders || 0, ownerId: u.id, selfListed: true, verified: !!prev?.verified });
+      if (prev?.track) Object.assign(s, { track: prev.track, onTime: prev.onTime, rating: prev.rating }); // earned, not editable
       store.data.suppliers = store.data.suppliers.filter(x => x.id !== s.id).concat(plainJ(s));
       u.supplierId = s.id; store.save(); syncSuppliers();
       const { ownerId, ...pub } = s; return { ...plainJ(pub), mine: true };
@@ -433,19 +492,97 @@ function createApp(opts = {}) {
       store.save();
       return { previews: out, sent, remaining: Math.max(0, room), cap: DAILY_CAP };
     }],
-    ["GET", /^\/api\/state$/, req => stateFor(req)],
+    ["GET", /^\/api\/state$/, req => { if (Date.now() - lastScheduleRun > 6e4) runSchedules(); return stateFor(req); }],
+
+    // ---------- Repeat orders ----------
+    ["POST", /^\/api\/schedules$/, async req => {
+      const u = needUser(req, "buyer");
+      if (store.data.schedules.filter(x => x.orgId === auth.orgOf(u)).length >= 30) throw bad("You have 30 repeat orders already. Remove one first.");
+      const { ok, s, errors } = core.normalizeSchedule(await jsonBody(req)); if (!ok) throw bad(errors.join(". "));
+      const sc = { ...plainJ(s), id: "REP-" + String(++store.data.seq.sched).padStart(4, "0"), ownerId: u.id, orgId: auth.orgOf(u), active: true, createdAt: Date.now(), runs: 0 };
+      store.data.schedules.push(sc); store.save(); return sc;
+    }],
+    ["PATCH", /^\/api\/schedules\/(.+)$/, async (req, m) => {
+      const u = needUser(req, "buyer"); const sc = store.data.schedules.find(x => x.id === m[1] && x.orgId === auth.orgOf(u)); if (!sc) throw notFound("Repeat order");
+      const p = await jsonBody(req);
+      if ("active" in p) { sc.active = !!p.active; if (sc.active && sc.nextAt < Date.now()) sc.nextAt = core.nextRun(Date.now(), sc.every); }
+      if (["qty", "every", "deadline", "city", "note", "start"].some(k => k in p)) {
+        const { ok, s, errors } = core.normalizeSchedule({ ...sc, ...p, start: p.start || new Date(sc.nextAt).toISOString().slice(0, 10) }); if (!ok) throw bad(errors.join(". "));
+        Object.assign(sc, plainJ(s));
+      }
+      store.save(); return sc;
+    }],
+    ["DELETE", /^\/api\/schedules\/(.+)$/, (req, m) => {
+      const u = needUser(req, "buyer"); const n = store.data.schedules.length;
+      store.data.schedules = store.data.schedules.filter(x => !(x.id === m[1] && x.orgId === auth.orgOf(u)));
+      if (n === store.data.schedules.length) throw notFound("Repeat order");
+      store.save(); return { ok: true };
+    }],
+
+    // ---------- Buyer teams: members, approval limits, invites ----------
+    ["GET", /^\/api\/org$/, req => {
+      const u = needUser(req, "buyer");
+      if (u.orgOwner) return { member: true };
+      return { member: false, budget: u.budgetMonthly || null, spent: core.monthSpend(store.data.orders.filter(o => o.orgId === u.id || (!o.orgId && o.ownerId === u.id))),
+        members: store.data.users.filter(x => x.orgOwner === u.id).map(x => ({ id: x.id, name: x.name, email: x.email, limit: x.memberLimit ?? null })),
+        invites: store.data.orgInvites.filter(i => i.orgId === u.id && i.exp > Date.now()).map(({ h, ...i }) => i),
+        pending: store.data.orders.filter(o => o.orgId === u.id && o.approval?.status === "pending").length };
+    }],
+    ["POST", /^\/api\/org\/invites$/, async req => {
+      const u = needUser(req, "buyer"); if (u.orgOwner) throw Object.assign(new Error("Only the account owner invites people"), { status: 403 });
+      limit(req, "orginvite", 20, 36e5);
+      const b = await jsonBody(req); const email = String(b.email || "").trim().toLowerCase();
+      if (!core.isEmail(email)) throw bad("Enter their email");
+      if (email === u.email) throw bad("That's your own email");
+      const lim = b.limit === "" || b.limit == null ? null : Math.round(Number(b.limit));
+      if (lim != null && !(lim >= 0)) throw bad("Approval limit must be a positive amount, or empty for no limit");
+      if (store.data.orgInvites.filter(i => i.orgId === u.id && i.exp > Date.now()).length >= 20) throw bad("Too many open invites. Remove some first.");
+      const token = crypto.randomBytes(18).toString("base64url");
+      const inv = { id: "INV" + Date.now().toString(36), h: crypto.createHash("sha256").update(token).digest("hex"), orgId: u.id, email, limit: lim, exp: Date.now() + 14 * 864e5, createdAt: Date.now() };
+      store.data.orgInvites.push(inv); store.save();
+      const link = `${PUBLIC_URL}/#team-invite/${token}`;
+      notify.teamInvite(email, u, link, lim);
+      return { ok: true, link, emailed: notify.on, invite: { ...inv, h: undefined } };
+    }],
+    ["DELETE", /^\/api\/org\/invites\/(.+)$/, (req, m) => {
+      const u = needUser(req, "buyer"); store.data.orgInvites = store.data.orgInvites.filter(i => !(i.id === m[1] && i.orgId === u.id)); store.save(); return { ok: true };
+    }],
+    ["POST", /^\/api\/org\/join$/, async req => {
+      const u = needUser(req); limit(req, "orgjoin", 20, 36e5);
+      const h = crypto.createHash("sha256").update(String((await jsonBody(req)).token || "")).digest("hex");
+      const inv = store.data.orgInvites.find(i => i.h === h && i.exp > Date.now());
+      if (!inv) throw bad("This invite has expired or was already used. Ask for a new one.");
+      if (u.role !== "buyer") throw Object.assign(new Error("Team invites are for buyer accounts. Log in or sign up as a buyer."), { status: 403 });
+      if (inv.orgId === u.id) throw bad("That's your own team");
+      if (store.data.users.some(x => x.orgOwner === u.id)) throw bad("You already have your own team. Remove its members first.");
+      Object.assign(u, { orgOwner: inv.orgId, memberLimit: inv.limit });
+      store.data.orgInvites = store.data.orgInvites.filter(i => i !== inv); store.save();
+      return { user: auth.publicUser(u) };
+    }],
+    ["PATCH", /^\/api\/org\/members\/(.+)$/, async (req, m) => {
+      const u = needUser(req, "buyer"); const mem = store.data.users.find(x => x.id === m[1] && x.orgOwner === u.id); if (!mem) throw notFound("Member");
+      const b = await jsonBody(req); const lim = b.limit === "" || b.limit == null ? null : Math.round(Number(b.limit));
+      if (lim != null && !(lim >= 0)) throw bad("Approval limit must be a positive amount, or empty for no limit");
+      mem.memberLimit = lim; store.save(); return { ok: true };
+    }],
+    ["DELETE", /^\/api\/org\/members\/(.+)$/, (req, m) => {
+      const u = needUser(req, "buyer"), id = m[1];
+      const mem = store.data.users.find(x => x.id === id && (x.orgOwner === u.id || (x.id === u.id && u.orgOwner))); if (!mem) throw notFound("Member");
+      delete mem.orgOwner; delete mem.memberLimit; store.save(); return { ok: true };
+    }],
 
     ["POST", /^\/api\/rfqs$/, async (req, m, url, res) => {
       const body = await jsonBody(req);
       const u = auth.ensureUser(req, res);
       if (u.role === "supplier") throw Object.assign(new Error("Supplier accounts can't place buy requests. Log in as a buyer."), { status: 403 });
-      const rec = ctx.services.createRfq({ ...body, ownerId: u.id });
+      const { scheduleId, orgId, ...clean } = body;
+      const rec = ctx.services.createRfq({ ...clean, ownerId: u.id, orgId: auth.orgOf(u) });
       notify.newRequest(rec); return rec;
     }],
     ["PATCH", /^\/api\/rfqs\/(.+)$/, async (req, m) => {
       const rec = store.data.rfqs.find(r => r.id === m[1]); if (!rec) throw notFound("RFQ");
       const u = auth.userOf(req);
-      if (!isAdmin(req) && !(u && rec.ownerId === u.id)) throw notFound("RFQ");
+      if (!isAdmin(req) && !sameOrg(u, rec)) throw notFound("RFQ");
       const p = await jsonBody(req);
       for (const k of ["productId", "qty", "city", "deadline", "quotes", "status", "wonBy"]) if (k in p) rec[k] = p[k];
       notify.newRequest(rec); store.save(); return rec;
@@ -459,7 +596,7 @@ function createApp(opts = {}) {
       const rec = order.rfqId && store.data.rfqs.find(r => r.id === order.rfqId);
       if (isAdmin(req)) { const o = ctx.services.createOrder({ ...order, ownerId: order.ownerId || u.id }, rfqPatch); if (!o.sample) notify.orderPlaced(o); return o; }
       // Buyers can't set prices: rebuild the order from their own request and the supplier's rates or own quote.
-      if (!rec || rec.ownerId !== u.id) throw bad("Place orders from one of your own requests");
+      if (!rec || !sameOrg(u, rec)) throw bad("Place orders from one of your own requests");
       if (rec.status === "ordered") throw Object.assign(new Error("This request already has an order"), { status: 409 });
       const r = { productId: rec.productId, qty: rec.qty, city: rec.city, deadline: rec.deadline || null, id: rec.id };
       const live = core.liveMap(rec), base = core.discover(r, {}, live), q0 = base.eligible.find(x => x.s.id === order.sid);
@@ -469,20 +606,47 @@ function createApp(opts = {}) {
       const asked = Number(order.unit);
       const neg = asked > 0 && asked < q0.list ? { [order.sid]: { price: Math.max(floor, asked) } } : {};
       const qres = core.discover(r, neg, live), q = qres.eligible.find(x => x.s.id === order.sid);
-      const clean = plainJ(core.orderRecord(r, qres, q, { ownerId: u.id, source: "web" }));
+      const clean = plainJ(core.orderRecord(r, qres, q, { ownerId: u.id, orgId: rec.orgId || auth.orgOf(u), source: rec.source === "schedule" ? "schedule" : "web" }));
+      // Team members: orders above their limit, or past the monthly budget, wait for the account owner.
+      const why = approvalNeeded(u, clean);
+      if (why) clean.approval = { status: "pending", by: u.id, name: u.name || "", why, at: Date.now() };
       const placed = ctx.services.createOrder(clean, { status: "ordered", wonBy: q.s.id, quotes: plainJ(core.quoteSummary(qres)) });
-      notify.orderPlaced(placed); return placed;
+      if (why) notify.approvalNeeded(placed, store.data.users.find(x => x.id === u.orgOwner), u);
+      else notify.orderPlaced(placed);
+      return placed;
     }],
+    // Orders move by named actions; applyOrderAction (engine.js) decides who may do what.
+    // The older {stage, history, issue} patch is kept for the team and the example orders.
     ["PATCH", /^\/api\/orders\/(.+)$/, async (req, m) => {
       const o = store.data.orders.find(x => x.po === m[1]); if (!o) throw notFound("Order");
       if (!o.sample && !canTouchOrder(req, o)) throw notFound("Order");
-      const p = await jsonBody(req);
+      const p = await jsonBody(req), u = auth.userOf(req), team = isAdmin(req);
+      if (p.action === "approve" || p.action === "reject") {
+        if (o.approval?.status !== "pending") throw Object.assign(new Error("This order isn't waiting for approval"), { status: 409 });
+        if (!team && !(u && !u.orgOwner && auth.orgOf(u) === o.orgId)) throw Object.assign(new Error("Only the account owner approves team orders"), { status: 403 });
+        const now = Date.now();
+        Object.assign(o.approval, { status: p.action === "approve" ? "approved" : "rejected", decidedBy: u?.id || "team", decidedAt: now, note: String(p.note || "").slice(0, 200) });
+        if (p.action === "approve") { o.promisedBy = now + o.eta * 864e5; o.history = [now]; store.save(); notify.orderPlaced(o); }
+        else { o.cancelled = { by: "buyer", reason: "Not approved" + (o.approval.note ? `: ${o.approval.note}` : ""), at: now }; afterOrderChange(o, "cancel_quiet", u?.id, "buyer"); }
+        notify.approvalDecided(o, store.data.users.find(x => x.id === o.approval.by));
+        store.save(); return o;
+      }
+      if (p.action) {
+        const who = team ? "team" : o.sample ? (u?.role === "supplier" ? "supplier" : String(p.as) === "supplier" ? "supplier" : "buyer")
+          : sameOrg(u, o) ? "buyer" : "supplier";
+        const r = core.applyOrderAction(o, p, who);
+        if (r.error) throw Object.assign(new Error(r.error), { status: 409 });
+        afterOrderChange(o, r.ev, u?.id, who);
+        if (who === "supplier") { const { ownerId, ...rest } = o; return rest; } // suppliers never learn who the buyer is
+        return o;
+      }
+      if (!team && !o.sample) throw bad("Use an action to update this order");
       const before = [o.stage, o.issue];
       if ("stage" in p) { const s = Math.round(p.stage); if (s < 0 || s > 4) throw bad("stage must be 0–4"); o.stage = s; }
       if (Array.isArray(p.history)) o.history = p.history.slice(0, 5);
       if ("issue" in p) o.issue = p.issue ? String(p.issue).slice(0, 200) : null;
       store.save();
-      if (o.stage !== before[0] || (o.issue && o.issue !== before[1])) { whatsapp.notifyOrder(o); if (!o.sample) notify.orderStage(o, auth.userOf(req)?.id); }
+      if (o.stage !== before[0] || (o.issue && o.issue !== before[1])) { whatsapp.notifyOrder(o); if (!o.sample) { refreshTrack(o.sid); notify.orderStage(o, u?.id); } }
       return o;
     }],
     ["DELETE", /^\/api\/samples$/, req => {
@@ -502,6 +666,7 @@ function createApp(opts = {}) {
       s.id ||= "c" + Date.now().toString(36);
       Object.assign(s, { orders: prev?.orders || 0, verified: "verified" in input ? !!input.verified : prev ? !!prev.verified : true });
       if (prev?.ownerId) Object.assign(s, { ownerId: prev.ownerId, selfListed: true });
+      if (prev?.track) Object.assign(s, { track: prev.track, onTime: prev.onTime, rating: prev.rating });
       store.data.suppliers = store.data.suppliers.filter(x => x.id !== s.id).concat(plainJ(s));
       store.save(); syncSuppliers(); return s;
     }],
@@ -634,7 +799,7 @@ function createApp(opts = {}) {
       if (!res.headersSent) send(res, e.status || 500, { error: e.status ? e.message : "Server error" });
     }
   });
-  return { server, store, ctx, mailer, sync };
+  return { server, store, ctx, mailer, sync, runSchedules };
 }
 
 function pickLLM(env) {

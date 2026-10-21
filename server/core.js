@@ -10,6 +10,7 @@ const EXPORTS = [
   "ruleParse", "applyParsed", "missing", "cleanParsed", "buildParsePrompt", "buildReplyPrompt",
   "discover", "negotiate", "quoteSummary", "rfqRecord", "orderRecord", "buildSampleData", "quoteMessage",
   "normalizeSupplier", "normalizeAccount", "normalizeLead", "mergeLeads", "renderOutreach", "outreachVars", "normalizeJoin", "normalizeLiveQuote", "liveMap", "parseCSV", "toCSV", "fillTemplate", "isEmail", "OUTREACH_TEMPLATES", "LEAD_STATUSES", "renderWhatsAppPitch", "renderCallScript", "mobileOf", "tierPrice", "freightCost", "km", "rfqIdFor", "poIdFor", "checkGstin", "parseTiers", "inr", "qfmt", "unitOne",
+  "ISSUE_REASONS", "RECEIPT_CONDITIONS", "RESOLUTIONS", "promisedBy", "normalizeShipment", "normalizeReview", "applyOrderAction", "trackRecord", "applyTrack", "onTimeOf", "ratingOf", "REPEAT_EVERY", "nextRun", "normalizeSchedule", "monthSpend",
 ];
 
 function loadCore() {
