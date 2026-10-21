@@ -255,6 +255,7 @@ function normalizeReview(x){
 }
 function applyOrderAction(o,a,who,now=Date.now()){
   a=a||{};const err=m=>({error:m});const is=(...r)=>who==="team"||r.includes(who);
+  if(["invoice","pay","payconfirm","paynotreceived"].includes(a.action))return applyMoneyAction(o,a,who,now);
   const set=st=>{o.history=(o.history||[o.date]).slice(0,5);for(let i=1;i<st;i++)o.history[i]=o.history[i]||now;o.history[st]=now;o.stage=st;};
   const txt=(v,n)=>String(v??"").trim().slice(0,n);
   if(o.cancelled&&a.action!=="reply")return err("This order was cancelled");
@@ -362,4 +363,64 @@ function normalizeSchedule(x,now=Date.now()){
 function monthSpend(orders,now=Date.now()){
   const d=new Date(now),m0=new Date(d.getFullYear(),d.getMonth(),1).getTime();
   return orders.filter(o=>!o.sample&&!o.cancelled&&o.date>=m0&&o.approval?.status!=="pending").reduce((a,o)=>a+(o.landed||0),0);
+}
+
+/* ===================== INVOICES, PAYMENTS, FEES ===================== */
+const PAY_METHODS={upi:"UPI",neft:"NEFT / RTGS / IMPS",cheque:"Cheque",cash:"Cash",card:"Card",razorpay:"Online (Razorpay)"};
+const paidOf=o=>(o.payments||[]).filter(p=>p.status==="confirmed").reduce((a,p)=>a+p.amount,0);
+const claimedOf=o=>(o.payments||[]).filter(p=>p.status==="claimed").reduce((a,p)=>a+p.amount,0);
+const dueOf=o=>Math.max(0,Math.round((o.landed||0)-paidOf(o)));
+function payStatus(o){const paid=paidOf(o);return paid>=(o.landed||0)-1?"paid":paid>0?"part":claimedOf(o)>0?"claimed":"unpaid";}
+/* GST split for the invoice: same state as the place of supply → CGST + SGST, otherwise IGST. Freight is shown as charged. */
+function invoiceLines(o,s){
+  const p=PMAP[o.productId]||{gst:0,hsn:""},from=CITIES[s?.city||o.scity]?.[2],to=(o.billTo?.gstin&&GST_STATE[o.billTo.gstin.slice(0,2)])||CITIES[o.city]?.[2];
+  const intra=!!from&&from===to,gst=o.gst||Math.round(o.subtotal*p.gst/100);
+  return {hsn:p.hsn,rate:p.gst,taxable:o.subtotal,intra,cgst:intra?gst/2:0,sgst:intra?gst/2:0,igst:intra?0:gst,freight:o.freight||0,total:o.landed,fromState:from,toState:to};
+}
+/* Indian-style amount in words: "Three lakh fifty-one thousand three hundred rupees only". */
+function rupeesInWords(n){
+  n=Math.round(n);if(!n)return "Zero rupees only";
+  const a=["","one","two","three","four","five","six","seven","eight","nine","ten","eleven","twelve","thirteen","fourteen","fifteen","sixteen","seventeen","eighteen","nineteen"];
+  const b=["","","twenty","thirty","forty","fifty","sixty","seventy","eighty","ninety"];
+  const two=x=>x<20?a[x]:b[Math.floor(x/10)]+(x%10?"-"+a[x%10]:"");
+  const three=x=>(x>=100?a[Math.floor(x/100)]+" hundred"+(x%100?" ":""):"")+(x%100?two(x%100):"");
+  const parts=[];const cr=Math.floor(n/1e7),lk=Math.floor(n/1e5)%100,th=Math.floor(n/1e3)%100,rest=n%1000;
+  if(cr)parts.push(three(cr)+" crore");if(lk)parts.push(two(lk)+" lakh");if(th)parts.push(two(th)+" thousand");if(rest)parts.push(three(rest));
+  const w=parts.join(" ")+" rupees only";return w[0].toUpperCase()+w.slice(1);
+}
+/* GST state code (first two digits of a GSTIN) → the short state code used in CITIES. */
+const GST_STATE={"01":"JK","02":"HP","03":"PB","04":"CH","06":"HR","07":"DL","08":"RJ","09":"UP","05":"UK","10":"BR","18":"AS","19":"WB","20":"JH","21":"OD","22":"CG","23":"MP","24":"GJ","26":"DN","27":"MH","29":"KA","30":"GA","32":"KL","33":"TN","34":"PY","36":"TS","37":"AP"};
+function normalizePayment(x,who,due){
+  x=x||{};const errors=[];const amount=Math.round(Number(x.amount)*100)/100;
+  if(!(amount>0))errors.push("Enter the amount paid");else if(due!=null&&amount>due+1)errors.push(`That's more than the ${inr(due)} still due`);
+  const method=PAY_METHODS[x.method]&&x.method!=="razorpay"?x.method:"";if(!method)errors.push("Pick how it was paid");
+  return {ok:!errors.length,p:{amount,method,ref:String(x.ref??"").trim().slice(0,40),note:String(x.note??"").trim().slice(0,120)},errors};
+}
+/* Invoice and payment actions, added to the same rulebook as delivery. */
+function applyMoneyAction(o,a,who,now=Date.now()){
+  const err=m=>({error:m});const is=(...r)=>who==="team"||r.includes(who);
+  if(o.cancelled)return err("This order was cancelled");
+  if(o.approval?.status==="pending")return err("This order is waiting for approval from the account owner");
+  if(a.action==="invoice"){
+    if(!is("supplier"))return err("The supplier issues the tax invoice");
+    if(o.stage<2)return err("Issue the invoice when you dispatch");
+    const no=String(a.number??"").trim().toUpperCase();
+    if(!/^[A-Z0-9][A-Z0-9/-]{0,15}$/.test(no))return err("Invoice number: up to 16 letters, digits, / or -");
+    const d=a.date?Date.parse(String(a.date).slice(0,10)):now;if(!isFinite(d))return err("Invoice date doesn't look right");
+    o.invoice={no,date:d,at:now};return {ok:true,ev:"invoice"};
+  }
+  if(a.action==="pay"){
+    if(!is("buyer","supplier"))return err("Not allowed");
+    const {ok,p,errors}=normalizePayment(a,who,dueOf(o));if(!ok)return err(errors.join(". "));
+    const id="PAY"+now.toString(36)+((o.payments||[]).length);
+    o.payments=(o.payments||[]).concat({...p,id,at:now,by:who,status:who==="buyer"?"claimed":"confirmed"});
+    return {ok:true,ev:who==="buyer"?"pay_claimed":"pay_recorded"};
+  }
+  if(a.action==="payconfirm"||a.action==="paynotreceived"){
+    if(!is("supplier"))return err("The supplier confirms what they received");
+    const p=(o.payments||[]).find(x=>x.id===a.id&&x.status==="claimed");if(!p)return err("Payment not found");
+    p.status=a.action==="payconfirm"?"confirmed":"not_received";p.decidedAt=now;
+    return {ok:true,ev:a.action};
+  }
+  return null;
 }

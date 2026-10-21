@@ -636,6 +636,77 @@ const { createApp } = require("../server");
         assert.strictEqual((await owner("DELETE", "/api/schedules/" + sc.id)).status, 200);
       } finally { s8.close(); }
     });
+    await test("money: bill-to on orders, supplier tax invoice, payments both sides, Razorpay link + signed webhook, fees", async () => {
+      const crypto = require("crypto");
+      const calls = [];
+      const fakeRzp = async (url, init) => { calls.push({ url, init }); return { ok: true, json: async () => ({ id: "plink_T1", short_url: "https://rzp.io/i/T1" }) }; };
+      const { server: s9, store: st9 } = createApp({ dataFile: path.join(dir, "db9.json"), claude: null, fetch: fakeRzp, noTimers: true,
+        env: { ADMIN_KEY: "k9", RAZORPAY_KEY_ID: "rzp_test_abc", RAZORPAY_KEY_SECRET: "sec", RAZORPAY_WEBHOOK_SECRET: "whsec", PUBLIC_URL: "https://vb.test" } });
+      await new Promise(r => s9.listen(0, r));
+      const b9 = `http://127.0.0.1:${s9.address().port}`;
+      const agent = key => { let cookie = ""; return async (method, p, body) => {
+        const r = await fetch(b9 + p, { method, headers: { "content-type": "application/json", ...(cookie ? { cookie } : {}), ...(key ? { "x-admin-key": key } : {}) }, body: body ? JSON.stringify(body) : undefined });
+        const sc = r.headers.get("set-cookie"); if (sc) cookie = sc.split(";")[0];
+        return { status: r.status, body: await r.json() }; }; };
+      try {
+        const sup = agent(), buyer = agent(), team = agent("k9");
+        await sup("POST", "/api/auth/signup", { role: "supplier", name: "Asha", business: "Asha Packaging", email: "asha@p.in", password: "longenough1" });
+        const sid = (await sup("PUT", "/api/my/listing", { name: "Asha Packaging", city: "Chakan", gstin: "27AAPFU0939F1ZV", lead: 2, coverage: 400, offers: [{ p: "box3", tiersText: "500:14.5, 5000:14", cap: 50000 }] })).body.id;
+        await buyer("POST", "/api/auth/signup", { role: "buyer", name: "Ravi", business: "Ravi Exports", email: "ravi@b.in", password: "longenough1" });
+        assert.strictEqual((await buyer("PATCH", "/api/auth/me", { gstin: "27AAPFU0939F1ZX" })).status, 400, "GSTIN is checked");
+        await buyer("PATCH", "/api/auth/me", { gstin: "27AAPFU0939F1ZV", address: "Plot 4, Bhosari MIDC, Pune" });
+        // The team agrees a 2% fee with this supplier before the order.
+        assert.strictEqual((await team("PATCH", "/api/admin/suppliers/" + sid, { feeAgreed: true, feeRatePct: 2 })).body.feeRate, 0.02);
+        const r = (await buyer("POST", "/api/rfqs", { productId: "box3", qty: 6000, city: "Pune", quotes: [{ sid, unit: 14, landed: 1, eta: 3, meets: true }] })).body;
+        const o = (await buyer("POST", "/api/orders", { order: { productId: "box3", sid, rfqId: r.id } })).body;
+        const act = (who, body) => who("PATCH", "/api/orders/" + encodeURIComponent(o.po), body);
+        const raw = st9.data.orders.find(x => x.po === o.po);
+        assert.deepStrictEqual([raw.fee.rate, raw.fee.amount, raw.fee.status], [0.02, Math.round(raw.subtotal * 0.02), "due"]);
+        assert.ok(!("fee" in (await buyer("GET", "/api/state")).body.orders.find(x => x.po === o.po)), "buyers don't see the supplier's fee");
+        const sv = (await sup("GET", "/api/state")).body.orders.find(x => x.po === o.po);
+        assert.deepStrictEqual([sv.billTo.business, sv.billTo.gstin, sv.billTo.address, "ownerId" in sv], ["Ravi Exports", "27AAPFU0939F1ZV", "Plot 4, Bhosari MIDC, Pune", false], "supplier gets what an invoice needs, not the buyer's account");
+        assert.strictEqual(sv.fee.amount, raw.fee.amount, "suppliers see their own fee");
+        // Invoice after dispatch only, supplier only, GST-legal number.
+        assert.strictEqual((await act(sup, { action: "invoice", number: "INV-1" })).status, 409, "not before dispatch");
+        await act(sup, { action: "dispatch", shipment: { transporter: "Gati", lr: "GT1" } });
+        assert.strictEqual((await act(buyer, { action: "invoice", number: "INV-1" })).status, 409);
+        assert.match((await act(sup, { action: "invoice", number: "INVOICE NUMBER TOO LONG 123" })).body.error, /16/);
+        assert.strictEqual((await act(sup, { action: "invoice", number: "ap/26-27/0042", date: "2026-10-20" })).body.invoice.no, "AP/26-27/0042");
+        const core = require("../server/core").loadCore();
+        const lines = JSON.parse(JSON.stringify(core.invoiceLines(raw, { city: "Chakan" })));
+        assert.ok(lines.intra && lines.cgst === lines.sgst && lines.igst === 0, "Maharashtra to Maharashtra: CGST + SGST");
+        assert.ok(!core.invoiceLines({ ...raw, billTo: { gstin: "24AAPFU0939F1ZV" } }, { city: "Chakan" }).intra, "to a Gujarat GSTIN: IGST");
+        // Buyer records a UPI payment (claimed) → supplier confirms; can't overpay.
+        assert.match((await act(buyer, { action: "pay", amount: raw.landed * 2, method: "upi" })).body.error, /more than/);
+        const half = Math.round(raw.landed / 2);
+        const claimed = (await act(buyer, { action: "pay", amount: half, method: "upi", ref: "UTR123" })).body;
+        assert.strictEqual(claimed.payments[0].status, "claimed");
+        assert.strictEqual(core.payStatus(claimed), "claimed");
+        const pid = claimed.payments[0].id;
+        assert.strictEqual((await act(buyer, { action: "payconfirm", id: pid })).status, 409, "buyers can't confirm their own payment");
+        const conf = (await act(sup, { action: "payconfirm", id: pid })).body;
+        assert.deepStrictEqual([conf.payments[0].status, core.payStatus(conf), core.dueOf(conf)], ["confirmed", "part", raw.landed - half]);
+        // Online: a Razorpay link for the rest (test keys); the signed webhook records it once.
+        const link = (await buyer("POST", "/api/orders/" + encodeURIComponent(o.po) + "/paylink")).body;
+        assert.deepStrictEqual([link.url, link.amount, link.test], ["https://rzp.io/i/T1", raw.landed - half, true]);
+        const sent = JSON.parse(calls.find(c => /payment_links/.test(c.url)).init.body);
+        assert.deepStrictEqual([sent.amount, sent.notes.po, sent.currency], [Math.round((raw.landed - half) * 100), o.po, "INR"]);
+        const event = JSON.stringify({ event: "payment_link.paid", payload: { payment_link: { entity: { id: "plink_T1", notes: { po: o.po }, amount_paid: (raw.landed - half) * 100 } }, payment: { entity: { id: "pay_T9", amount: (raw.landed - half) * 100 } } } });
+        const hook = (body, sig, id) => fetch(b9 + "/webhooks/razorpay", { method: "POST", headers: { "content-type": "application/json", "x-razorpay-signature": sig, "x-razorpay-event-id": id }, body });
+        assert.strictEqual((await hook(event, "bad", "e1")).status, 401, "unsigned webhooks are refused");
+        const sig = crypto.createHmac("sha256", "whsec").update(event).digest("hex");
+        assert.strictEqual((await hook(event, sig, "e1")).status, 200);
+        assert.strictEqual((await hook(event, sig, "e1")).status, 200);
+        const paid = st9.data.orders.find(x => x.po === o.po);
+        assert.deepStrictEqual([paid.payments.length, core.payStatus(paid), paid.payments[1].settled], [2, "paid", false], "recorded once; marked for settling to the supplier");
+        // Team settles the online payment and marks the fee invoiced.
+        const t1 = (await team("PATCH", "/api/admin/orders/" + encodeURIComponent(o.po), { settle: "RZPpay_T9", fee: { status: "invoiced" } })).body;
+        assert.ok(t1.payments[1].settled && t1.fee.status === "invoiced");
+        assert.strictEqual((await buyer("PATCH", "/api/admin/orders/" + encodeURIComponent(o.po), { fee: { status: "waived" } })).status, 401);
+        const setup = (await team("GET", "/api/admin/setup")).body;
+        assert.deepStrictEqual([setup.payments.on, setup.payments.test, setup.payments.webhook], [true, true, true]);
+      } finally { s9.close(); }
+    });
     await test("unknown API path is a JSON 404", async () => {
       const { status, body } = await call("GET", "/api/nope");
       assert.deepStrictEqual([status, body.error], [404, "No such endpoint"]);

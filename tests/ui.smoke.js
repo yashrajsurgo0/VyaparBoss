@@ -51,6 +51,12 @@ const buy=()=>els["v-buy"].innerHTML;
     check(els["v-orders"].innerHTML.includes("How was")&&els["v-orders"].innerHTML.includes("Save rating"),"delivered order asks for a rating");
     await T.Repo.orderAction(po,{action:"review",stars:4,text:"Neat packing"},"buyer");T.renderAll();
     check(els["v-orders"].innerHTML.includes("You rated")&&els["v-orders"].innerHTML.includes("Neat packing"),"rating shows on the order"); }
+  if(T.Repo.mode==="local"){ const po=T.flow.po;
+    await T.Repo.orderAction(po,{action:"invoice",number:"sp/26-27/7"},"supplier");act("print-inv",{po});
+    const inv=els.printArea.innerHTML;
+    check(inv.includes("Tax invoice")&&inv.includes("SP/26-27/7")&&/[CI]GST/.test(inv)&&inv.includes("rupees only"),"supplier's tax invoice prints with the GST split and amount in words");
+    await T.Repo.orderAction(po,{action:"pay",amount:100,method:"upi",ref:"UTR9"},"buyer");T.renderAll();
+    check(els["v-orders"].innerHTML.includes("Waiting for supplier")&&els["v-orders"].innerHTML.includes("Payment to confirm"),"buyer's payment waits for the supplier to confirm"); }
 
   check(buy().includes("Order placed")&&buy().includes("Track order"),"success screen");
   if(T.Repo.mode==="local"){

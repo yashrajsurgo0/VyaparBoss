@@ -11,6 +11,7 @@ const { createWhatsApp } = require("./whatsapp");
 const { createMailer, unsubSig } = require("./email");
 const { createAuth } = require("./auth");
 const { createNotifier } = require("./notify");
+const { createRazorpay } = require("./razorpay");
 const crypto = require("crypto");
 const zlib = require("zlib");
 const { createRemote, pullSnapshot, attachRemote } = require("./remote");
@@ -74,6 +75,9 @@ function createApp(opts = {}) {
   };
   const auth = createAuth({ store, env, fetchImpl: opts.fetch || globalThis.fetch });
   const notify = createNotifier({ store, mailer, core, publicUrl: PUBLIC_URL });
+  const razorpay = opts.razorpay !== undefined ? opts.razorpay : createRazorpay(env, opts.fetch);
+  store.data.fees ||= { rate: 0.015 };
+  store.data.rzEvents ||= [];
   // Sends the confirm-your-email link (only when email sending is set up). Never blocks the request.
   const sendVerify = u => { if (!notify.on) return; const tok = auth.startVerify(u); if (tok) notify.verifyEmail(u, `${PUBLIC_URL}/#verify/${tok}`).catch(() => {}); };
   store.data.messages ||= [];
@@ -134,7 +138,8 @@ function createApp(opts = {}) {
     const org = auth.orgOf(u);
     const mine = r => r.sample || (u && (r.ownerId === u.id || (r.orgId && r.orgId === org)));
     const schedules = u ? store.data.schedules.filter(x => x.orgId === org) : [];
-    return { orders: base.orders.filter(mine), rfqs: base.rfqs.filter(mine), seq: base.seq, suppliers, useSamples: base.useSamples, me, schedules };
+    return { orders: base.orders.filter(mine).map(({ fee, ...o }) => o), rfqs: base.rfqs.filter(mine), seq: base.seq, suppliers, useSamples: base.useSamples, me, schedules,
+      payOnline: !!razorpay };
   }
   const sameOrg = (u, rec) => !!(u && u.role === "buyer" && (rec.ownerId === u.id || (rec.orgId && rec.orgId === auth.orgOf(u))));
   const hiddenFromSupplier = o => ["pending", "rejected"].includes(o.approval?.status);
@@ -186,6 +191,7 @@ function createApp(opts = {}) {
     }
     store.save();
     if (o.sample || ev === "cancel_quiet") return;
+    if (["invoice", "pay_claimed", "pay_recorded", "payconfirm", "paynotreceived"].includes(ev)) { notify.moneyEvent(o, ev, actorId); return; }
     if (["deliver", "deliver_issue", "review", "cancel", "dispute", "resolve", "withdraw"].includes(ev)) refreshTrack(o.sid);
     if (["confirm", "dispatch", "transit", "deliver", "deliver_issue"].includes(ev)) whatsapp.notifyOrder(o);
     notify.orderEvent(o, ev, actorId, who, env.CONTACT_TO);
@@ -289,6 +295,8 @@ function createApp(opts = {}) {
         signIn: { email: true, google: !!auth.providers.google, apple: !!auth.providers.apple, facebook: !!auth.providers.facebook },
         ai: claude ? `${claude.provider} (${claude.model})` : null,
         whatsapp: whatsapp.configured,
+        payments: razorpay ? { on: true, test: razorpay.test, webhook: razorpay.webhookOn } : { on: false },
+        fees: store.data.fees,
         counts: { buyers: users.filter(u => u.role === "buyer").length, suppliers: users.filter(u => u.role === "supplier").length,
           verifiedEmails: users.filter(u => u.emailVerified).length, listings: store.data.suppliers.filter(x => x.selfListed).length,
           verifiedListings: store.data.suppliers.filter(x => x.verified).length, requests: store.data.rfqs.filter(r => !r.sample).length, orders: real.length,
@@ -319,6 +327,7 @@ function createApp(opts = {}) {
       s.id ||= "c" + Date.now().toString(36);
       Object.assign(s, { orders: prev?.orders || 0, ownerId: u.id, selfListed: true, verified: !!prev?.verified });
       if (prev?.track) Object.assign(s, { track: prev.track, onTime: prev.onTime, rating: prev.rating }); // earned, not editable
+      if (prev) Object.assign(s, { feeAgreed: !!prev.feeAgreed, feeRate: prev.feeRate ?? null });
       store.data.suppliers = store.data.suppliers.filter(x => x.id !== s.id).concat(plainJ(s));
       u.supplierId = s.id; store.save(); syncSuppliers();
       const { ownerId, ...pub } = s; return { ...plainJ(pub), mine: true };
@@ -608,12 +617,17 @@ function createApp(opts = {}) {
       const qres = core.discover(r, neg, live), q = qres.eligible.find(x => x.s.id === order.sid);
       const clean = plainJ(core.orderRecord(r, qres, q, { ownerId: u.id, orgId: rec.orgId || auth.orgOf(u), source: rec.source === "schedule" ? "schedule" : "web" }));
       // Team members: orders above their limit, or past the monthly budget, wait for the account owner.
+      // Bill-to details for the supplier's tax invoice: the team's business (owner's details for members). No email or phone.
+      const biz = (u.orgOwner && store.data.users.find(x => x.id === u.orgOwner)) || u;
+      clean.billTo = { business: biz.business || "", gstin: biz.gstin || "", address: biz.address || "", city: rec.city };
+      const supRec = store.data.suppliers.find(x => x.id === clean.sid);
+      if (supRec?.feeAgreed) { const rate = supRec.feeRate ?? store.data.fees.rate; clean.fee = { rate, amount: Math.round(clean.subtotal * rate), status: "due" }; }
       const why = approvalNeeded(u, clean);
       if (why) clean.approval = { status: "pending", by: u.id, name: u.name || "", why, at: Date.now() };
       const placed = ctx.services.createOrder(clean, { status: "ordered", wonBy: q.s.id, quotes: plainJ(core.quoteSummary(qres)) });
       if (why) notify.approvalNeeded(placed, store.data.users.find(x => x.id === u.orgOwner), u);
       else notify.orderPlaced(placed);
-      return placed;
+      const { fee, ...forBuyer } = placed; return forBuyer;
     }],
     // Orders move by named actions; applyOrderAction (engine.js) decides who may do what.
     // The older {stage, history, issue} patch is kept for the team and the example orders.
@@ -649,6 +663,50 @@ function createApp(opts = {}) {
       if (o.stage !== before[0] || (o.issue && o.issue !== before[1])) { whatsapp.notifyOrder(o); if (!o.sample) { refreshTrack(o.sid); notify.orderStage(o, u?.id); } }
       return o;
     }],
+    // Online payment: a Razorpay link for what's still due on one order (buyer side).
+    ["POST", /^\/api\/orders\/(.+)\/paylink$/, async (req, m) => {
+      if (!razorpay) throw Object.assign(new Error("Online payment isn't switched on yet. Pay the supplier directly and record it here."), { status: 503 });
+      const o = store.data.orders.find(x => x.po === m[1]); const u = auth.userOf(req);
+      if (!o || !(isAdmin(req) || sameOrg(u, o))) throw notFound("Order");
+      if (o.cancelled || o.approval?.status === "pending") throw Object.assign(new Error("This order can't be paid right now"), { status: 409 });
+      limit(req, "paylink", 20, 36e5);
+      const due = core.dueOf(o); if (due < 1) throw Object.assign(new Error("Nothing is due on this order"), { status: 409 });
+      if (o.payLink && o.payLink.amount === due && o.payLink.at > Date.now() - 6 * 864e5) return o.payLink;
+      const p = core.PMAP[o.productId];
+      const link = await razorpay.createLink({ amount: due, po: o.po, description: `${o.po}: ${core.qfmt(o.qty)} ${p.unit} ${p.name} from ${o.sname}`, callbackUrl: `${PUBLIC_URL}/#orders` });
+      o.payLink = { ...link, at: Date.now(), test: razorpay.test }; store.save(); return o.payLink;
+    }],
+    ["POST", /^\/webhooks\/razorpay$/, async (req, m, url, res) => {
+      const raw = await readBody(req);
+      if (!razorpay || !razorpay.verify(raw, req.headers["x-razorpay-signature"])) { send(res, 401, { error: "Bad signature" }); return; }
+      const evId = String(req.headers["x-razorpay-event-id"] || "");
+      if (evId && store.data.rzEvents.includes(evId)) return { ok: true, duplicate: true };
+      let j; try { j = JSON.parse(raw); } catch { throw bad("Body must be JSON"); }
+      if (j.event === "payment_link.paid") {
+        const link = j.payload?.payment_link?.entity || {}, pay = j.payload?.payment?.entity || {};
+        const o = store.data.orders.find(x => x.po === link.notes?.po);
+        if (o && pay.id && !(o.payments || []).some(x => x.ref === pay.id)) {
+          o.payments = (o.payments || []).concat({ id: "RZP" + pay.id, amount: (pay.amount || link.amount_paid || 0) / 100, method: "razorpay", ref: pay.id, at: Date.now(), by: "razorpay", status: "confirmed", settled: false, test: razorpay.test });
+          if (o.payLink) o.payLink.paid = true;
+          notify.moneyEvent(o, "pay_online", null);
+        }
+      }
+      if (evId) store.data.rzEvents = store.data.rzEvents.concat(evId).slice(-500);
+      store.save(); return { ok: true };
+    }],
+    // Team: VyaparBoss's fee per order, settling online payments to suppliers, fee terms per supplier.
+    ["PATCH", /^\/api\/admin\/orders\/(.+)$/, async (req, m) => {
+      admin(req); const o = store.data.orders.find(x => x.po === m[1]); if (!o) throw notFound("Order");
+      const b = await jsonBody(req);
+      if (b.fee && o.fee && ["due", "invoiced", "collected", "waived"].includes(b.fee.status)) o.fee.status = b.fee.status;
+      if (b.settle) { const p = (o.payments || []).find(x => x.id === b.settle && x.method === "razorpay"); if (!p) throw notFound("Payment"); p.settled = Date.now(); }
+      store.save(); return o;
+    }],
+    ["PUT", /^\/api\/admin\/fees$/, async req => {
+      admin(req); const r = Number((await jsonBody(req)).ratePct);
+      if (!(r >= 0 && r <= 10)) throw bad("Fee must be 0–10%");
+      store.data.fees.rate = Math.round(r * 100) / 10000; store.save(); return store.data.fees;
+    }],
     ["DELETE", /^\/api\/samples$/, req => {
       admin(req);
       store.data.orders = store.data.orders.filter(o => !o.sample);
@@ -667,12 +725,15 @@ function createApp(opts = {}) {
       Object.assign(s, { orders: prev?.orders || 0, verified: "verified" in input ? !!input.verified : prev ? !!prev.verified : true });
       if (prev?.ownerId) Object.assign(s, { ownerId: prev.ownerId, selfListed: true });
       if (prev?.track) Object.assign(s, { track: prev.track, onTime: prev.onTime, rating: prev.rating });
+      if (prev) Object.assign(s, { feeAgreed: !!prev.feeAgreed, feeRate: prev.feeRate ?? null });
       store.data.suppliers = store.data.suppliers.filter(x => x.id !== s.id).concat(plainJ(s));
       store.save(); syncSuppliers(); return s;
     }],
     ["PATCH", /^\/api\/admin\/suppliers\/(.+)$/, async (req, m) => {
       admin(req); const s = store.data.suppliers.find(x => x.id === m[1]); if (!s) throw notFound("Supplier");
       const p = await jsonBody(req); if ("verified" in p) s.verified = !!p.verified;
+      if ("feeAgreed" in p) s.feeAgreed = !!p.feeAgreed;
+      if ("feeRatePct" in p) { const r = p.feeRatePct === "" || p.feeRatePct == null ? null : Number(p.feeRatePct); if (r != null && !(r >= 0 && r <= 10)) throw bad("Fee must be 0–10%"); s.feeRate = r == null ? null : Math.round(r * 100) / 10000; }
       store.save(); syncSuppliers(); return s;
     }],
     ["DELETE", /^\/api\/(?:admin\/)?suppliers\/(.+)$/, (req, m) => {

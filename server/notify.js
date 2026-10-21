@@ -103,6 +103,17 @@ function createNotifier({ store, mailer, core, publicUrl, log = console }) {
       const lim = limit == null ? "You can place orders of any size." : limit === 0 ? `Every order you place goes to ${owner.name || "the owner"} for approval first.` : `Orders above ${core.inr(limit)} go to ${owner.name || "the owner"} for approval first.`;
       later(mailer.send({ to: email, subject: `${owner.name || "Someone"} invited you to buy for ${owner.business || "their business"} on VyaparBoss`, text: `Namaste,\n\n${owner.name || "A VyaparBoss buyer"} invited you to place orders for ${owner.business || "their business"} on VyaparBoss. ${lim}\n\nAccept the invite (it works for 14 days): ${link}\n\nNot expecting this? Ignore this email.\n\n— VyaparBoss` }));
     },
+    /** Invoices and payments. */
+    moneyEvent(o, ev, actorId) {
+      const buyer = userById(o.ownerId), sup = ownerOfSupplier(o.sid), last = (o.payments || []).slice(-1)[0];
+      const to = (u, subject, text) => { if (u && u.id !== actorId) later(mail(u, subject, text)); };
+      const amt = last ? core.inr(last.amount) : "";
+      if (ev === "invoice") to(buyer, `Tax invoice ${o.invoice?.no} for order ${o.po}`, `${o.sname} issued tax invoice ${o.invoice?.no} for order ${o.po} (${core.inr(o.landed)}).\n\nView or print it: ${publicUrl}/#orders`);
+      if (ev === "pay_claimed") to(sup, `Buyer says they paid ${amt} for ${o.po}`, `The buyer recorded a payment of ${amt} for order ${o.po}${last?.ref ? ` (ref ${last.ref})` : ""}. Please confirm once it reaches your account: ${publicUrl}/#sorders`);
+      if (ev === "pay_recorded" || ev === "payconfirm") to(buyer, `Payment of ${amt} confirmed for ${o.po}`, `${o.sname} confirmed receiving ${amt} for order ${o.po}. Still due: ${core.inr(core.dueOf(o))}.\n\n${publicUrl}/#orders`);
+      if (ev === "paynotreceived") to(buyer, `Payment for ${o.po} not received yet`, `${o.sname} says the payment of ${amt} for order ${o.po} hasn't reached them yet. Please check the reference with your bank, or reply in the app: ${publicUrl}/#orders`);
+      if (ev === "pay_online") { to(buyer, `Payment received for ${o.po}`, `We received your online payment of ${amt} for order ${o.po}. Thank you!`); to(sup, `Buyer paid ${amt} online for ${o.po}`, `The buyer paid ${amt} online for order ${o.po}. VyaparBoss will settle it to you.\n\n${publicUrl}/#sorders`); }
+    },
     /** Order moved along. Tells whichever side didn't make the change. */
     orderStage(o, actorId) {
       const stage = (core.STAGES || [])[o.stage] || `stage ${o.stage}`;
