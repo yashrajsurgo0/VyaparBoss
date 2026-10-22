@@ -24,7 +24,7 @@ function ruleParse(text){
   // mask spec numbers
   t=t.replace(/\d+\s*-?\s*(ply|mm|micron|lph|gsm|inch|in\b|m\b)/g," ").replace(/\d+:\d+:\d+/g," ").replace(/\d+\s*x\s*\d+/g," ");
   // quantity
-  const qr=/(\d[\d,]*(?:\.\d+)?)\s*(k(?![a-z])|lakh|hazaar|hazar|thousand)?\s*(kgs?|kilos?|tonnes?|tons?|mt|t\b|pcs|pieces?|nos|units?|boxes|box|rolls?|bags?|crates?|cartons?|dabbe|dabba|spools?)?/g;
+  const qr=/(\d[\d,]*(?:\.\d+)?)\s*(k(?![a-z])|lakh|hazaar|hazar|thousand)?\s*(kgs?|kilos?|tonnes?|tons?|mt|t\b|pcs|pieces?|nos|units?|boxes|box|rolls?|bags?|crates?|cartons?|dabbe|dabba|spools?|coils?|lengths?)?/g;
   while((m=qr.exec(t))){
     let n=parseFloat(m[1].replace(/,/g,""));if(!isFinite(n)||n===0)continue;
     if(m[2]==="k"||m[2]==="hazaar"||m[2]==="hazar"||m[2]==="thousand")n*=1000;if(m[2]==="lakh")n*=1e5;

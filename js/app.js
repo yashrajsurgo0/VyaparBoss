@@ -11,8 +11,9 @@ const store=()=>Repo.data;
 const fail=e=>{console.error(e);toast(e.message||"Something went wrong. Try again.");};
 const initials=n=>String(n).split(/\s+/).filter(w=>/^[A-Za-z]/.test(w)).slice(0,2).map(w=>w[0]).join("").toUpperCase()||"S";
 const ico=(id,cls="ic")=>`<svg class="${cls}" aria-hidden="true"><use href="#${id}"/></svg>`;
-const CAT_INFO={pack:{icon:"cat-pack",name:"Packaging",hint:"Boxes, film, tape"},ind:{icon:"cat-ind",name:"Industrial",hint:"Safety, welding, cleaning"},agri:{icon:"cat-agri",name:"Agri inputs",hint:"Drip, crates, fertiliser"}};
-const QTY_PRESETS={kg:[500,1000,2000,5000],pcs:[1000,5000,10000,25000],rolls:[20,50,100,500],boxes:[50,100,250,500]};
+const CAT_INFO={pack:{icon:"cat-pack",name:"Packaging",hint:"Boxes, film, tape"},ind:{icon:"cat-ind",name:"Industrial",hint:"Safety, welding, cleaning"},agri:{icon:"cat-agri",name:"Agri inputs",hint:"Drip, crates, fertiliser"},
+  elec:{icon:"cat-elec",name:"Electrical",hint:"Wire, MCBs, LED"},build:{icon:"cat-build",name:"Building",hint:"Cement, TMT, pipes"}};
+const QTY_PRESETS={kg:[500,1000,2000,5000],pcs:[1000,5000,10000,25000],rolls:[20,50,100,500],boxes:[50,100,250,500],coils:[20,50,100,250],bags:[100,250,500,1000],lengths:[20,50,100,200]};
 const TOP_CITIES=["Pune","Mumbai","Delhi","Ahmedabad","Bengaluru","Chennai","Hyderabad","Indore"];
 const DEADLINES=[[3,"In 3 days"],[7,"Within a week"],[15,"In 2 weeks"],[0,"No rush"]];
 
@@ -350,7 +351,8 @@ function moneyHTML(o,side){
       <div class="field"><label for="pm-${k}">How</label><select id="pm-${k}" name="method">${Object.entries(PAY_METHODS).filter(([v])=>v!=="razorpay").map(([v,l])=>`<option value="${v}">${l}</option>`).join("")}</select></div>
       <div class="field"><label for="pr-${k}">Reference (UTR, cheque no.)</label><input id="pr-${k}" name="ref" maxlength="40" class="num"></div>
     </div>${side==="buyer"?`<p class="hint">The supplier confirms once it reaches them.</p>`:""}<button class="btn sm">Save payment</button></form></div></details>`:"";
-  const online=side==="buyer"&&due>0&&store().payOnline?`<button class="btn sm primary" data-action="pay-online" data-po="${po}">Pay ${inr(due)} online</button>`:"";
+  const claimed=claimedOf(o),payNow=Math.max(0,Math.round(due-claimed));
+  const online=side==="buyer"&&payNow>0&&store().payOnline?`<button class="btn sm primary" data-action="pay-online" data-po="${po}">Pay ${inr(payNow)} online</button>`:"";
   const invForm=side==="supplier"&&!o.invoice&&o.stage>=2?`<details class="more sub"><summary>Issue tax invoice ${ico("i-chev","")}</summary><div>
     <form class="oform" data-form="oact" data-act="invoice" data-po="${po}" data-side="supplier" novalidate><div class="fields">
       <div class="field"><label for="in-${k}">Your invoice number</label><input id="in-${k}" name="number" maxlength="16" class="num" placeholder="e.g. AP/26-27/0042"></div>
@@ -358,7 +360,7 @@ function moneyHTML(o,side){
     </div><p class="hint">Bhai fills in the GST split, HSN and the buyer's billing details from the order. Check it before you send it.</p><button class="btn sm">Create invoice</button></form></div></details>`:"";
   const fee=side==="supplier"&&o.fee?`<p class="hint">VyaparBoss fee on this order: ${inr(o.fee.amount)} (${(o.fee.rate*100).toFixed(1)}% of goods, as agreed) · ${esc(o.fee.status)}</p>`:"";
   return `<div class="moneybox"><div class="ohead"><b>Payment</b><span class="pill ${pc}">${pl}</span></div>
-    <p class="hint">${inr(paidOf(o))} paid of ${inr(o.landed)}${due>0?` · <b>${inr(due)} due</b>`:""}</p>${list}${online?`<div class="actions">${online}</div>`:""}${payForm}${inv}${invForm}${fee}</div>`;
+    <p class="hint">${inr(paidOf(o))} paid of ${inr(o.landed)}${due>0?` · <b>${inr(due)} due</b>`:""}${claimed?` · ${inr(claimed)} waiting for ${side==="supplier"?"you":"the supplier"} to confirm`:""}</p>${list}${online?`<div class="actions">${online}</div>`:""}${payForm}${inv}${invForm}${fee}</div>`;
 }
 /* Printable GST tax invoice, issued by the supplier from the order. */
 function invoiceHTML(o){
@@ -443,7 +445,7 @@ function renderOrders(){
       ${o.cancelled?"":`<div class="track" aria-hidden="true">${STAGES.map((_,i)=>`<i class="${i<o.stage||deliv?"on":i===o.stage?"now":""}"></i>`).join("")}</div>`}
       <div class="ostatus">${status}</div>
       ${shipmentHTML(o)}${receiptHTML(o)}
-      ${buyerNext(o,sname)}
+      ${o.sample?"":buyerNext(o,sname)}
       ${disputeHTML(o,"buyer")}
       ${o.sample?"":moneyHTML(o,"buyer")}
       <details class="more"><summary>Details ${ico("i-chev","")}</summary><div>
@@ -516,8 +518,8 @@ function supplierCard(s){
 function renderSuppliers(){
   const own=store().suppliers.length;
   $("#useSamples").checked=store().useSamples;
-  $("#snetIntro").textContent=own?`${own} supplier${own===1?"":"s"} you added${store().useSamples?", plus 15 examples":""}. Ranked by delivered price and track record, not by who pays for listings.`
-    :`15 example suppliers for now. Add your real suppliers and Bhai will quote from their rates.`;
+  $("#snetIntro").textContent=own?`${own} supplier${own===1?"":"s"} you added${store().useSamples?", plus 20 examples":""}. Ranked by delivered price and track record, not by who pays for listings.`
+    :`20 example suppliers for now. Add your real suppliers and Bhai will quote from their rates.`;
   const q=($("#sq").value||"").toLowerCase().trim();
   const list=SUPPLIERS.filter(s=>(scat==="all"||s.offers.some(o=>PMAP[o.p]?.cat===scat))&&(!q||(s.name+" "+s.city+" "+(s.area||"")+" "+s.offers.map(o=>PMAP[o.p]?.name).join(" ")).toLowerCase().includes(q)));
   $("#sgrid").innerHTML=list.length?list.map(supplierCard).join("")

@@ -472,10 +472,11 @@ function showTeamView(v,quiet){
   if(locked){gate.innerHTML=`<div class="panel pad gate"><h3>Team only</h3><p class="muted">Enter the admin key set on the server (ADMIN_KEY) to manage suppliers, sign-ups and outreach.</p>
       <form class="warow" data-form="admin-key"><input id="adminKey" type="password" autocomplete="current-password" placeholder="Admin key" aria-label="Admin key"><button class="btn primary">Unlock</button></form></div>`;}
   else gate.innerHTML="";
-  const show={setup:"s-setup",network:"s-network",apps:"s-apps",outreach:"i-outreach",desk:"s-desk",wa:"t-wa"};
+  const show={setup:"s-setup",ops:"s-ops",network:"s-network",apps:"s-apps",outreach:"i-outreach",desk:"s-desk",wa:"t-wa"};
   Object.entries(show).forEach(([k,id])=>{const e=document.getElementById(id);if(e)e.hidden=locked||k!==v;});
   if(locked)return;
   if(v==="setup"&&!quiet)renderSetup();
+  if(v==="ops"&&!quiet)renderOps();
   if(v==="network")renderSuppliers();if(v==="desk")renderDesk();if(v==="wa")renderWhatsApp();
   if(!quiet){if(v==="apps")renderApps();if(v==="outreach")renderOutreachView();}
 }
@@ -499,8 +500,10 @@ async function renderSetup(){
       ${item(s.signIn.apple,"Sign in with Apple",s.signIn.apple?"On.":"Off.","Needs the Apple Developer Program (US$99 a year). Add <code>APPLE_CLIENT_ID</code>.")}
       ${item(s.signIn.facebook,"Sign in with Facebook",s.signIn.facebook?"On.":"Off.","Needs a Meta developer app. Add <code>FACEBOOK_APP_ID</code> and <code>FACEBOOK_APP_SECRET</code>.")}
       ${item(!!s.ai,"Bhai's AI",s.ai?`Reading requests with ${esc(s.ai)}.`:"Off: Bhai uses the built-in rule reader.","Add <code>GEMINI_API_KEY</code> from aistudio.google.com.")}
+      ${item(s.payments?.on&&s.payments?.webhook,"Online payments",s.payments?.on?`Razorpay ${s.payments.test?"in test mode (no real money)":"live"}${s.payments.webhook?".":", but the webhook secret is missing, so paid links won't be recorded."}`:"Off: buyers pay suppliers directly and record it.",
+        `Razorpay dashboard → API keys (start with test keys) → add <code>RAZORPAY_KEY_ID</code> and <code>RAZORPAY_KEY_SECRET</code>; Webhooks → URL <code>${esc(s.publicUrl)}/webhooks/razorpay</code>, event payment_link.paid → add <code>RAZORPAY_WEBHOOK_SECRET</code>. Before taking real money, set up Razorpay Route so payments go to suppliers, not to VyaparBoss.`)}
       ${item(s.whatsapp,"WhatsApp",s.whatsapp?"Connected.":"Not connected.","Needs a Meta business account. Steps in docs/WHATSAPP_SETUP.md.")}
-      ${item(!c.samplesShown,"Real suppliers only",c.samplesShown?`The 15 example suppliers still show to buyers. ${c.listings} supplier${c.listings===1?"":"s"} listed themselves.`:"Example suppliers are hidden.","Once you have real suppliers for your first category, hide the examples in Network.")}
+      ${item(!c.samplesShown,"Real suppliers only",c.samplesShown?`The 20 example suppliers still show to buyers. ${c.listings} supplier${c.listings===1?"":"s"} listed themselves.`:"Example suppliers are hidden.","Once you have real suppliers for your first category, hide the examples in Network.")}
     </ol>
     <div class="kpis setup-k">
       <div class="panel kpi"><span>Buyers</span><b>${c.buyers}</b><small>${c.verifiedEmails} confirmed emails in all</small></div>
@@ -509,6 +512,52 @@ async function renderSetup(){
       <div class="panel kpi"><span>Inbox</span><b>${c.signups+c.messages}</b><small>${c.signups} sign-ups, ${c.messages} messages</small></div>
     </div>`;
   setHTML(el,html);
+}
+/* Team → Ops: is the marketplace working, and what needs a person today. */
+const LEVEL={critical:["bad","Urgent"],serious:["warn","Today"],warning:["gold","Watch"]};
+const pct=x=>x==null?"–":Math.round(x*100)+"%";
+const hrs=x=>x==null?"–":x<1?"<1 h":x<48?Math.round(x)+" h":Math.round(x/24)+" days";
+function weeksChart(weeks){
+  const max=Math.max(1,...weeks.map(w=>w.gmv)),lbl=t=>new Date(t).toLocaleDateString("en-IN",{day:"numeric",month:"short"});
+  const top=lakh(max),last=weeks[weeks.length-1];
+  return `<figure class="wchart"><figcaption><b>Orders by week</b> <span class="muted">order value by the week it was placed, last 8 weeks</span></figcaption>
+    <div class="wplot" role="img" aria-label="Order value by week for the last 8 weeks; this week ${lakh(last.gmv)}">
+      <div class="wgrid"><span>${top}</span><span>0</span></div>
+      <div class="wbars">${weeks.map((w,i)=>`<div class="wcol" tabindex="0" data-tip="Week of ${lbl(w.start)}: ${inr(w.gmv)}, ${w.orders} order${w.orders===1?"":"s"}">${i===weeks.length-1&&w.gmv?`<em>${lakh(w.gmv)}</em>`:""}<i style="height:calc((100% - ${i===weeks.length-1&&w.gmv?18:0}px) * ${(w.gmv/max).toFixed(3)})"></i><small>${lbl(w.start)}</small></div>`).join("")}</div>
+    </div>
+    <details class="more sub"><summary>Show as a table ${ico("i-chev","")}</summary><div><table class="breakdown"><tbody>${weeks.map(w=>`<tr><td>Week of ${lbl(w.start)}</td><td>${w.orders} order${w.orders===1?"":"s"}</td><td>${inr(w.gmv)}</td></tr>`).join("")}</tbody></table></div></details>
+  </figure>`;
+}
+async function renderOps(){
+  const el=document.getElementById("s-ops");if(!el)return;
+  if(Repo.mode!=="server"){setHTML(el,`<div class="panel empty">${ico("art-chart","")}<h2>Ops lives on the live app</h2><p>It reads real orders, requests and payments from the server.</p></div>`);return;}
+  if(el.contains(document.activeElement)&&/^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName))return;
+  if(!el.innerHTML)el.innerHTML=`<p class="muted">Loading…</p>`;
+  let r;try{r=await Repo.opsReport();}catch(e){el.innerHTML=`<div class="errors">${esc(e.message)}</div>`;el._html=null;return;}
+  const k=r.kpi;
+  const tiles=[["Order value",lakh(k.gmv),`${lakh(k.gmv30)} in the last 30 days`],["Orders",String(k.orders),k.orders?`average ${lakh(k.aov)}`:"none yet"],
+    ["Requests that became orders",pct(k.orderRate),`${k.requests} request${k.requests===1?"":"s"}`],["Supplier reply time",hrs(k.responseHours),`median, to their own price · ${pct(k.quoteRate)} of requests`],
+    ["Time to confirm",hrs(k.confirmHours),"median, supplier confirming a PO"],["On time",pct(k.onTimeRate),`${k.delivered} delivered`],
+    ["Orders with a problem",pct(k.disputeRate),`${k.openDisputes} open now · ${pct(k.cancelRate)} cancelled`],["Buyers who came back",pct(k.repeatRate),`${k.activeBuyers} active buyers, ${k.activeSuppliers} suppliers (30 days)`]];
+  const fee=Math.round(r.feeRate*1000)/10;
+  setHTML(el,`<section class="topsec"><h2 class="sub">Needs a person today</h2>
+      ${r.alerts.length?`<ul class="alerts">${r.alerts.map(a=>`<li class="${a.level}"><span class="pill ${LEVEL[a.level][0]}">${LEVEL[a.level][1]}</span><div><b>${esc(a.title)}</b><small>${esc(a.detail)}</small></div></li>`).join("")}</ul>`:`<p class="hint">${ico("i-check","")}Nothing waiting. Every order is on track.</p>`}</section>
+    <div class="kpis">${tiles.map(([a,b,c])=>`<div class="panel kpi"><span>${a}</span><b>${b}</b><small>${c}</small></div>`).join("")}</div>
+    <div class="panel pad">${weeksChart(r.weeks)}</div>
+    ${r.disputes.length?`<section class="topsec"><h2 class="sub">Open problems</h2>${r.disputes.map(d=>`<div class="panel ocard"><div class="ohead"><div><h3>${esc(d.po)}: ${esc(d.issue)}</h3><p class="meta">${esc(d.supplier)} · ${inr(d.landed)} · opened ${fdate(d.opened)}</p></div></div>
+      ${d.detail?`<p>“${esc(d.detail)}”</p>`:""}${d.msgs.length?`<ul class="thread">${d.msgs.map(m=>`<li class="${m.by}"><small>${m.by==="buyer"?"Buyer":m.by==="supplier"?"Supplier":"Team"} · ${fdate(m.at)}</small>${esc(m.text)}</li>`).join("")}</ul>`:""}
+      <form class="oform" data-form="ops-resolve" data-po="${esc(d.po)}" novalidate><div class="fields">
+        <div class="field"><label for="rs-${okey(d.po)}">Outcome</label><select id="rs-${okey(d.po)}">${Object.entries(RESOLUTIONS).filter(([v])=>v!=="withdrawn").map(([v,l])=>`<option value="${v}">${l}</option>`).join("")}</select></div>
+        <div class="field"><label for="rt-${okey(d.po)}">Note to both sides</label><input id="rt-${okey(d.po)}" maxlength="300"></div></div>
+        <div class="actions"><button class="btn sm primary">Close the problem</button><button class="btn sm ghost" type="button" data-action="ops-msg" data-po="${esc(d.po)}">Send note only</button></div></form></div>`).join("")}</section>`:""}
+    ${r.toSettle.length?`<section class="topsec"><h2 class="sub">Paid online, to settle</h2><ul class="memberlist">${r.toSettle.map(p=>`<li><div><b>${inr(p.amount)} to ${esc(p.supplier)}</b><small>${esc(p.po)} · ${fdate(p.at)}${p.test?" · test mode, no real money":""}</small></div><button class="btn sm" data-action="ops-settle" data-po="${esc(p.po)}" data-id="${esc(p.id)}">Mark settled</button></li>`).join("")}</ul></section>`:""}
+    <section class="topsec"><h2 class="sub">VyaparBoss fees</h2>
+      <p class="muted">A fee applies only to suppliers who agreed to it, from their next order. ${lakh(k.feesDue)} due, ${lakh(k.feesCollected)} collected.</p>
+      <form class="replyrow feerate" data-form="ops-feerate" novalidate><label for="feeRate">Standard fee (% of goods)</label><input id="feeRate" type="number" min="0" max="10" step="0.1" value="${fee}"><button class="btn sm">Save</button></form>
+      ${r.suppliers.length?`<ul class="memberlist">${r.suppliers.map(x=>`<li><div><b>${esc(x.name)}</b><small>${esc(x.city)}${x.verified?" · verified":""}${x.delivered?` · ${x.onTime}% on time over ${x.delivered}`:""}</small></div>
+        <form class="replyrow" data-form="ops-supfee" data-sid="${esc(x.id)}" novalidate><label class="toggle"><input type="checkbox" id="fa-${esc(x.id)}" ${x.feeAgreed?"checked":""}> Fee agreed</label><label class="sr" for="fr-${esc(x.id)}">Their rate (%)</label><input id="fr-${esc(x.id)}" type="number" min="0" max="10" step="0.1" placeholder="${fee}%" value="${x.feeRate!=null?Math.round(x.feeRate*1000)/10:""}"><button class="btn sm">Save</button></form></li>`).join("")}</ul>`:`<p class="hint">Suppliers who list themselves show up here.</p>`}
+      ${r.fees.length?`<div class="tablewrap"><table class="cmp"><thead><tr><th>Order</th><th>Supplier</th><th>Fee</th><th>Status</th></tr></thead><tbody>${r.fees.map(f=>`<tr><td>${esc(f.po)}</td><td>${esc(f.supplier)}</td><td>${inr(f.amount)}</td><td><select data-feestatus="${esc(f.po)}" aria-label="Fee status for ${esc(f.po)}">${["due","invoiced","collected","waived"].map(v=>`<option ${v===f.status?"selected":""}>${v}</option>`).join("")}</select></td></tr>`).join("")}</tbody></table></div>`:""}
+    </section>`);
 }
 function onTeamUnlocked(){teamView="setup";Repo.refresh().then(()=>{renderNav();renderAcct();showTab("team");showTeamView(teamView);}).catch(fail);}
 
@@ -556,6 +605,8 @@ Object.assign(ACTIONS,{
   "au-mode":a=>{au.mode=a.dataset.v;au.err=[];au.wrongRole=null;au.sent=null;renderAuth();},
   "au-email":()=>{au.email=!au.email;renderAuth();if(au.email)setTimeout(()=>document.getElementById(au.mode==="signup"?"auName":"auEmail")?.focus(),30);},
   "au-provider":a=>startProvider(a.dataset.v),
+  "ops-settle":a=>Repo.teamOrder(a.dataset.po,{settle:a.dataset.id}).then(()=>{toast("Marked settled");renderOps();}).catch(fail),
+  "ops-msg":a=>{const t=document.getElementById("rt-"+okey(a.dataset.po))?.value||"";Repo.orderAction(a.dataset.po,{action:"reply",text:t},"team").then(()=>{toast("Note sent to both sides");renderOps();}).catch(fail);},
   "team-remove":a=>Repo.removeMember(a.dataset.id).then(()=>{toast("Removed from your team");loadTeam();}).catch(fail),
   "team-uninvite":a=>Repo.cancelInvite(a.dataset.id).then(()=>{toast("Invite cancelled");loadTeam();}).catch(fail),
   "team-copy":()=>{const i=document.getElementById("invLink");if(!i)return;const ok=()=>toast("Link copied");try{navigator.clipboard.writeText(i.value).then(ok,()=>{i.select();toast("Press Ctrl+C to copy");});}catch(e){i.select();}},
@@ -580,6 +631,11 @@ document.addEventListener("submit",e=>{
   const f=e.target.closest("form[data-form]");if(!f)return;const k=f.dataset.form;
   if(k==="au-signup"||k==="au-login"){e.preventDefault();submitAuth(k==="au-signup"?"signup":"login");}
   if(k==="au-forgot"||k==="au-reset"){e.preventDefault();submitRecover(k==="au-forgot"?"forgot":"reset");}
+  if(k==="ops-resolve"){e.preventDefault();const po=f.dataset.po;
+    Repo.orderAction(po,{action:"resolve",resolution:document.getElementById("rs-"+okey(po))?.value,note:document.getElementById("rt-"+okey(po))?.value||""},"team").then(()=>{toast("Problem closed. Both sides got an email.");renderOps();}).catch(fail);}
+  if(k==="ops-feerate"){e.preventDefault();Repo.setFeeRate(document.getElementById("feeRate")?.value).then(()=>{toast("Standard fee saved");renderOps();}).catch(fail);}
+  if(k==="ops-supfee"){e.preventDefault();const id=f.dataset.sid;
+    Repo.setFeeTerms(id,!!document.getElementById("fa-"+id)?.checked,document.getElementById("fr-"+id)?.value??"").then(()=>{toast("Fee terms saved");document.activeElement?.blur?.();renderOps();}).catch(fail);}
   if(k==="team-invite"){e.preventDefault();const em=document.getElementById("tiEmail")?.value||"",lim=document.getElementById("tiLimit")?.value??"";
     Repo.invite(em,lim).then(j=>{lastInvite={email:em.trim().toLowerCase(),link:j.link,emailed:j.emailed};toast("Invite created");loadTeam();}).catch(fail);}
   if(k==="team-limit"){e.preventDefault();const v=document.getElementById("ml-"+f.dataset.id)?.value??"";
@@ -601,6 +657,7 @@ document.addEventListener("input",e=>{
 });
 document.addEventListener("change",e=>{
   const t=e.target,id=t.id;
+  if(t.dataset?.feestatus){Repo.teamOrder(t.dataset.feestatus,{fee:{status:t.value}}).then(()=>{toast("Fee status saved");t.blur?.();renderOps();}).catch(fail);return;}
   const num=v=>{const n=Number(v);return isFinite(n)&&n>0?n:0;};
   const map={dprod:()=>{df.product=t.value;if(!df.product){df.maxPrice=0;if(df.sort==="price")df.sort="best";}},dstate:()=>df.state=t.value,dcity:()=>{df.city=t.value;if(!df.city){df.maxKm=0;if(df.sort==="near")df.sort="best";}},
     dkm:()=>df.maxKm=num(t.value),dqty:()=>df.qty=Math.round(num(t.value)),dprice:()=>df.maxPrice=num(t.value),drate:()=>df.minRating=num(t.value),dver:()=>df.verified=t.checked,dontime:()=>df.ontime=t.checked,dsort:()=>df.sort=t.value};
