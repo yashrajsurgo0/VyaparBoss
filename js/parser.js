@@ -1,4 +1,4 @@
-/* VyaparBoss — Buyer Intelligence Agent: rule parser + Claude parser. Plain browser script (no build step); loaded in order by index.html. */
+/* KaantaMandi — Buyer Intelligence Agent: rule parser + Claude parser. Plain browser script (no build step); loaded in order by index.html. */
 /* ===================== PARSING ===================== */
 const HNUM={ek:1,do:2,teen:3,char:4,chaar:4,paanch:5,panch:5,chhe:6,saat:7,aath:8,nau:9,das:10,a:1,one:1,two:2,three:3,four:4,five:5,seven:7,ten:10};
 const HWORD={ek:1,do:2,teen:3,char:4,chaar:4,paanch:5,panch:5,chhe:6,saat:7,aath:8,nau:9,das:10,bees:20,pachaas:50,sau:100,dedh:1.5,dhai:2.5,dhaai:2.5,adha:0.5};
@@ -56,7 +56,7 @@ function missing(r){const m=[];if(!r?.productId)m.push("product");if(!r?.qty)m.p
 /* Prompts are shared by the browser (claude.ai artifact runtime) and the server (Anthropic API). */
 function buildParsePrompt(text,partial,lang){
   const catalog=PRODUCTS.map(p=>`${p.id}: ${p.name} (${p.spec}; sold per ${p.unit}${p.unit!=="kg"?`, ~${p.kgPer} kg each`:""})`).join("\n");
-  return `You are Bhai, the friendly buying assistant of VyaparBoss, an Indian B2B procurement platform for small businesses. You talk like a helpful elder brother at a trusted wholesale shop: warm, short, practical. Read the buyer's message (English, Hindi or Hinglish) and extract a structured purchase requirement.
+  return `You are Bhai, the friendly buying assistant of KaantaMandi, an Indian B2B procurement platform for small businesses. You talk like a helpful elder brother at a trusted wholesale shop: warm, short, practical. Read the buyer's message (English, Hindi or Hinglish) and extract a structured purchase requirement.
 
 Catalog product ids (use only these):
 ${catalog}
@@ -73,7 +73,7 @@ Rules: quantity is the number the buyer said and unit is the unit they used (kg,
 }
 function buildReplyPrompt(r,s,mine){
   const p=PMAP[r.productId];
-  return `Write a short WhatsApp reply (3-4 sentences, Hinglish, polite and businesslike, no emojis) from Indian supplier "${s.name}" (${s.city}) answering a buyer RFQ on the VyaparBoss platform. RFQ: ${qfmt(r.qty)} ${p.unit} of ${p.name} (${p.spec}) delivered to ${r.city}${r.deadline?` within ${r.deadline} days`:""}. Our price: ${inr(mine.unit,2)} per ${unitOne(p.unit)} plus GST ${p.gst}%. Delivery in ${mine.eta} days. Payment terms: ${s.terms}. Certifications: ${(s.certs||[]).join(", ")||"none listed"}. Only use these facts; do not invent discounts or stock levels. Reply with only the message text.`;
+  return `Write a short WhatsApp reply (3-4 sentences, Hinglish, polite and businesslike, no emojis) from Indian supplier "${s.name}" (${s.city}) answering a buyer RFQ on the KaantaMandi platform. RFQ: ${qfmt(r.qty)} ${p.unit} of ${p.name} (${p.spec}) delivered to ${r.city}${r.deadline?` within ${r.deadline} days`:""}. Our price: ${inr(mine.unit,2)} per ${unitOne(p.unit)} plus GST ${p.gst}%. Delivery in ${mine.eta} days. Payment terms: ${s.terms}. Certifications: ${(s.certs||[]).join(", ")||"none listed"}. Only use these facts; do not invent discounts or stock levels. Reply with only the message text.`;
 }
 /* Validate whatever the model returned before it touches the engine. */
 function cleanParsed(x){

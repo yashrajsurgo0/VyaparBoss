@@ -1,4 +1,4 @@
-/* VyaparBoss UI. Bhai is the built-in buying assistant.
+/* KaantaMandi UI. Bhai is the built-in buying assistant.
    Buy screen = a short conversation: each answer reveals the next question (product → quantity → city → date),
    then quotes (best pick first, details on demand), then approval. Plain browser script, loaded last. */
 
@@ -175,9 +175,9 @@ function askCard(){
 }
 function trustPills(s){
   const t=[];
-  t.push(s.sample?`<span class="pill good">${ico("i-shield","")}GST verified</span>`:s.selfListed&&!s.verified?`<span class="pill warn">Not yet verified</span>`:s.verified?`<span class="pill good">${ico("i-shield","")}Verified by VyaparBoss</span>`:s.gstOk?`<span class="pill good">${ico("i-shield","")}GSTIN checked</span>`:`<span class="pill warn">GSTIN not checked</span>`);
+  t.push(s.sample?`<span class="pill good">${ico("i-shield","")}GST verified</span>`:s.selfListed&&!s.verified?`<span class="pill warn">Not yet verified</span>`:s.verified?`<span class="pill good">${ico("i-shield","")}Verified by KaantaMandi</span>`:s.gstOk?`<span class="pill good">${ico("i-shield","")}GSTIN checked</span>`:`<span class="pill warn">GSTIN not checked</span>`);
   if(s.track?.delivered){
-    t.push(`<span class="pill" title="Delivered by the promised date on VyaparBoss">${s.onTime}% on time · ${s.track.delivered} order${s.track.delivered>1?"s":""}</span>`);
+    t.push(`<span class="pill" title="Delivered by the promised date on KaantaMandi">${s.onTime}% on time · ${s.track.delivered} order${s.track.delivered>1?"s":""}</span>`);
     if(s.rating!=null)t.push(`<span class="pill gold">${ico("i-star","")}${s.rating} (${s.track.rated})</span>`);
   }else if(s.onTime!=null)t.push(`<span class="pill">${s.onTime}% on time</span>`,`<span class="pill gold">${ico("i-star","")}${s.rating}</span>`);
   else t.push(`<span class="pill brand">New supplier</span>`);
@@ -326,15 +326,15 @@ function receiptHTML(o){
 }
 function disputeHTML(o,side){
   const d=o.dispute;if(!d)return "";
-  const who={buyer:side==="buyer"?"You":"Buyer",supplier:side==="supplier"?"You":"Supplier",team:"VyaparBoss team"};
+  const who={buyer:side==="buyer"?"You":"Buyer",supplier:side==="supplier"?"You":"Supplier",team:"KaantaMandi team"};
   const k=okey(o.po);
   const thread=[{by:d.by,text:d.detail||ISSUE_REASONS[d.reason],at:d.opened}].concat(d.msgs||[]);
   return `<div class="dispute ${d.status}">
     <div class="ohead"><b>${d.status==="open"?"Problem":"Problem resolved"}: ${esc(ISSUE_REASONS[d.reason]||"Other")}</b>${d.status==="open"?`<span class="pill bad">Open</span>`:`<span class="pill good">${esc(RESOLUTIONS[d.resolution]||"Resolved")}</span>`}</div>
-    <ul class="thread">${thread.map(m=>`<li class="${m.by}"><small>${who[m.by]||m.by} · ${fdate(m.at)}</small>${esc(m.text)}</li>`).join("")}${d.status!=="open"&&d.note?`<li class="team"><small>VyaparBoss team · ${fdate(d.resolvedAt)}</small>${esc(d.note)}</li>`:""}</ul>
+    <ul class="thread">${thread.map(m=>`<li class="${m.by}"><small>${who[m.by]||m.by} · ${fdate(m.at)}</small>${esc(m.text)}</li>`).join("")}${d.status!=="open"&&d.note?`<li class="team"><small>KaantaMandi team · ${fdate(d.resolvedAt)}</small>${esc(d.note)}</li>`:""}</ul>
     ${d.status==="open"?`<form class="oform replyrow" data-form="oact" data-act="reply" data-po="${esc(o.po)}" data-side="${side}" novalidate>
       <label class="sr" for="rp-${k}">Reply</label><input id="rp-${k}" name="text" maxlength="500" placeholder="${side==="supplier"?"Reply to the buyer…":"Add a message…"}"><button class="btn sm">Send</button></form>
-      ${side==="buyer"?`<p class="hint">Sorted out? <button class="link" data-action="oact" data-act="withdraw" data-po="${esc(o.po)}" data-side="buyer">Close the problem</button>. Otherwise the VyaparBoss team steps in within a working day.</p>`:`<p class="hint">The VyaparBoss team reads this thread and closes the problem once you and the buyer agree.</p>`}`:""}
+      ${side==="buyer"?`<p class="hint">Sorted out? <button class="link" data-action="oact" data-act="withdraw" data-po="${esc(o.po)}" data-side="buyer">Close the problem</button>. Otherwise the KaantaMandi team steps in within a working day.</p>`:`<p class="hint">The KaantaMandi team reads this thread and closes the problem once you and the buyer agree.</p>`}`:""}
   </div>`;
 }
 /* Money on an order: invoice, payments recorded by either side, online payment for the buyer. */
@@ -358,7 +358,7 @@ function moneyHTML(o,side){
       <div class="field"><label for="in-${k}">Your invoice number</label><input id="in-${k}" name="number" maxlength="16" class="num" placeholder="e.g. AP/26-27/0042"></div>
       <div class="field"><label for="id-${k}">Invoice date</label><input id="id-${k}" name="date" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
     </div><p class="hint">Bhai fills in the GST split, HSN and the buyer's billing details from the order. Check it before you send it.</p><button class="btn sm">Create invoice</button></form></div></details>`:"";
-  const fee=side==="supplier"&&o.fee?`<p class="hint">VyaparBoss fee on this order: ${inr(o.fee.amount)} (${(o.fee.rate*100).toFixed(1)}% of goods, as agreed) · ${esc(o.fee.status)}</p>`:"";
+  const fee=side==="supplier"&&o.fee?`<p class="hint">KaantaMandi fee on this order: ${inr(o.fee.amount)} (${(o.fee.rate*100).toFixed(1)}% of goods, as agreed) · ${esc(o.fee.status)}</p>`:"";
   return `<div class="moneybox"><div class="ohead"><b>Payment</b><span class="pill ${pc}">${pl}</span></div>
     <p class="hint">${inr(paidOf(o))} paid of ${inr(o.landed)}${due>0?` · <b>${inr(due)} due</b>`:""}${claimed?` · ${inr(claimed)} waiting for ${side==="supplier"?"you":"the supplier"} to confirm`:""}</p>${list}${online?`<div class="actions">${online}</div>`:""}${payForm}${inv}${invForm}${fee}</div>`;
 }
@@ -376,7 +376,7 @@ function invoiceHTML(o){
       <tr><td colspan="4">Freight</td><td>${inr(L.freight)}</td></tr><tr class="tot"><td colspan="4">Total</td><td>${inr(L.total)}</td></tr></tfoot></table>
     <p><small>Amount in words</small><br>${esc(rupeesInWords(L.total))}</p>
     ${s.terms?`<p><small>Payment terms</small><br>${esc(s.terms)}</p>`:""}
-    <p class="po-fine">Issued by ${esc(s.name||o.sname||"the supplier")} through VyaparBoss for order ${esc(o.po)}. The supplier is responsible for this invoice and its GST filing.${o.sample?" Example only.":""}</p>
+    <p class="po-fine">Issued by ${esc(s.name||o.sname||"the supplier")} through KaantaMandi for order ${esc(o.po)}. The supplier is responsible for this invoice and its GST filing.${o.sample?" Example only.":""}</p>
   </div>`;
 }
 function printInvoice(po){
@@ -387,7 +387,7 @@ function printInvoice(po){
 /* Buyer: what to do next with this order. One clear step at a time. */
 function buyerNext(o,sname){
   const k=okey(o.po),po=esc(o.po);
-  if(o.cancelled)return `<p class="issue">Cancelled by ${o.cancelled.by==="buyer"?"you":o.cancelled.by==="supplier"?esc(sname):"the VyaparBoss team"}${o.cancelled.reason?`: ${esc(o.cancelled.reason)}`:""}.</p>${o.cancelled.by!=="buyer"||o.approval?.status==="rejected"?`<div class="actions"><button class="btn sm primary" data-action="${store().rfqs.some(r=>r.id===o.rfqId&&r.status==="open")?"open-rfq":"reorder"}" data-rfq="${esc(o.rfqId||"")}" data-po="${po}">Pick another option</button></div>`:""}`;
+  if(o.cancelled)return `<p class="issue">Cancelled by ${o.cancelled.by==="buyer"?"you":o.cancelled.by==="supplier"?esc(sname):"the KaantaMandi team"}${o.cancelled.reason?`: ${esc(o.cancelled.reason)}`:""}.</p>${o.cancelled.by!=="buyer"||o.approval?.status==="rejected"?`<div class="actions"><button class="btn sm primary" data-action="${store().rfqs.some(r=>r.id===o.rfqId&&r.status==="open")?"open-rfq":"reorder"}" data-rfq="${esc(o.rfqId||"")}" data-po="${po}">Pick another option</button></div>`:""}`;
   if(o.stage<4)return `<details class="more nextstep" ${o.stage>=2?"open":""}><summary>${o.stage>=2?"Has it arrived?":"Already arrived?"} ${ico("i-chev","")}</summary><div>
     <form class="oform" data-form="oact" data-act="deliver" data-po="${po}" data-side="buyer" novalidate>
       <fieldset class="choice"><legend>How did it arrive?</legend>${Object.entries(RECEIPT_CONDITIONS).map(([v,l],i)=>`<label><input type="radio" name="condition" value="${v}" ${i?"":"checked"}> ${l}</label>`).join("")}</fieldset>
@@ -462,7 +462,7 @@ function renderOrders(){
           <form class="oform" data-form="oact" data-act="dispute" data-po="${po}" data-side="buyer" novalidate>
             <div class="field"><label for="dr-${okey(o.po)}">What went wrong?</label><select id="dr-${okey(o.po)}" name="reason">${Object.entries(ISSUE_REASONS).map(([v,l])=>`<option value="${v}">${l}</option>`).join("")}</select></div>
             <div class="field"><label for="dd-${okey(o.po)}">Details</label><input id="dd-${okey(o.po)}" name="detail" maxlength="500" placeholder="What happened, and what would fix it?"></div>
-            <button class="btn sm">Send to supplier and VyaparBoss</button></form></div></details>`:""}
+            <button class="btn sm">Send to supplier and KaantaMandi</button></form></div></details>`:""}
         ${!o.cancelled&&o.stage<2?`<details class="more sub"><summary>Cancel this order ${ico("i-chev","")}</summary><div>
           <form class="oform" data-form="oact" data-act="cancel" data-po="${po}" data-side="buyer" novalidate>
             <div class="field"><label for="cr-${okey(o.po)}">Reason (the supplier sees this)</label><input id="cr-${okey(o.po)}" name="reason" maxlength="200" placeholder="e.g. Plan changed"></div>
@@ -473,7 +473,7 @@ function renderOrders(){
 
 /* Submits any order action form (buyer or supplier) through the same rules as the server. */
 const ACT_DONE={confirm:"Order confirmed. The buyer can see it.",dispatch:"Marked dispatched. The buyer has the LR number.",shipment:"Shipment details updated",transit:"Marked on the way",
-  deliver:"Thanks! Delivery recorded.",deliver_issue:"Recorded. The supplier and VyaparBoss team have been told.",review:"Thanks for rating",dispute:"Sent. The supplier and the VyaparBoss team will reply here.",
+  deliver:"Thanks! Delivery recorded.",deliver_issue:"Recorded. The supplier and KaantaMandi team have been told.",review:"Thanks for rating",dispute:"Sent. The supplier and the KaantaMandi team will reply here.",
   reply:"Sent",withdraw:"Problem closed",resolve:"Problem resolved",cancel:"Order cancelled",
   invoice:"Invoice created. The buyer can view it.",pay:"Payment recorded",payconfirm:"Marked as received",paynotreceived:"Marked as not received. The buyer will check."};
 function readOrderForm(f){
@@ -560,7 +560,7 @@ function renderSupplierForm(s){
       <div class="field"><label for="sfCity">${own?"You ship from":"Ships from"}</label><select id="sfCity"><option value="">Choose…</option>${cityOpts}</select></div>
       <div class="field"><label for="sfArea">Area or industrial estate</label><input id="sfArea" value="${v("area")}" placeholder="e.g. Hadapsar MIDC"></div>
       <div class="field wide"><label for="sfGst">GSTIN</label><input id="sfGst" value="${v("gstin")}" maxlength="15" autocapitalize="characters" placeholder="27AAPFU0939F1ZV" class="num"><span class="hint" id="sfGstHint">15 characters. Bhai checks it with the official checksum.</span></div>
-      <div class="field"><label for="sfContact">${own?"Your WhatsApp number (for the VyaparBoss team)":"WhatsApp number (optional)"}</label><input id="sfContact" value="${v("contact")}" inputmode="tel" placeholder="+91 98xxxxxxxx"></div>
+      <div class="field"><label for="sfContact">${own?"Your WhatsApp number (for the KaantaMandi team)":"WhatsApp number (optional)"}</label><input id="sfContact" value="${v("contact")}" inputmode="tel" placeholder="+91 98xxxxxxxx"></div>
       <div class="field"><label for="sfLead">Days to get an order ready</label><input id="sfLead" type="number" min="1" max="60" value="${v("lead",2)}"></div>
       <div class="field"><label for="sfCov">Delivers up to (km)</label><input id="sfCov" type="number" min="25" max="3500" value="${v("coverage",500)}"></div>
       <div class="field"><label for="sfDisc">${own?"Most discount you'll give when a buyer asks (%)":"Most discount they'll give (%)"}</label><input id="sfDisc" type="number" min="0" max="15" step="0.5" value="${esc(s.maxDiscPct??(s.maxDisc!=null?+(s.maxDisc*100).toFixed(1):3))}"></div>
@@ -639,7 +639,7 @@ async function draftReply(id,btn){
 function renderInsights(){
   const o=store().orders,gmv=o.reduce((a,x)=>a+x.landed,0),goods=o.reduce((a,x)=>a+x.subtotal,0),saved=o.reduce((a,x)=>a+Math.max(0,x.avg-x.landed),0);
   const rfqs=store().rfqs.length,conv=rfqs?store().rfqs.filter(r=>r.status==="ordered").length/rfqs:0;
-  const k=[["Bought through VyaparBoss",lakh(gmv),`${o.length} order${o.length===1?"":"s"}, delivered value`],["Buyers saved",lakh(saved),"versus the average quote"],["Requests that became orders",(conv*100).toFixed(0)+"%",`${rfqs} request${rfqs===1?"":"s"} so far`],["Delivered",String(o.filter(x=>x.stage===4).length),`of ${o.length} order${o.length===1?"":"s"}`]];
+  const k=[["Bought through KaantaMandi",lakh(gmv),`${o.length} order${o.length===1?"":"s"}, delivered value`],["Buyers saved",lakh(saved),"versus the average quote"],["Requests that became orders",(conv*100).toFixed(0)+"%",`${rfqs} request${rfqs===1?"":"s"} so far`],["Delivered",String(o.filter(x=>x.stage===4).length),`of ${o.length} order${o.length===1?"":"s"}`]];
   const bud=myOrg().budget;
   if(bud){const sp=spentThisMonth();k.unshift(["Spent this month",lakh(sp),`of your ${lakh(bud)} budget${sp>bud?" (over)":""}`]);}
   $("#kpis").innerHTML=k.map(([a,b,c])=>`<div class="panel kpi"><span>${a}</span><b>${b}</b><small>${c}</small></div>`).join("")
@@ -659,7 +659,7 @@ async function renderWhatsApp(){
   const typed=$("#waInput")?.value||"",hadFocus=document.activeElement?.id==="waInput";
   if(Repo.mode!=="server"){
     el.innerHTML=`<div class="wahead"><h3>Bhai on WhatsApp</h3><span class="pill">Coming soon</span></div>
-      <p class="muted">Buyers will text their needs to the VyaparBoss WhatsApp number and get quotes back from Bhai. Reply "APPROVE 1" places the order. This works on the live server, not in this demo copy.</p>`;return;
+      <p class="muted">Buyers will text their needs to the KaantaMandi WhatsApp number and get quotes back from Bhai. Reply "APPROVE 1" places the order. This works on the live server, not in this demo copy.</p>`;return;
   }
   el.innerHTML=`<div class="wahead"><h3>Bhai on WhatsApp</h3>${Repo.info.whatsapp?`<span class="pill good">Connected</span>`:`<span class="pill gold">Practice mode</span>`}</div>
     <p class="muted">${Repo.info.whatsapp?"Chat as a buyer to test. These messages aren't sent to a phone.":"WhatsApp isn't connected yet. Chat here exactly as a buyer would on WhatsApp."}</p>
@@ -711,9 +711,9 @@ function onLocaleChange(){
 function poHTML(o){
   const p=PMAP[o.productId],s=SMAP[o.sid]||{},me=Repo.me,buyerSide=role()!=="supplier";
   const per=o.unit??(o.subtotal/o.qty);
-  const buyer=buyerSide&&me&&!me.guest?[me.business,me.name,me.city].filter(Boolean).map(esc).join("<br>"):"Buyer on VyaparBoss";
+  const buyer=buyerSide&&me&&!me.guest?[me.business,me.name,me.city].filter(Boolean).map(esc).join("<br>"):"Buyer on KaantaMandi";
   return `<div class="po">
-    <div class="po-head"><div><svg class="logo"><use href="#logo"/></svg><b>Vyapar<span class="boss">Boss</span></b></div><div><h1>Purchase order</h1><p><b>${esc(o.po)}</b><br>${new Date(o.date).toLocaleDateString("en-IN",{day:"numeric",month:"long",year:"numeric"})}</p></div></div>
+    <div class="po-head"><div><svg class="logo"><use href="#logo"/></svg><b>Kaanta<span class="boss">Mandi</span></b></div><div><h1>Purchase order</h1><p><b>${esc(o.po)}</b><br>${new Date(o.date).toLocaleDateString("en-IN",{day:"numeric",month:"long",year:"numeric"})}</p></div></div>
     ${o.sample?`<p class="po-note">Example order: illustrative only, not a real purchase.</p>`:""}
     <div class="po-parties"><div><small>Supplier</small><p><b>${esc(s.name||o.sname||"")}</b><br>${esc(s.area?s.area+", ":"")}${esc(s.city||o.scity||"")}${s.gstin?`<br>GSTIN ${esc(s.gstin)}`:""}</p></div>
       <div><small>Buyer</small><p>${buyer}</p></div><div><small>Deliver to</small><p>${esc(o.city)}${o.deadline?`<br>Needed within ${o.deadline} days`:""}<br>Expected by ${new Date(o.date+o.eta*864e5).toLocaleDateString("en-IN",{day:"numeric",month:"long",year:"numeric"})}</p></div></div>
@@ -721,7 +721,7 @@ function poHTML(o){
       <tbody><tr><td><b>${esc(p.name)}</b><br><small>${esc(p.spec||"")}</small></td><td>${qfmt(o.qty)} ${p.unit}</td><td>${inr(per,2)} / ${unitOne(p.unit)}</td><td>${inr(o.subtotal)}</td></tr></tbody>
       <tfoot><tr><td colspan="3">GST (${p.gst}%)</td><td>${inr(o.gst)}</td></tr><tr><td colspan="3">Freight</td><td>${inr(o.freight)}</td></tr><tr class="tot"><td colspan="3">Total delivered</td><td>${inr(o.landed)}</td></tr></tfoot></table>
     ${s.terms?`<p><small>Payment terms</small><br>${esc(s.terms)}</p>`:""}
-    <p class="po-fine">Approved by the buyer on VyaparBoss. This order is between the buyer and the supplier; the supplier's tax invoice is the bill. VyaparBoss, House of 24 Pvt. Ltd.</p>
+    <p class="po-fine">Approved by the buyer on KaantaMandi. This order is between the buyer and the supplier; the supplier's tax invoice is the bill. KaantaMandi, House of 24 Pvt. Ltd.</p>
   </div>`;
 }
 function printPO(po){

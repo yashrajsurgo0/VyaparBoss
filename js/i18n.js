@@ -1,8 +1,8 @@
-/* VyaparBoss regions and languages. One app, three settings:
+/* KaantaMandi regions and languages. One app, three settings:
      in_hi  India · Hinglish  (the original voice)
      in_en  India · English
      gl_en  Global · English  (buyers anywhere sourcing from Indian suppliers)
-   The logo, the name VyaparBoss and Bhai stay the same everywhere. Browser-only; loaded after repo.js, before app.js. */
+   The logo, the name KaantaMandi and Bhai stay the same everywhere. Browser-only; loaded after repo.js, before app.js. */
 const LOCALES={
   in_hi:{id:"in_hi",region:"in",lang:"hi",label:"India · Hinglish",short:"IN",htmlLang:"en-IN"},
   in_en:{id:"in_en",region:"in",lang:"en",label:"India · English",short:"IN",htmlLang:"en-IN"},
