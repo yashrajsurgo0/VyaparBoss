@@ -1,20 +1,20 @@
 /* KaantaMandi UI
    Layout: one calm centered column. The Buy screen is a conversation with Bhai where each answer reveals the next
    question, then quotes, then approval. */
-/* Kraft-paper beige with soft-orange headings: the colour of a corrugated box and its printed mark.
-   Body text is a deep cocoa (readable); soft orange carries headings, the brand and highlights.
-   Teal (--art) survives only inside the illustrations, as truck-art contrast. */
+/* Indigo and marigold on warm cream: indigo dye and a marigold garland, with the gold kaanta logo.
+   Body text is deep navy; indigo carries headings, buttons and links; marigold carries highlights and counts.
+   Teal (--art) and kraft survive only inside the illustrations. Dark look: indigo night with soft periwinkle. */
 :root{
-  --bg:#F1E4CC; --surface:#FBF5EA; --sunk:#EADBC0; --ink:#3E2615; --muted:#7A5132; --line:#E0CBA6;
-  --head:#C25E1A; --brand:#B4501A; --brand-deep:#8F3F12; --brand-tint:#F8DFC4; --on-brand:#FFF8EE; --brand-text:#A54A10;
-  --accent:#F2A33A; --accent-lite:#FFC965; --accent-deep:#9A5A06; --accent-tint:#FCE9C6; --on-accent:#3E2615;
+  --bg:#F8F4EC; --surface:#FFFDF8; --sunk:#EEE7DA; --ink:#1F2340; --muted:#5A5E7A; --line:#E2D9C8;
+  --head:#2F3A9E; --brand:#2F3A9E; --brand-deep:#232C7A; --brand-tint:#E3E5F7; --on-brand:#FFFFFF; --brand-text:#2F3A9E;
+  --accent:#F5A300; --accent-lite:#FFC94D; --accent-deep:#9A6300; --accent-tint:#FDEFC8; --on-accent:#1F2340;
   --art:#2C6E6A; --art-deep:#1F524F; --art-tint:#D9E8E2;
   --kraft:#DDBF8E; --kraft-dark:#B8925D; --glass:#CFE6EC;
   --good:#2E7A4C; --good-lite:#5CC08F; --good-tint:#E1F0DF; --warn:#9A5A06; --warn-tint:#FCE9C6; --bad:#B23A2B; --bad-tint:#F9DDD5;
   --skin:#C98B5E; --skin-shade:#A8704A; --hair:#2A2233; --blush:#E58E73; --white:#FFFFFF;
-  --chart:#B4501A;
-  --paper:.07;
-  --lift:0 1px 2px rgba(98,52,16,.07),0 8px 22px rgba(98,52,16,.09);
+  --chart:#2F3A9E;
+  --paper:.035;
+  --lift:0 1px 2px rgba(31,35,64,.06),0 8px 22px rgba(31,35,64,.08);
   --f-display:"Baloo 2","Trebuchet MS",system-ui,sans-serif;
   --f-body:"Mukta","Segoe UI",system-ui,-apple-system,sans-serif;
   --r-lg:22px; --r:14px; --r-sm:10px;
@@ -22,14 +22,14 @@
   color-scheme:light;
 }
 :root[data-look="dark"]{
-  --bg:#1C140E; --surface:#271C14; --sunk:#33251A; --ink:#F3E3CC; --muted:#C2A283; --line:#433122;
-  --head:#F2A65A; --brand:#E8823A; --brand-deep:#F5A160; --brand-tint:#3D2616; --on-brand:#1C140E; --brand-text:#F2A65A;
-  --accent:#FFB23A; --accent-lite:#FFCF7A; --accent-deep:#E08F12; --accent-tint:#3A2A0E; --on-accent:#2B1C00;
+  --bg:#12142A; --surface:#1B1E3A; --sunk:#242849; --ink:#ECEAF6; --muted:#A7A9C9; --line:#2F3358;
+  --head:#B7BEFF; --brand:#8E9BFF; --brand-deep:#AEB8FF; --brand-tint:#262B5A; --on-brand:#12142A; --brand-text:#AEB8FF;
+  --accent:#FFB52E; --accent-lite:#FFCF6E; --accent-deep:#F0A010; --accent-tint:#3A2E10; --on-accent:#1A1400;
   --art:#4FA39D; --art-deep:#7AD3CF; --art-tint:#1E3533;
   --kraft:#C9A774; --kraft-dark:#9E7A48; --glass:#2D5560;
   --good:#6FCF97; --good-lite:#7FDCAE; --good-tint:#16301F; --warn:#FFAE55; --warn-tint:#3A260F; --bad:#FF8C7A; --bad-tint:#3E1C1A;
   --hair:#1B1622; --white:#FFFFFF;
-  --chart:#D9742E;
+  --chart:#8E9BFF;
   --paper:.05;
   --lift:0 1px 2px rgba(0,0,0,.35),0 8px 24px rgba(0,0,0,.3);
   color-scheme:dark}
@@ -458,17 +458,17 @@ tr.leaddetail td{background:var(--sunk)}
 .usd{font-size:.42em;font-weight:600;color:var(--muted);letter-spacing:0;white-space:nowrap}
 .amt small.usd{font-size:12.5px;display:block}
 
-/* ===================== THEME: kraft paper, soft orange, smooth ===================== */
-/* Faint paper fibre behind everything, like the face of a carton. */
+/* ===================== THEME: indigo and marigold on warm cream, smooth ===================== */
+/* Faint paper fibre behind everything, like a ledger page. */
 body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;opacity:var(--paper);
-  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .35 0 0 0 0 .2 0 0 0 0 .08 0 0 0 1 0'/%3E%3C/filter%3E%3Crect width='220' height='220' filter='url(%23n)'/%3E%3C/svg%3E")}
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .12 0 0 0 0 .14 0 0 0 0 .25 0 0 0 1 0'/%3E%3C/filter%3E%3Crect width='220' height='220' filter='url(%23n)'/%3E%3C/svg%3E")}
 ::selection{background:var(--accent-lite);color:var(--ink)}
 h1,h2,h3,.q-title,.price .total,.ohead .amt,.kpi b{color:var(--head)}
 .hello,.msg .by{color:var(--brand-text)}
 :root[data-look="dark"] .hello,:root[data-look="dark"] .msg .by{color:var(--brand-text)}
 .wordmark{color:var(--ink)}
 header.top{transition:box-shadow .25s var(--ease),background-color .25s}
-header.top.scrolled{box-shadow:0 6px 18px rgba(98,52,16,.08)}
+header.top.scrolled{box-shadow:0 6px 18px rgba(31,35,64,.08)}
 :focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 
 /* Every control answers a touch: colour eases, presses sink a little. */
@@ -608,19 +608,19 @@ body.docpage{padding-bottom:0}
 
 /* ===== Printable purchase order ===== */
 #printArea{display:none}
-.po{color:#2A1A0E;font-size:14px;line-height:1.45}
+.po{color:#1F2340;font-size:14px;line-height:1.45}
 .po-head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid var(--head);padding-bottom:10px;margin-bottom:14px}
 .po-head .logo{width:28px;height:28px;vertical-align:middle;margin-right:6px}
 .po-head b{font-family:var(--f-display);font-size:22px}.po-head .boss{color:var(--head)}
 .po-head h1{font-family:var(--f-display);font-size:24px;margin:0;text-align:right;color:var(--head)}.po-head p{text-align:right;margin:2px 0 0}
-.po small{color:#6B4A2E;text-transform:uppercase;letter-spacing:.04em;font-size:11px;font-weight:700}
+.po small{color:#5A5E7A;text-transform:uppercase;letter-spacing:.04em;font-size:11px;font-weight:700}
 .po-parties{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:16px}.po-parties p{margin:2px 0 0}
 .po-lines{width:100%;border-collapse:collapse;margin-bottom:14px}
-.po-lines th,.po-lines td{border-bottom:1px solid #D9C4A0;padding:8px 6px;text-align:right;vertical-align:top}
+.po-lines th,.po-lines td{border-bottom:1px solid #E2D9C8;padding:8px 6px;text-align:right;vertical-align:top}
 .po-lines th:first-child,.po-lines td:first-child{text-align:left}
-.po-lines .tot td{font-weight:700;border-top:2px solid #2A1A0E;border-bottom:0}
+.po-lines .tot td{font-weight:700;border-top:2px solid #1F2340;border-bottom:0}
 .po-note{background:#FCE9C6;padding:6px 10px;border-radius:6px}
-.po-fine{font-size:12px;color:#6B4A2E;margin-top:22px}
+.po-fine{font-size:12px;color:#5A5E7A;margin-top:22px}
 @media print{
   @page{margin:14mm}
   html,body{background:#fff!important}
