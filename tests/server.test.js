@@ -705,6 +705,17 @@ const { createApp } = require("../server");
         assert.strictEqual((await buyer("PATCH", "/api/admin/orders/" + encodeURIComponent(o.po), { fee: { status: "waived" } })).status, 401);
         const setup = (await team("GET", "/api/admin/setup")).body;
         assert.deepStrictEqual([setup.payments.on, setup.payments.test, setup.payments.webhook], [true, true, true]);
+        // Ops: metrics and the alerts a person should act on today.
+        await buyer("POST", "/api/rfqs", { productId: "drip", qty: 99999, city: "Kochi", quotes: [] });
+        st9.data.orders.find(x => x.po === o.po).promisedBy = Date.now() - 2 * 864e5;
+        assert.strictEqual((await buyer("GET", "/api/admin/ops")).status, 401);
+        const ops = (await team("GET", "/api/admin/ops")).body;
+        assert.deepStrictEqual([ops.kpi.orders, ops.kpi.gmv, ops.weeks.length, ops.weeks[7].orders], [1, raw.landed, 8, 1]);
+        assert.ok(ops.alerts.some(x => x.kind === "sourcing" && x.level === "critical"), "a request no supplier can serve is flagged");
+        assert.ok(ops.alerts.some(x => x.kind === "late" && x.ref === o.po), "late orders are flagged");
+        assert.ok(ops.alerts[0].level === "critical", "most urgent first");
+        assert.deepStrictEqual([ops.fees.length, ops.fees[0].status, ops.kpi.feesDue, ops.suppliers.find(x => x.id === sid).feeAgreed], [1, "invoiced", raw.fee.amount, true]);
+        assert.strictEqual((await team("PUT", "/api/admin/fees", { ratePct: 1.2 })).body.rate, 0.012);
       } finally { s9.close(); }
     });
     await test("unknown API path is a JSON 404", async () => {

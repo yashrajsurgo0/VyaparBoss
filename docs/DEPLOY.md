@@ -58,7 +58,10 @@ Put it behind Caddy or nginx for HTTPS, since WhatsApp requires `https://`.
 | `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | Keeps data across redeploys on the free plan | upstash.com → your database → REST API |
 | `ADMIN_KEY` | Team tools (Sign-ups, Outreach, network edits) | Any long random string you make up |
 | `EMAIL_PROVIDER`, `EMAIL_API_KEY`, `OUTREACH_FROM_EMAIL` | Password resets, order emails, outreach | docs/OUTREACH.md |
-| `CONTACT_TO` | Where contact-page messages are forwarded | Your inbox |
+| `CONTACT_TO` | Where contact-page messages and new problems are forwarded | Your inbox |
+| `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET` | "Pay online" on orders (test keys first) | Razorpay dashboard → API keys; Webhooks → `<PUBLIC_URL>/webhooks/razorpay`, event `payment_link.paid` |
+
+**Before real online payments:** with plain Payment Links the money lands in VyaparBoss's Razorpay account and the team settles it to the supplier (Team → Ops → Paid online, to settle). For a marketplace that usually needs Razorpay Route (or a similar split-payment product) and legal advice, so suppliers are paid directly. Keep test keys until that's in place.
 | `WHATSAPP_*` | WhatsApp intake | docs/WHATSAPP_SETUP.md |
 
 ## Backups

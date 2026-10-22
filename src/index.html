@@ -85,6 +85,21 @@
       <rect class="f-accent-deep" x="6" y="43" width="50" height="7" rx="3.5"/>
     </symbol>
     <!-- Category: agri inputs (sprout with a drip) -->
+    <!-- Electrical: a coil of wire and a bulb. Building: a cement bag and a pipe. Original drawings. -->
+    <symbol id="cat-elec" viewBox="0 0 64 64">
+      <circle class="f-brand" cx="24" cy="40" r="16"/><circle class="f-surface" cx="24" cy="40" r="7"/>
+      <circle class="s-brand-deep" cx="24" cy="40" r="11.5" fill="none" stroke-width="2"/>
+      <path class="s-accent-deep" d="M38 44c6 0 8-4 8-8" fill="none" stroke-width="3" stroke-linecap="round"/>
+      <circle class="f-accent-lite" cx="47" cy="20" r="11"/><rect class="f-accent-deep" x="42" y="29" width="10" height="7" rx="1.5"/>
+      <path class="s-accent-deep" d="M44 20l3 4 3-4" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="cat-build" viewBox="0 0 64 64">
+      <path class="f-kraft" d="M8 22c0-3 2-5 5-5h22c3 0 5 2 5 5v30c0 3-2 5-5 5H13c-3 0-5-2-5-5z"/>
+      <rect class="f-kraft-dark" x="8" y="17" width="32" height="6" rx="3"/>
+      <rect class="f-brand" x="14" y="31" width="20" height="12" rx="2"/><rect class="f-surface" x="18" y="35" width="12" height="4" rx="1"/>
+      <rect class="f-sunk" x="44" y="12" width="12" height="46" rx="3"/><rect class="f-brand-deep" x="42" y="10" width="16" height="6" rx="2"/>
+      <rect class="f-brand-deep" x="42" y="52" width="16" height="6" rx="2"/>
+    </symbol>
     <symbol id="cat-agri" viewBox="0 0 64 64">
       <path class="f-kraft" d="M14 46h36l-4 12H18z"/>
       <rect class="f-kraft-dark" x="12" y="42" width="40" height="6" rx="2"/>
@@ -227,6 +242,7 @@
       <div><h1>Team</h1><p class="muted">Run the network: suppliers, sign-ups, outreach and the WhatsApp practice chat.</p></div>
       <div class="seg" role="tablist" aria-label="Team pages">
         <button data-tview="setup" aria-selected="false">Setup</button>
+        <button data-tview="ops" aria-selected="false">Ops</button>
         <button data-tview="network" aria-selected="true">Network</button>
         <button data-tview="apps" aria-selected="false">Sign-ups</button>
         <button data-tview="outreach" aria-selected="false">Outreach</button>
@@ -236,6 +252,7 @@
     </div>
     <div id="teamGate"></div>
     <div id="s-setup" hidden></div>
+    <div id="s-ops" hidden></div>
     <div id="s-network">
       <p id="snetIntro" class="muted lede-sm"></p>
       <div class="toolbar">
@@ -245,12 +262,14 @@
           <button class="chip" data-cat="pack" aria-pressed="false">Packaging</button>
           <button class="chip" data-cat="ind" aria-pressed="false">Industrial</button>
           <button class="chip" data-cat="agri" aria-pressed="false">Agri</button>
+          <button class="chip" data-cat="elec" aria-pressed="false">Electrical</button>
+          <button class="chip" data-cat="build" aria-pressed="false">Building</button>
         </div>
         <button class="btn primary" data-action="sf-open"><svg class="ic"><use href="#i-plus"/></svg>Add supplier</button>
       </div>
       <div id="sform" hidden></div>
       <div class="sgrid" id="sgrid"></div>
-      <label class="toggle"><input type="checkbox" id="useSamples" checked> Show the 15 sample suppliers</label>
+      <label class="toggle"><input type="checkbox" id="useSamples" checked> Show the 20 sample suppliers</label>
     </div>
     <div id="s-apps" hidden><div id="appsList"></div></div>
     <div id="i-outreach" hidden><div id="outreachBox" class="outbox"></div></div>
@@ -267,7 +286,7 @@
 
 <nav class="bottomnav" id="bottomnav" aria-label="Main"></nav>
 
-<footer class="wrap foot"><b>VyaparBoss. <span data-i18n="tagline">Vyapar bada, jhanjhat chhota!</span></b> <a href="#join/s">List your business free</a> · <a href="#join/b">Join as a buyer</a> · <a href="privacy.html">Privacy</a> · <a href="terms.html">Terms</a> · <a href="contact.html">Contact</a> · <a href="#" data-action="team-open">Team</a><br>By House of 24 Pvt. Ltd. The 15 sample suppliers, their GSTINs and prices, and the GST rates are illustrative.</footer>
+<footer class="wrap foot"><b>VyaparBoss. <span data-i18n="tagline">Vyapar bada, jhanjhat chhota!</span></b> <a href="#join/s">List your business free</a> · <a href="#join/b">Join as a buyer</a> · <a href="privacy.html">Privacy</a> · <a href="terms.html">Terms</a> · <a href="contact.html">Contact</a> · <a href="#" data-action="team-open">Team</a><br>By House of 24 Pvt. Ltd. The 20 sample suppliers, their GSTINs and prices, and the GST rates are illustrative.</footer>
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="js/data.js"></script>

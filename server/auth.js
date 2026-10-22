@@ -74,7 +74,7 @@ function createAuth({ store, env, fetchImpl = globalThis.fetch, now = () => Date
     return { id: u.id, role: u.role, guest: !!u.guest, name: u.name || "", business: u.business || "", email: u.email || "",
       phone: u.phone || "", city: u.city || "", gstin: u.gstin || "", address: u.address || "",
       providers: Object.keys(u.providers || {}), hasPassword: !!u.pass, supplierId: u.supplierId || null, notify: u.notify !== false, emailVerified: !!u.emailVerified,
-      org: owner ? { member: true, name: owner.business || owner.name || "", ownerName: owner.name || "", limit: u.memberLimit ?? null, budget: owner.budgetMonthly || null }
+      org: u.role !== "buyer" ? null : owner ? { member: true, name: owner.business || owner.name || "", ownerName: owner.name || "", limit: u.memberLimit ?? null, budget: owner.budgetMonthly || null }
         : { member: false, budget: u.budgetMonthly || null, members: store.data.users.filter(x => x.orgOwner === u.id).length } };
   };
 

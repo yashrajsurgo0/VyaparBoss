@@ -46,7 +46,7 @@ The app checks for `api/health` on load and picks the mode by itself.
 | POST / PATCH | `/api/rfqs`, `/api/rfqs/:id` | Create / update RFQs (server assigns `RFQ-2627-0001` ids) |
 | POST / PATCH | `/api/orders`, `/api/orders/:po` | Raise POs (`VB/PO/2026-27/0001`), move stages, flag issues |
 | PUT / DELETE | `/api/suppliers/:id` | Onboard, edit or remove a supplier (validated, GSTIN checksum) |
-| PUT | `/api/settings` | `{useSamples}`: show or hide the 15 sample suppliers |
+| PUT | `/api/settings` | `{useSamples}`: show or hide the 20 sample suppliers |
 | POST | `/api/draft` | AI-drafted supplier reply for an RFQ |
 | GET / POST | `/webhooks/whatsapp` | Meta webhook verification and incoming messages (HMAC-checked when `WHATSAPP_APP_SECRET` is set) |
 | POST | `/api/whatsapp/simulate` | `{from, text}` → the reply a buyer would get (no message sent) |
@@ -62,6 +62,12 @@ The app checks for `api/health` on load and picks the mode by itself.
 | PUT / POST | `/api/my/listing`, `/api/my/quotes` | Supplier's own listing and in-app quotes |
 | POST | `/api/contact` | Contact page (rate-limited, honeypot); team reads them in Sign-ups |
 | GET | `/sitemap.xml`, `/robots.txt` | For search engines |
+| PATCH | `/api/orders/:po` `{action}` | confirm, dispatch (transporter + LR), transit, deliver (condition), review, dispute, reply, withdraw, cancel, invoice, pay, payconfirm; team: resolve, approve/reject for team orders. Rules in `applyOrderAction()` |
+| POST | `/api/orders/:po/paylink` | Razorpay Payment Link for what's due (when keys are set) |
+| POST | `/webhooks/razorpay` | Signed `payment_link.paid` webhook, recorded once |
+| POST / PATCH / DELETE | `/api/schedules` | Repeat orders: a fresh request on schedule, never an order |
+| GET / POST / PATCH / DELETE | `/api/org`, `/api/org/invites`, `/api/org/join`, `/api/org/members/:id` | Buyer teams with per-person approval limits |
+| GET | `/api/admin/ops` | Team: KPIs, weekly order value, alerts, open problems, fees, online payments to settle |
 
 ## What's in the prototype
 
@@ -71,7 +77,7 @@ The app checks for `api/health` on load and picks the mode by itself.
 |---|---|
 | Buy | Talk to Bhai or tap through categories → quotes ranked by delivered cost → ask for a better price → approve → PO |
 | Orders | POs (`VB/PO/2026-27/0001`) through PO sent → Confirmed → Dispatched → In transit → Delivered; issue reporting |
-| Suppliers | Network: onboard real suppliers (GSTIN checksum, products, price tiers, MOQ, capacity, delivery radius, negotiation limit); 15 sample suppliers you can hide |
+| Suppliers | Network: onboard real suppliers (GSTIN checksum, products, price tiers, MOQ, capacity, delivery radius, negotiation limit); 20 sample suppliers you can hide |
 | Suppliers → Supplier view | What a supplier sees: requests they qualified for, auto-quote, rank, drafted WhatsApp reply |
 | Insights | Value bought, buyer savings, request→order conversion, platform revenue, spend by category, WhatsApp practice chat |
 | Insights → Outreach (team) | Import lead CSVs, email templates in Bhai's voice, preview, send with daily cap and unsubscribe, or download for mail merge |
@@ -93,7 +99,8 @@ server/
   store.js          JSON-file database (data/db.json)
   remote.js         optional Upstash copy so data survives redeploys on a temporary disk
   auth.js           accounts, sessions, Google/Apple/Facebook token checks, password reset
-  notify.js         account emails: reset links, new requests, quotes, order updates
+  notify.js         account emails: reset links, new requests, quotes, order updates, approvals, repeat orders, payments
+  razorpay.js       optional online payments (Payment Links + signed webhook)
   gemini.js         Google Gemini API client
   anthropic.js      Anthropic Messages API client
   whatsapp.js       WhatsApp Cloud API: webhook, conversation state, APPROVE flow, order updates

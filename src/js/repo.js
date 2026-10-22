@@ -52,7 +52,7 @@ const Repo={
   setAdminKey(k){this.adminKey=k||"";try{k?sessionStorage.setItem(KEY+".admin",k):sessionStorage.removeItem(KEY+".admin");}catch(e){}},
   async api(method,path,body,base=""){
     const headers=body?{"content-type":"application/json"}:{};
-    if(this.adminKey&&/^api\/(admin|draft|whatsapp)/.test(path))headers["x-admin-key"]=this.adminKey;
+    if(this.adminKey&&/^api\/(admin|draft|whatsapp|orders\/)/.test(path))headers["x-admin-key"]=this.adminKey;
     const r=await fetch(base+path,{method,headers,body:body?JSON.stringify(body):undefined});
     const j=await r.json().catch(()=>({}));
     if(!r.ok)throw Object.assign(new Error(j.error||`Server error ${r.status}`),{status:r.status});
@@ -263,6 +263,7 @@ const Repo={
   /* Ops tools (server + admin key). Leads also work in the static copy, kept in this browser. */
   get ops(){return this.mode==="server";},
   async adminCheck(){return this.api("GET","api/admin/check");},
+  async opsReport(){return this.api("GET","api/admin/ops");},
   async setup(){return this.api("GET","api/admin/setup");},
   async verifyEmail(token){const j=await this.api("POST","api/auth/verify",{token},this.publicBase);if(j.user)this.data.me=j.user;return j;},
   async resendVerify(){return this.api("POST","api/auth/verify/resend");},

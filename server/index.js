@@ -178,6 +178,54 @@ function createApp(opts = {}) {
     if (changed) store.save();
   }
   if (!opts.noTimers) setInterval(() => { try { runSchedules(); } catch (e) { console.error("schedules:", e); } }, 15 * 6e4).unref();
+  function opsReport(now = Date.now()) {
+    const H = 36e5, D = 864e5, med = xs => { const v = xs.filter(x => x >= 0).sort((a, b) => a - b); return v.length ? v[Math.floor((v.length - 1) / 2)] : null; };
+    const orders = store.data.orders.filter(o => !o.sample), live = orders.filter(o => !o.cancelled && o.approval?.status !== "pending" && o.approval?.status !== "rejected");
+    const rfqs = store.data.rfqs.filter(r => !r.sample);
+    const delivered = live.filter(o => o.stage === 4 && o.history?.[4]);
+    const onTime = delivered.filter(o => o.history[4] <= core.promisedBy(o) + 12 * H).length;
+    const gmv = live.reduce((a, o) => a + o.landed, 0);
+    const weekStart = t => { const d = new Date(t); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return d.getTime(); };
+    const w0 = weekStart(now), weeks = Array.from({ length: 8 }, (_, i) => ({ start: w0 - (7 - i) * 7 * D, gmv: 0, orders: 0 }));
+    for (const o of live) { const w = weeks.find(x => o.date >= x.start && o.date < x.start + 7 * D); if (w) { w.gmv += o.landed; w.orders++; } }
+    const firstQuote = r => Math.min(...(r.invites || []).filter(i => i.quote?.at).map(i => i.quote.at));
+    const quoted = rfqs.filter(r => isFinite(firstQuote(r)));
+    const orgsWith = n => { const c = {}; for (const o of live) { const k = o.orgId || o.ownerId; if (k) c[k] = (c[k] || 0) + 1; } return Object.values(c).filter(x => x >= n).length; };
+    const recent = t => t > now - 30 * D;
+    const fees = live.filter(o => o.fee); // only orders that actually went to the supplier
+    const toSettle = orders.flatMap(o => (o.payments || []).filter(p => p.method === "razorpay" && !p.settled).map(p => ({ po: o.po, supplier: o.sname, amount: p.amount, id: p.id, at: p.at, test: !!p.test })));
+    const alerts = [];
+    const add = (level, kind, title, detail, ref) => alerts.push({ level, kind, title, detail, ref });
+    const ago = t => { const h = (now - t) / H; return h < 1 ? "under an hour" : h < 48 ? `${Math.round(h)} h` : `${Math.round(h / 24)} days`; };
+    for (const r of rfqs) if (r.status === "open" && Array.isArray(r.quotes) && !r.quotes.length && r.date > now - 14 * D) add("critical", "sourcing", `No supplier for ${core.qfmt(r.qty)} ${core.PMAP[r.productId]?.unit} ${core.PMAP[r.productId]?.name} to ${r.city}`, `${r.id}, ${ago(r.date)} ago. Find a supplier who makes this and serves ${r.city}.`, r.id);
+    for (const o of live) {
+      if (o.stage === 0 && now - (o.approval?.decidedAt || o.date) > 24 * H) add("serious", "confirm", `${o.sname} hasn't confirmed ${o.po}`, `Placed ${ago(o.approval?.decidedAt || o.date)} ago. Call the supplier.`, o.po);
+      if (o.stage < 4 && now > core.promisedBy(o) + 12 * H) add("serious", "late", `${o.po} is late`, `${o.sname} promised ${new Date(core.promisedBy(o)).toDateString()}; it's at "${core.STAGES[o.stage]}".`, o.po);
+      if (o.dispute?.status === "open") add(now - o.dispute.opened > 48 * H ? "critical" : "warning", "dispute", `Problem on ${o.po}: ${o.issue}`, `Open ${ago(o.dispute.opened)}. ${o.dispute.msgs?.length || 0} message${o.dispute.msgs?.length === 1 ? "" : "s"}.`, o.po);
+      for (const p of o.payments || []) if (p.status === "claimed" && now - p.at > 3 * D) add("warning", "payment", `${o.sname} hasn't confirmed a payment on ${o.po}`, `Buyer paid ${core.inr(p.amount)} ${Math.round((now - p.at) / D)} days ago${p.ref ? ` (ref ${p.ref})` : ""}.`, o.po);
+    }
+    if (toSettle.length) add("warning", "settle", `${core.inr(toSettle.reduce((a, p) => a + p.amount, 0))} paid online waits to be settled to suppliers`, `${toSettle.length} payment${toSettle.length > 1 ? "s" : ""}. Pay the supplier, then mark it settled below.`, null);
+    const rank = { critical: 0, serious: 1, warning: 2 };
+    alerts.sort((a, b) => rank[a.level] - rank[b.level]);
+    return {
+      kpi: {
+        gmv, gmv30: live.filter(o => recent(o.date)).reduce((a, o) => a + o.landed, 0), orders: live.length, aov: live.length ? Math.round(gmv / live.length) : 0,
+        requests: rfqs.length, quoteRate: rfqs.length ? quoted.length / rfqs.length : null, orderRate: rfqs.length ? rfqs.filter(r => r.status === "ordered").length / rfqs.length : null,
+        responseHours: med(quoted.map(r => (firstQuote(r) - r.date) / H)), confirmHours: med(live.filter(o => o.history?.[1]).map(o => (o.history[1] - (o.approval?.decidedAt || o.date)) / H)),
+        onTimeRate: delivered.length ? onTime / delivered.length : null, delivered: delivered.length,
+        disputeRate: live.length ? live.filter(o => o.dispute).length / live.length : null, openDisputes: live.filter(o => o.dispute?.status === "open").length,
+        cancelRate: orders.length ? orders.filter(o => o.cancelled && o.approval?.status !== "rejected").length / orders.length : null,
+        repeatRate: orgsWith(1) ? orgsWith(2) / orgsWith(1) : null, activeBuyers: new Set(rfqs.filter(r => recent(r.date)).map(r => r.orgId || r.ownerId).filter(Boolean)).size,
+        activeSuppliers: new Set([...live.filter(o => recent(o.date)).map(o => o.sid), ...rfqs.filter(r => recent(r.date)).flatMap(r => (r.invites || []).filter(i => i.quote).map(i => i.sid))]).size,
+        feesDue: fees.filter(o => ["due", "invoiced"].includes(o.fee.status)).reduce((a, o) => a + o.fee.amount, 0), feesCollected: fees.filter(o => o.fee.status === "collected").reduce((a, o) => a + o.fee.amount, 0),
+      },
+      weeks, alerts,
+      disputes: live.filter(o => o.dispute?.status === "open").map(o => ({ po: o.po, supplier: o.sname, issue: o.issue, detail: o.dispute.detail, msgs: o.dispute.msgs || [], opened: o.dispute.opened, landed: o.landed })),
+      fees: fees.map(o => ({ po: o.po, supplier: o.sname, amount: o.fee.amount, rate: o.fee.rate, status: o.fee.status, date: o.date })).slice(0, 200),
+      toSettle, feeRate: store.data.fees.rate,
+      suppliers: store.data.suppliers.filter(x => x.selfListed || x.feeAgreed).map(x => ({ id: x.id, name: x.name, city: x.city, feeAgreed: !!x.feeAgreed, feeRate: x.feeRate ?? null, verified: !!x.verified, onTime: x.onTime, rating: x.rating, delivered: x.track?.delivered || 0 })),
+    };
+  }
   /** Recomputes a real supplier's on-time rate and rating from their delivered orders. */
   function refreshTrack(sid) {
     const s = store.data.suppliers.find(x => x.id === sid); if (!s) return;
@@ -303,6 +351,8 @@ function createApp(opts = {}) {
           samplesShown: !!store.data.useSamples, messages: (store.data.messages || []).length, signups: store.data.applications.length },
       };
     }],
+    // Team → Ops: the numbers that say whether the marketplace works, and what needs a person today.
+    ["GET", /^\/api\/admin\/ops$/, req => { admin(req); return opsReport(); }],
     ["GET", /^\/api\/admin\/messages$/, req => (admin(req), { messages: store.data.messages.slice().reverse() })],
     ["POST", /^\/api\/auth\/logout$/, (req, m, url, res) => { auth.endSession(req, res); store.save(); return { ok: true }; }],
     ["PATCH", /^\/api\/auth\/me$/, async req => {
@@ -670,7 +720,8 @@ function createApp(opts = {}) {
       if (!o || !(isAdmin(req) || sameOrg(u, o))) throw notFound("Order");
       if (o.cancelled || o.approval?.status === "pending") throw Object.assign(new Error("This order can't be paid right now"), { status: 409 });
       limit(req, "paylink", 20, 36e5);
-      const due = core.dueOf(o); if (due < 1) throw Object.assign(new Error("Nothing is due on this order"), { status: 409 });
+      // What's due, minus payments the buyer already recorded that the supplier hasn't confirmed yet: no paying twice.
+      const due = Math.round(core.dueOf(o) - core.claimedOf(o)); if (due < 1) throw Object.assign(new Error("Nothing is due on this order (payments waiting for the supplier's confirmation count)"), { status: 409 });
       if (o.payLink && o.payLink.amount === due && o.payLink.at > Date.now() - 6 * 864e5) return o.payLink;
       const p = core.PMAP[o.productId];
       const link = await razorpay.createLink({ amount: due, po: o.po, description: `${o.po}: ${core.qfmt(o.qty)} ${p.unit} ${p.name} from ${o.sname}`, callbackUrl: `${PUBLIC_URL}/#orders` });
