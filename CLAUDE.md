@@ -1,4 +1,4 @@
-# CLAUDE.md — VyaparBoss
+# CLAUDE.md — KaantaMandi
 
 B2B procurement MVP for Indian MSMEs. Founder: Yashraj Surgoniwar (House of 24 Pvt. Ltd.). Full brief: `docs/PROJECT_BRIEF.md`.
 
@@ -17,6 +17,7 @@ B2B procurement MVP for Indian MSMEs. Founder: Yashraj Surgoniwar (House of 24 P
 - Don't log full buyer phone numbers; use `mask()` from `server/whatsapp.js`.
 - Agents map to code: Buyer Intelligence = `parser.js`; Supplier Discovery + RFQ + Optimization = `discover()` / `quoteFor()` in `engine.js`; Negotiation = `negotiate()` in `engine.js`.
 - Server data: `data/db.json` (gitignored). Browser data: localStorage key `vyaparboss.v1`.
+- Renamed from VyaparBoss to KaantaMandi (Oct 2026). Internal ids keep the old name on purpose so saved data and sessions survive: localStorage `vyaparboss.v1*`, health/backup `app:"vyaparboss"`, Upstash key `vyaparboss:db`, the Render service and its onrender URL, the GitHub repo/Pages path.
 - Never commit `.env`, `data/` or `leads/` (researched business contacts; the repo is public).
 
 ## Rules
@@ -27,8 +28,8 @@ B2B procurement MVP for Indian MSMEs. Founder: Yashraj Surgoniwar (House of 24 P
 - Sample suppliers (`SAMPLE_SUPPLIERS`, flagged `sample:true`) are illustrative; onboarded suppliers go through `normalizeSupplier()` on both client and server. Keep the footer disclaimer.
 - New suppliers have no track record: `onTime`/`rating` stay `null` and ranking uses `NEW_SUPPLIER` defaults. Never invent history.
 - Colors only through CSS tokens in `styles.css`; light and dark themes both supported. Theme: kraft-paper beige background (`--bg` #F1E4CC, faint paper texture), soft-orange headings and highlights (`--head` #C25E1A, ≥3:1 for large text), deep orange buttons/links (`--brand`, `--brand-text`, ≥4.5:1), cocoa body text (`--ink`). Teal survives only inside illustrations (`--art`). Beige is the default for everyone; dark only via `data-look="dark"`, set when picked in the globe menu (Look → Dark, saved per browser). Never key styles on `prefers-color-scheme` or `data-theme` (hosts like claude.ai set it). Motion only in answer to an action (press, tab switch, expanders, toast); respect reduced motion. Check phone widths 320–430 for horizontal overflow after layout changes. Drawings live as `<symbol>`s in `index.html` and take color from `.f-*`/`.s-*` classes.
-- Logo: `#logo` (two-gold folded up-right arrow) and `#logo-tile` (on #16171B, app icon/favicon) in `index.html`. Wordmark is "Vyapar" + "Boss" in gold. Before registering the brand, get a trademark search done: the established "Vyapar" billing app serves the same MSME market.
-- Regions/languages (`i18n.js`): India · Hinglish (`in_hi`, original voice), India · English (`in_en`), Global · English (`gl_en`, buyers anywhere sourcing from Indian suppliers). Every user-facing line that differs goes through `t(key)` with entries in `STR.hi`, `STR.en` and, if Global needs different framing, `STR.gl`. No Hindi words in English modes. Logo, the name VyaparBoss and Bhai never change. Switcher in the header; `?region=global` / `?lang=en` in links; default guessed from time zone (India time → Hinglish, else Global).
+- Logo: `#logo` (two-gold balanced kaanta, the mandi weighing scale) and `#logo-tile` (on #16171B, app icon/favicon) in `index.html`. Wordmark is "Kaanta" + "Mandi" (`.boss` span). Domain: kaantamandi.com (kantamandi.com redirects). Get a trademark search done before registering the brand.
+- Regions/languages (`i18n.js`): India · Hinglish (`in_hi`, original voice), India · English (`in_en`), Global · English (`gl_en`, buyers anywhere sourcing from Indian suppliers). Every user-facing line that differs goes through `t(key)` with entries in `STR.hi`, `STR.en` and, if Global needs different framing, `STR.gl`. No Hindi words in English modes. Logo, the name KaantaMandi and Bhai never change. Switcher in the header; `?region=global` / `?lang=en` in links; default guessed from time zone (India time → Hinglish, else Global).
 - Taglines: company "Vyapar bada, jhanjhat chhota!" (English: "Bigger business. Smaller hassle."); Bhai "Tu business badha, jugaad mera!" (English: "You grow the business. I'll handle the buying."). Bhai is an original character: don't base him on film characters or real people.
 - The assistant is called **Bhai** everywhere (UI, AI prompts, WhatsApp). Voice: warm, short, Hinglish-friendly; never promises price or availability.
 - Buy flow is progressive: show one question at a time (`nextField()`), keep details behind `<details>` expanders. Don't put everything on screen at once.
@@ -44,6 +45,6 @@ B2B procurement MVP for Indian MSMEs. Founder: Yashraj Surgoniwar (House of 24 P
 - Track record (`trackRecord`/`applyTrack`): on-time = delivered by `promisedBy` (fixed at order time, reset on approval); rating = average review. Real suppliers only, never editable through listing or team edits. Ranking blends with `NEW_SUPPLIER` as two neutral orders (`PRIOR_ORDERS`).
 - Repeat orders (`store.data.schedules`) only create a fresh request with server-computed quotes and email the buyer; if the last one is still open they remind instead. Never auto-order.
 - Buyer teams: members have `orgOwner` and `memberLimit`; records carry `orgId`. Orders above the limit or past the owner's `budgetMonthly` get `approval.status:"pending"` and are hidden from the supplier until approved.
-- Money: suppliers issue the GST invoice from the order (`invoiceLines`, CGST+SGST vs IGST by state); buyer-recorded payments are "claimed" until the supplier confirms; online pay = due minus unconfirmed claims; Razorpay webhook must be signature-checked and de-duplicated. VyaparBoss fee (`o.fee`) only when the team marked the supplier `feeAgreed`; buyers never see it.
+- Money: suppliers issue the GST invoice from the order (`invoiceLines`, CGST+SGST vs IGST by state); buyer-recorded payments are "claimed" until the supplier confirms; online pay = due minus unconfirmed claims; Razorpay webhook must be signature-checked and de-duplicated. KaantaMandi fee (`o.fee`) only when the team marked the supplier `feeAgreed`; buyers never see it.
 - Suppliers see `billTo` (business, GSTIN, address) on their orders, never the buyer's email/phone/`ownerId`.
 - Outreach: every email carries sender name, business address and a signed unsubscribe link; daily cap; no repeat of the same template; never auto-send (an admin presses Send, twice). Lead lists only hold contact details the business published itself, with a source URL. See `docs/OUTREACH.md`.

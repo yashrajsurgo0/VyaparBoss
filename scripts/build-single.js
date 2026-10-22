@@ -1,4 +1,4 @@
-// Builds dist/vyaparboss.html: the whole app in one self-contained file (styles and scripts inlined).
+// Builds dist/kaantamandi.html: the whole app in one self-contained file (styles and scripts inlined).
 // Used for the claude.ai artifact demo and for sending the demo as an attachment.
 const fs = require("fs");
 const path = require("path");
@@ -12,6 +12,6 @@ if (process.argv.includes("--fragment")) {
              .replace(/<\/head>\s*<body>/i, "").replace(/<\/body>\s*<\/html>\s*$/i, "");
 }
 fs.mkdirSync(path.join(__dirname, "..", "dist"), { recursive: true });
-const out = path.join(__dirname, "..", "dist", process.argv.includes("--fragment") ? "vyaparboss-artifact.html" : "vyaparboss.html");
+const out = path.join(__dirname, "..", "dist", process.argv.includes("--fragment") ? "kaantamandi-artifact.html" : "kaantamandi.html");
 fs.writeFileSync(out, html);
 console.log(`Wrote ${path.relative(process.cwd(), out)} (${(html.length / 1024).toFixed(0)} KB)`);

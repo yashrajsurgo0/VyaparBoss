@@ -55,7 +55,7 @@ const { createApp } = require("../server");
     });
     await test("static app is served", async () => {
       const { status, body } = await call("GET", "/");
-      assert.strictEqual(status, 200); assert.ok(body.includes("VyaparBoss"));
+      assert.strictEqual(status, 200); assert.ok(body.includes("KaantaMandi"));
     });
     await test("path traversal is blocked", async () => {
       const { status } = await call("GET", "/../package.json");
@@ -77,7 +77,7 @@ const { createApp } = require("../server");
     let po;
     await test("create order marks the RFQ ordered", async () => {
       const { body } = await call("POST", "/api/orders", { order: { productId: "box3", qty: 3000, city: "Pune", sid: "s1", landed: 1, subtotal: 1, gst: 0, freight: 0, avg: 1, eta: 3, stage: 0, history: [Date.now()], rfqId }, rfqPatch: { status: "ordered", wonBy: "s1" } });
-      assert.match(body.po, /^VB\/PO\/\d{4}-\d{2}\/0004$/); po = body.po;
+      assert.match(body.po, /^KM\/PO\/\d{4}-\d{2}\/0004$/); po = body.po;
       const st = (await call("GET", "/api/state")).body;
       assert.strictEqual(st.rfqs.find(r => r.id === rfqId).status, "ordered");
     });
@@ -127,7 +127,7 @@ const { createApp } = require("../server");
       const from = "919844444444";
       await call("POST", "/api/whatsapp/simulate", { from, text: "8000 3 ply boxes Pune 7 din" });
       const { body } = await call("POST", "/api/whatsapp/simulate", { from, text: "APPROVE 1" });
-      assert.match(body.reply, /PO VB\/PO\//);
+      assert.match(body.reply, /PO KM\/PO\//);
       const st = (await call("GET", "/api/state")).body;
       assert.strictEqual(st.orders[0].source, "whatsapp");
       sent.length = 0;
@@ -240,7 +240,7 @@ const { createApp } = require("../server");
         assert.deepStrictEqual([clicked.views, !!clicked.lastViewed], [1, true]);
         // backup and restore round-trip
         const bk = await fetch(b3 + "/api/admin/backup", { headers: { "x-admin-key": "k3y-123" } });
-        assert.match(bk.headers.get("content-disposition"), /vyaparboss-backup/);
+        assert.match(bk.headers.get("content-disposition"), /kaantamandi-backup/);
         const backup = await bk.json();
         await c3("DELETE", "/api/admin/leads/" + leads[0].id, null, "k3y-123");
         assert.strictEqual((await c3("POST", "/api/admin/restore", { app: "other" }, "k3y-123")).status, 400);
@@ -350,7 +350,7 @@ const { createApp } = require("../server");
       const r2 = await fetch(base + "/js/engine.js", { headers: { "if-none-match": r.headers.get("etag") } });
       assert.strictEqual(r2.status, 304);
       const nf = await fetch(base + "/no-such-page");
-      assert.strictEqual(nf.status, 404); assert.match(await nf.text(), /VyaparBoss/);
+      assert.strictEqual(nf.status, 404); assert.match(await nf.text(), /KaantaMandi/);
       const sm = await fetch(base + "/sitemap.xml").then(x => x.text());
       assert.match(sm, /<loc>https:\/\/vyaparboss\.onrender\.com\/privacy\.html<\/loc>/);
       for (const f of ["/robots.txt", "/privacy.html", "/terms.html", "/contact.html"]) assert.strictEqual((await fetch(base + f)).status, 200, f);
@@ -392,7 +392,7 @@ const { createApp } = require("../server");
       const mails = [];
       const fakeMail = async (url, init) => { if (String(url).includes("resend")) { const b = JSON.parse(init.body); mails.push({ to: b.to[0], subject: b.subject, text: b.text }); } return { ok: true, json: async () => ({}), text: async () => "" }; };
       const { server: s5, store: st5 } = createApp({ dataFile: path.join(dir, "db5.json"), claude: null, fetch: fakeMail,
-        env: { ADMIN_KEY: "k5", EMAIL_PROVIDER: "resend", EMAIL_API_KEY: "re_x", OUTREACH_FROM_EMAIL: "bhai@vyaparboss.test", PUBLIC_URL: "https://vb.test", CONTACT_TO: "team@vyaparboss.test" } });
+        env: { ADMIN_KEY: "k5", EMAIL_PROVIDER: "resend", EMAIL_API_KEY: "re_x", OUTREACH_FROM_EMAIL: "bhai@kaantamandi.test", PUBLIC_URL: "https://vb.test", CONTACT_TO: "team@kaantamandi.test" } });
       await new Promise(r => s5.listen(0, r));
       const b5 = `http://127.0.0.1:${s5.address().port}`;
       const agent = () => { let cookie = ""; return async (method, p, body) => {
@@ -480,7 +480,7 @@ const { createApp } = require("../server");
         const msgs = await fetch(b5 + "/api/admin/messages", { headers: { "x-admin-key": "k5" } }).then(r => r.json());
         assert.strictEqual(msgs.messages[0].email, "meena@x.in");
         assert.strictEqual((await agent()("GET", "/api/admin/messages")).status, 401);
-        assert.ok(mails.some(m => m.to === "team@vyaparboss.test"));
+        assert.ok(mails.some(m => m.to === "team@kaantamandi.test"));
       } finally { s5.close(); }
     });
     await test("delivery: shipment, receipt, rating, disputes, cancellations and the supplier's real track record", async () => {

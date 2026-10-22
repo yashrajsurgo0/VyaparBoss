@@ -1,4 +1,4 @@
-# VyaparBoss — project brief (condensed)
+# KaantaMandi — project brief (condensed)
 
 Full brief lives in the claude.ai Project "Export Supply Chain". This is the working summary for development.
 
@@ -9,7 +9,7 @@ Full brief lives in the claude.ai Project "Export Supply Chain". This is the wor
 Procurement is fragmented and manual (phone, WhatsApp, spreadsheets). Buyers can't compare true delivered cost across MOQs, freight and taxes; supplier reliability is hard to judge; logistics is disconnected from sourcing. IndiaMART / JD Mart solve discovery, not execution.
 
 ## Product
-Tell VyaparBoss what you need; it handles sourcing, quotes, comparison, negotiation, PO and delivery tracking.
+Tell KaantaMandi what you need; it handles sourcing, quotes, comparison, negotiation, PO and delivery tracking.
 
 Components: (A) AI procurement assistant · (B) verified supplier marketplace · (C) AI supplier/sales assistant · (D) transaction and PO management · (E) logistics via 3PL partners first.
 

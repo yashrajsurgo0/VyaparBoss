@@ -7,7 +7,7 @@ function createNotifier({ store, mailer, core, publicUrl, log = console }) {
   const userById = id => id && users().find(u => u.id === id && !u.guest && u.email);
   const ownerOfSupplier = sid => { const s = store.data.suppliers.find(x => x.id === sid); return s && userById(s.ownerId); };
   const qty = (n, unit) => `${Number(n).toLocaleString("en-IN")} ${unit}`;
-  const foot = `\n\n— Bhai, VyaparBoss\n${publicUrl}\n\nYou get these because you have a VyaparBoss account. Turn them off in Account settings.`;
+  const foot = `\n\n— Bhai, KaantaMandi\n${publicUrl}\n\nYou get these because you have a KaantaMandi account. Turn them off in Account settings.`;
 
   async function mail(u, subject, text, { force = false } = {}) {
     if (!mailer.configured || !u || !u.email) return false;
@@ -24,10 +24,10 @@ function createNotifier({ store, mailer, core, publicUrl, log = console }) {
   return {
     get on() { return mailer.configured; },
     passwordReset(u, link) {
-      return mail(u, "Reset your VyaparBoss password", `Namaste${u.name ? " " + u.name.split(/\s+/)[0] : ""},\n\nSomeone (hopefully you) asked to reset the password for this VyaparBoss account. Open this link within one hour to choose a new one:\n\n${link}\n\nIf it wasn't you, ignore this email; your password stays the same.\n\n— VyaparBoss`, { force: true });
+      return mail(u, "Reset your KaantaMandi password", `Namaste${u.name ? " " + u.name.split(/\s+/)[0] : ""},\n\nSomeone (hopefully you) asked to reset the password for this KaantaMandi account. Open this link within one hour to choose a new one:\n\n${link}\n\nIf it wasn't you, ignore this email; your password stays the same.\n\n— KaantaMandi`, { force: true });
     },
     verifyEmail(u, link) {
-      return mail(u, "Confirm your email for VyaparBoss", `Namaste${u.name ? " " + u.name.split(/\s+/)[0] : ""},\n\nPlease confirm this is your email by opening this link (it works for 7 days):\n\n${link}\n\nConfirmed emails get order and quote updates, and can reset a forgotten password.\n\nDidn't make a VyaparBoss account? Ignore this email.\n\n— VyaparBoss`, { force: true });
+      return mail(u, "Confirm your email for KaantaMandi", `Namaste${u.name ? " " + u.name.split(/\s+/)[0] : ""},\n\nPlease confirm this is your email by opening this link (it works for 7 days):\n\n${link}\n\nConfirmed emails get order and quote updates, and can reset a forgotten password.\n\nDidn't make a KaantaMandi account? Ignore this email.\n\n— KaantaMandi`, { force: true });
     },
     /** A buyer request that a supplier's listing qualifies for. Sent once per request. */
     newRequest(rfq) {
@@ -51,7 +51,7 @@ function createNotifier({ store, mailer, core, publicUrl, log = console }) {
       const u = ownerOfSupplier(o.sid); if (!u) return;
       const p = prod(o.productId);
       later(mail(u, `New order ${o.po}: ${qty(o.qty, p.unit)} ${p.name}`,
-        `You have a new purchase order on VyaparBoss.\n\nPO: ${o.po}\nItem: ${p.name}\nQuantity: ${qty(o.qty, p.unit)}\nDeliver to: ${o.city}\n\nOpen it and confirm: ${publicUrl}/#sorders`));
+        `You have a new purchase order on KaantaMandi.\n\nPO: ${o.po}\nItem: ${p.name}\nQuantity: ${qty(o.qty, p.unit)}\nDeliver to: ${o.city}\n\nOpen it and confirm: ${publicUrl}/#sorders`));
     },
     /** Named order actions (engine.js applyOrderAction). Tells the side that didn't act; disputes also go to the team. */
     orderEvent(o, ev, actorId, who, teamInbox) {
@@ -68,16 +68,16 @@ function createNotifier({ store, mailer, core, publicUrl, log = console }) {
         review: [sup, `New ${o.review?.stars}-star rating on order ${o.po}`, `The buyer rated order ${o.po}: ${"★".repeat(o.review?.stars || 0)}${o.review?.text ? `\n"${o.review.text}"` : ""}\n\n${publicUrl}/#sorders`],
         dispute: [sup, `Problem reported on order ${o.po}`, `The buyer reported a problem: ${o.issue}.${o.dispute?.detail ? `\n"${o.dispute.detail}"` : ""}\n\nPlease reply in the app: ${publicUrl}/#sorders`],
         resolve: null, withdraw: [sup, `Problem on order ${o.po} closed`, `The buyer withdrew the problem on order ${o.po}.`],
-        cancel: [who === "buyer" ? sup : buyer, `Order ${o.po} cancelled`, `Order ${o.po} was cancelled by the ${who === "team" ? "VyaparBoss team" : who}.${o.cancelled?.reason ? `\nReason: ${o.cancelled.reason}` : ""}${who !== "buyer" ? `\n\nYour request is open again; pick another supplier here: ${publicUrl}/#orders` : ""}`],
+        cancel: [who === "buyer" ? sup : buyer, `Order ${o.po} cancelled`, `Order ${o.po} was cancelled by the ${who === "team" ? "KaantaMandi team" : who}.${o.cancelled?.reason ? `\nReason: ${o.cancelled.reason}` : ""}${who !== "buyer" ? `\n\nYour request is open again; pick another supplier here: ${publicUrl}/#orders` : ""}`],
         reply: [who === "buyer" ? sup : buyer, `New message about order ${o.po}`, `${(o.dispute?.msgs || []).slice(-1)[0]?.text || ""}\n\nReply in the app: ${publicUrl}/#${who === "buyer" ? "sorders" : "orders"}`],
       };
       if (ev === "resolve") {
         const r = core.RESOLUTIONS[o.dispute?.resolution] || "Resolved";
-        for (const [u, tab] of [[buyer, "orders"], [sup, "sorders"]]) to(u, `Problem on order ${o.po} resolved`, `The VyaparBoss team closed the problem on order ${o.po}: ${r}.${o.dispute?.note ? `\n${o.dispute.note}` : ""}\n\n${publicUrl}/#${tab}`);
+        for (const [u, tab] of [[buyer, "orders"], [sup, "sorders"]]) to(u, `Problem on order ${o.po} resolved`, `The KaantaMandi team closed the problem on order ${o.po}: ${r}.${o.dispute?.note ? `\n${o.dispute.note}` : ""}\n\n${publicUrl}/#${tab}`);
       } else if (msgs[ev]) to(...msgs[ev]);
-      if (ev === "cancel" && who === "team") to(sup, `Order ${o.po} cancelled`, `Order ${o.po} was cancelled by the VyaparBoss team.`);
+      if (ev === "cancel" && who === "team") to(sup, `Order ${o.po} cancelled`, `Order ${o.po} was cancelled by the KaantaMandi team.`);
       if ((ev === "dispute" || ev === "deliver_issue") && teamInbox && mailer.configured)
-        later(mailer.send({ to: teamInbox, subject: `[VyaparBoss] Problem on ${o.po}: ${o.issue}`, text: `${head}\nSupplier: ${o.sname}\n${o.dispute?.detail || o.receipt?.note || ""}\n\nTeam → Ops to resolve.` }));
+        later(mailer.send({ to: teamInbox, subject: `[KaantaMandi] Problem on ${o.po}: ${o.issue}`, text: `${head}\nSupplier: ${o.sname}\n${o.dispute?.detail || o.receipt?.note || ""}\n\nTeam → Ops to resolve.` }));
     },
     /** A team member's order is over their limit or the budget: the owner decides. */
     approvalNeeded(o, owner, member) {
@@ -101,7 +101,7 @@ function createNotifier({ store, mailer, core, publicUrl, log = console }) {
     teamInvite(email, owner, link, limit) {
       if (!mailer.configured) return;
       const lim = limit == null ? "You can place orders of any size." : limit === 0 ? `Every order you place goes to ${owner.name || "the owner"} for approval first.` : `Orders above ${core.inr(limit)} go to ${owner.name || "the owner"} for approval first.`;
-      later(mailer.send({ to: email, subject: `${owner.name || "Someone"} invited you to buy for ${owner.business || "their business"} on VyaparBoss`, text: `Namaste,\n\n${owner.name || "A VyaparBoss buyer"} invited you to place orders for ${owner.business || "their business"} on VyaparBoss. ${lim}\n\nAccept the invite (it works for 14 days): ${link}\n\nNot expecting this? Ignore this email.\n\n— VyaparBoss` }));
+      later(mailer.send({ to: email, subject: `${owner.name || "Someone"} invited you to buy for ${owner.business || "their business"} on KaantaMandi`, text: `Namaste,\n\n${owner.name || "A KaantaMandi buyer"} invited you to place orders for ${owner.business || "their business"} on KaantaMandi. ${lim}\n\nAccept the invite (it works for 14 days): ${link}\n\nNot expecting this? Ignore this email.\n\n— KaantaMandi` }));
     },
     /** Invoices and payments. */
     moneyEvent(o, ev, actorId) {
@@ -112,7 +112,7 @@ function createNotifier({ store, mailer, core, publicUrl, log = console }) {
       if (ev === "pay_claimed") to(sup, `Buyer says they paid ${amt} for ${o.po}`, `The buyer recorded a payment of ${amt} for order ${o.po}${last?.ref ? ` (ref ${last.ref})` : ""}. Please confirm once it reaches your account: ${publicUrl}/#sorders`);
       if (ev === "pay_recorded" || ev === "payconfirm") to(buyer, `Payment of ${amt} confirmed for ${o.po}`, `${o.sname} confirmed receiving ${amt} for order ${o.po}. Still due: ${core.inr(core.dueOf(o))}.\n\n${publicUrl}/#orders`);
       if (ev === "paynotreceived") to(buyer, `Payment for ${o.po} not received yet`, `${o.sname} says the payment of ${amt} for order ${o.po} hasn't reached them yet. Please check the reference with your bank, or reply in the app: ${publicUrl}/#orders`);
-      if (ev === "pay_online") { to(buyer, `Payment received for ${o.po}`, `We received your online payment of ${amt} for order ${o.po}. Thank you!`); to(sup, `Buyer paid ${amt} online for ${o.po}`, `The buyer paid ${amt} online for order ${o.po}. VyaparBoss will settle it to you.\n\n${publicUrl}/#sorders`); }
+      if (ev === "pay_online") { to(buyer, `Payment received for ${o.po}`, `We received your online payment of ${amt} for order ${o.po}. Thank you!`); to(sup, `Buyer paid ${amt} online for ${o.po}`, `The buyer paid ${amt} online for order ${o.po}. KaantaMandi will settle it to you.\n\n${publicUrl}/#sorders`); }
     },
     /** Order moved along. Tells whichever side didn't make the change. */
     orderStage(o, actorId) {

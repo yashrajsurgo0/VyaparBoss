@@ -1,13 +1,15 @@
-# VyaparBoss
+# KaantaMandi
 
-**AI-assisted B2B procurement for Indian small businesses.** A buyer types what they need in plain English or Hinglish; VyaparBoss finds suppliers who can actually serve that quantity and city, compares them on the **full delivered price** (rate + GST + freight), and places a purchase order only after the buyer approves. Then it tracks delivery, invoices and payments, and builds each supplier's real track record.
+*Formerly VyaparBoss. Domain: kaantamandi.com.*
+
+**AI-assisted B2B procurement for Indian small businesses.** A buyer types what they need in plain English or Hinglish; KaantaMandi finds suppliers who can actually serve that quantity and city, compares them on the **full delivered price** (rate + GST + freight), and places a purchase order only after the buyer approves. Then it tracks delivery, invoices and payments, and builds each supplier's real track record.
 
 [![Live demo](https://img.shields.io/badge/%E2%96%B6%20Live%20demo-open%20in%20browser-B4501A?style=for-the-badge)](https://yashrajsurgo0.github.io/VyaparBoss/?lang=en)
 [![Tests](https://github.com/yashrajsurgo0/VyaparBoss/actions/workflows/test.yml/badge.svg)](https://github.com/yashrajsurgo0/VyaparBoss/actions/workflows/test.yml)
 ![No dependencies](https://img.shields.io/badge/npm%20dependencies-0-3E2615)
 ![Node](https://img.shields.io/badge/Node.js-18%2B-3E2615)
 
-![VyaparBoss demo: a buyer types a request, compares delivered prices, approves and tracks the order](docs/screenshots/demo.gif)
+![KaantaMandi demo: a buyer types a request, compares delivered prices, approves and tracks the order](docs/screenshots/demo.gif)
 
 > **Try it in a minute:** open the [live demo](https://yashrajsurgo0.github.io/VyaparBoss/?lang=en) → **I'm buying** → **Explore without an account** → type *"5000 corrugated boxes to Pune in 7 days"* → pick a supplier → tick approve → **Place order** → follow it under **Orders**. The demo runs entirely in your browser with example suppliers; nothing is sent anywhere. Pick **I'm supplying** instead to see the supplier side.
 >
@@ -51,7 +53,7 @@ cp .env.example .env     # optional: add GEMINI_API_KEY (or ANTHROPIC_API_KEY) t
 npm start                # app + API at http://localhost:5173
 npm test                 # engine, parser and API tests (Node 18+, no dependencies)
 npm run deploy:pages     # publish src/ to GitHub Pages (gh-pages branch)
-npm run build:single     # dist/vyaparboss.html: whole app in one file, for sharing
+npm run build:single     # dist/kaantamandi.html: whole app in one file, for sharing
 ```
 
 **Two sides, one app:** the welcome screen asks "I'm buying" or "I'm supplying"; each side has its own sign-up/log-in (email, Google, Apple, Facebook; see [docs/SIGN_IN_SETUP.md](docs/SIGN_IN_SETUP.md)) and its own tabs. Buyers: Buy, Orders, a supplier directory with filters (product, ships from, delivers to, distance, quantity, max price, rating, verified, on-time; sort by price, distance, rating), Insights. Suppliers: Requests (quote in the app; see your rank), Orders (confirm, dispatch, deliver), My listing, Insights. Team tools sit under Team (admin key). Buyers can also explore as a guest.
@@ -79,7 +81,7 @@ The app checks for `api/health` on load and picks the mode by itself.
 | POST | `/api/parse` | `{text, partial}` → structured requirement (Claude or rules) |
 | POST | `/api/quotes` | `{productId, qty, city, deadline}` → ranked landed-cost quotes |
 | POST / PATCH | `/api/rfqs`, `/api/rfqs/:id` | Create / update RFQs (server assigns `RFQ-2627-0001` ids) |
-| POST / PATCH | `/api/orders`, `/api/orders/:po` | Raise POs (`VB/PO/2026-27/0001`), move stages, flag issues |
+| POST / PATCH | `/api/orders`, `/api/orders/:po` | Raise POs (`KM/PO/2026-27/0001`), move stages, flag issues |
 | PUT / DELETE | `/api/suppliers/:id` | Onboard, edit or remove a supplier (validated, GSTIN checksum) |
 | PUT | `/api/settings` | `{useSamples}`: show or hide the 20 sample suppliers |
 | POST | `/api/draft` | AI-drafted supplier reply for an RFQ |
@@ -111,7 +113,7 @@ The app checks for `api/health` on load and picks the mode by itself.
 | Tab | What it does |
 |---|---|
 | Buy | Talk to Bhai or tap through categories → quotes ranked by delivered cost → ask for a better price → approve → PO |
-| Orders | POs (`VB/PO/2026-27/0001`) through PO sent → Confirmed → Dispatched → In transit → Delivered; issue reporting |
+| Orders | POs (`KM/PO/2026-27/0001`) through PO sent → Confirmed → Dispatched → In transit → Delivered; issue reporting |
 | Suppliers | Network: onboard real suppliers (GSTIN checksum, products, price tiers, MOQ, capacity, delivery radius, negotiation limit); 20 sample suppliers you can hide |
 | Suppliers → Supplier view | What a supplier sees: requests they qualified for, auto-quote, rank, drafted WhatsApp reply |
 | Insights | Value bought, buyer savings, request→order conversion, platform revenue, spend by category, WhatsApp practice chat |

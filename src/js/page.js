@@ -19,7 +19,7 @@
       fetch(API+"api/contact",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)})
         .then(function(r){return r.json().catch(function(){return{};}).then(function(j){if(!r.ok)throw new Error(j.error||"Couldn't send. Please try again.");});})
         .then(function(){f.hidden=true;document.getElementById("cDone").hidden=false;})
-        .catch(function(x){err.textContent=x.message==="Failed to fetch"?"Couldn't reach VyaparBoss. Check your connection and try again.":x.message;err.hidden=false;btn.disabled=false;btn.textContent="Send message";});
+        .catch(function(x){err.textContent=x.message==="Failed to fetch"?"Couldn't reach KaantaMandi. Check your connection and try again.":x.message;err.hidden=false;btn.disabled=false;btn.textContent="Send message";});
     });
   });
 })();

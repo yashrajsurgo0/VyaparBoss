@@ -1,6 +1,6 @@
 # WhatsApp setup
 
-Buyers message your WhatsApp Business number → VyaparBoss replies with the top 3 landed-cost quotes → buyer replies **APPROVE 1** → a purchase order is raised → dispatch updates go back to the buyer on WhatsApp.
+Buyers message your WhatsApp Business number → KaantaMandi replies with the top 3 landed-cost quotes → buyer replies **APPROVE 1** → a purchase order is raised → dispatch updates go back to the buyer on WhatsApp.
 
 **You can try all of this today without Meta:** open the app on the server, go to **Pilot metrics → WhatsApp intake**, and type as a buyer. Or from a terminal: `npm run wa -- "5000 3-ply boxes Pune 7 din"`.
 
@@ -20,7 +20,7 @@ To connect a real number you need two things: the server online at a public `htt
 ## 1. Create the Meta app (about 10 min)
 
 1. Go to **developers.facebook.com** and log in with the Facebook account that manages your business. Click **My Apps → Create App**.
-2. Choose the use case **"Connect with customers through WhatsApp"** (or app type **Business**), give it a name such as *VyaparBoss*, and link your Meta Business portfolio (House of 24). Create one if asked.
+2. Choose the use case **"Connect with customers through WhatsApp"** (or app type **Business**), give it a name such as *KaantaMandi*, and link your Meta Business portfolio (House of 24). Create one if asked.
 3. In the app dashboard, open **WhatsApp → API Setup**. Meta gives you a free **test phone number**. On this page note down:
    - **Phone number ID** → this is `WHATSAPP_PHONE_NUMBER_ID`
    - **Temporary access token** → this is `WHATSAPP_TOKEN`. It expires after 24 hours; step 4 replaces it.
@@ -53,7 +53,7 @@ Now send `hi` from your phone to the test number. You should get the help messag
 ## 4. Before real buyers use it
 
 - **Permanent token.** The temporary token dies every 24 hours. In **business.facebook.com → Settings → Users → System users**, add a system user (Admin), click **Generate token**, pick your app, and tick `whatsapp_business_messaging` and `whatsapp_business_management`. Use that token as `WHATSAPP_TOKEN`.
-- **Your own number.** In **WhatsApp → API Setup → Add phone number**, register the VyaparBoss business number. It must not be active on the normal WhatsApp or WhatsApp Business app. Meta also needs business verification to lift the test limits.
+- **Your own number.** In **WhatsApp → API Setup → Add phone number**, register the KaantaMandi business number. It must not be active on the normal WhatsApp or WhatsApp Business app. Meta also needs business verification to lift the test limits.
 - **The 24-hour rule.** WhatsApp only allows free-form replies within 24 hours of the buyer's last message. Quote replies are always inside that window. Dispatch updates sent days later need a Meta-approved **message template**. Until templates are added, late updates may not be delivered, so check **Orders** in the app.
 - **Costs.** Meta charges per conversation for business-initiated messages. Replies to buyers within 24 hours are currently free or cheap in India; check Meta's current pricing page.
 

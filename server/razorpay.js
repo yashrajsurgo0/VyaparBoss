@@ -1,6 +1,6 @@
 // Online payments through Razorpay Payment Links. Optional: on only when RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET are set.
 // Use test keys (rzp_test_…) until a lawyer and Razorpay have signed off on how money reaches suppliers
-// (a marketplace normally needs Razorpay Route or similar, so funds don't sit with VyaparBoss).
+// (a marketplace normally needs Razorpay Route or similar, so funds don't sit with KaantaMandi).
 const crypto = require("crypto");
 
 function createRazorpay(env, fetchImpl = globalThis.fetch) {

@@ -1,8 +1,8 @@
 {
-  "name": "vyaparboss",
+  "name": "kaantamandi",
   "version": "0.1.0",
   "private": true,
-  "description": "VyaparBoss — AI-powered B2B procurement and supplier marketplace for Indian MSMEs (MVP prototype). A House of 24 Pvt. Ltd. initiative.",
+  "description": "KaantaMandi — AI-powered B2B procurement and supplier marketplace for Indian MSMEs (MVP prototype). A House of 24 Pvt. Ltd. initiative.",
   "scripts": {
     "start": "node server/index.js",
     "static": "npx --yes serve src -l 5173",

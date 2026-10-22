@@ -8,8 +8,8 @@ business owner can create. Add the keys in Render → vyaparboss → Environment
 includes everyone's accounts.
 
 ## Google (free, ~15 minutes)
-1. console.cloud.google.com → create a project "VyaparBoss" (the same Google account as the Gemini key is fine).
-2. APIs & Services → OAuth consent screen → External → app name VyaparBoss, support email, logo optional → add your
+1. console.cloud.google.com → create a project "KaantaMandi" (the same Google account as the Gemini key is fine).
+2. APIs & Services → OAuth consent screen → External → app name KaantaMandi, support email, logo optional → add your
    domain(s) under Authorized domains (`onrender.com` for now, your own domain later). Publish the app.
 3. Credentials → Create credentials → OAuth client ID → Web application.
    Authorized JavaScript origins: `https://vyaparboss.onrender.com` (and your own domain later). No redirect URI needed.

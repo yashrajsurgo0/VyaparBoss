@@ -1,4 +1,4 @@
-/* VyaparBoss — formatting, geo and validation helpers. Plain browser script (no build step); loaded in order by index.html. */
+/* KaantaMandi — formatting, geo and validation helpers. Plain browser script (no build step); loaded in order by index.html. */
 /* ===================== UTIL ===================== */
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -11,7 +11,7 @@ const unitOne=u=>({boxes:"box",pcs:"piece"})[u]||u.replace(/s$/,"");
 function km(a,b){const [la1,lo1]=CITIES[a],[la2,lo2]=CITIES[b];const R=6371,r=Math.PI/180;const dl=(la2-la1)*r,dn=(lo2-lo1)*r;const h=Math.sin(dl/2)**2+Math.cos(la1*r)*Math.cos(la2*r)*Math.sin(dn/2)**2;const d=2*R*Math.asin(Math.sqrt(h))*1.3;return Math.max(25,Math.round(d));}
 function fy(d=today()){d=new Date(d);const y=d.getMonth()>=3?d.getFullYear():d.getFullYear()-1;return `${y}-${String((y+1)%100).padStart(2,"0")}`;}
 function rfqIdFor(n){const f=fy();return `RFQ-${f.slice(2,4)}${f.slice(5)}-${String(n).padStart(4,"0")}`;}
-function poIdFor(n){return `VB/PO/${fy()}/${String(n).padStart(4,"0")}`;}
+function poIdFor(n){return `KM/PO/${fy()}/${String(n).padStart(4,"0")}`;}
 function toast(t){const el=$("#toast");el.textContent=t;el.hidden=false;clearTimeout(toast._t);toast._t=setTimeout(()=>el.hidden=true,2600);}
 
 /* GSTIN: 2-digit state code + PAN (5 letters, 4 digits, 1 letter) + entity code + "Z" + check character (base-36 mod checksum). */

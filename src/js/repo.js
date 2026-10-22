@@ -1,5 +1,5 @@
-/* VyaparBoss — where data lives.
-   "server": the VyaparBoss backend (npm start) is reachable at api/* → shared data, Claude via the Anthropic API, WhatsApp.
+/* KaantaMandi — where data lives.
+   "server": the KaantaMandi backend (npm start) is reachable at api/* → shared data, Claude via the Anthropic API, WhatsApp.
    "local":  opened as a static page (GitHub Pages, file://, claude.ai) → data stays in this browser's localStorage. */
 const KEY="vyaparboss.v1";
 /* The always-on server. The static copy (GitHub Pages) sends sign-ups and supplier quotes here. */

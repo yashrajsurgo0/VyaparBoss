@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>VyaparBoss</title>
+<title>KaantaMandi</title>
 <meta name="description" content="Vyapar bada, jhanjhat chhota! Tell Bhai what your business needs; he finds verified suppliers and shows the full delivered price.">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Crect width='48' height='48' rx='12' fill='%2316171B'/%3E%3Cg transform='translate%286 6%29 scale%28.75%29 rotate%28-45 24 24%29'%3E%3Cpath fill='%23FFC21A' d='M10.5 17h10V3L45 24H7z'/%3E%3Cpath fill='%23E48A00' d='M7 24h38L20.5 45V31H3.5z'/%3E%3C/g%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Crect width='48' height='48' rx='12' fill='%2316171B'/%3E%3Cg transform='translate%286 6%29 scale%28.75%29'%3E%3Cpath fill='%23E48A00' d='M21.5 10h5v28h-5zM13 44a11 5 0 0 1 22 0z'/%3E%3Ccircle fill='%23FFC21A' cx='24' cy='7' r='4'/%3E%3Crect fill='%23FFC21A' x='4' y='12.5' width='40' height='4.5' rx='2.25'/%3E%3Cpath fill='none' stroke='%23E48A00' stroke-width='1.8' stroke-linecap='round' d='M10 17 4.5 29M10 17l5.5 12M38 17l-5.5 12M38 17l5.5 12'/%3E%3Cpath fill='%23FFC21A' d='M2 28.5h16a8 7 0 0 1-16 0zM30 28.5h16a8 7 0 0 1-16 0z'/%3E%3C/g%3E%3C/svg%3E">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.webmanifest">
 <meta property="og:type" content="website">
-<meta property="og:site_name" content="VyaparBoss">
-<meta property="og:title" content="VyaparBoss: tell Bhai what your business needs">
+<meta property="og:site_name" content="KaantaMandi">
+<meta property="og:title" content="KaantaMandi: tell Bhai what your business needs">
 <meta property="og:description" content="Verified Indian suppliers. One full delivered price (rate, GST and freight). Nothing ordered until you approve.">
 <meta property="og:image" content="https://vyaparboss.onrender.com/og.png">
 <meta property="og:image:width" content="1200">
@@ -27,9 +27,9 @@
 <!-- ========== Drawings (original artwork, colored through CSS tokens) ========== -->
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <defs>
-    <!-- Logo: a bold up-right arrow folded in two golds (growth + a parcel's crease). "logo-tile" is the app icon. -->
+    <!-- Logo: a two-gold kaanta (mandi weighing scale), balanced: a fair deal for buyer and supplier. "logo-tile" is the app icon. -->
     <symbol id="logo" viewBox="0 0 48 48">
-      <g transform="rotate(-45 24 24)"><path fill="#FFC21A" d="M10.5 17h10V3L45 24H7z"/><path fill="#E48A00" d="M7 24h38L20.5 45V31H3.5z"/></g>
+      <path fill="#E48A00" d="M21.5 10h5v28h-5zM13 44a11 5 0 0 1 22 0z"/><circle fill="#FFC21A" cx="24" cy="7" r="4"/><rect fill="#FFC21A" x="4" y="12.5" width="40" height="4.5" rx="2.25"/><path fill="none" stroke="#E48A00" stroke-width="1.8" stroke-linecap="round" d="M10 17 4.5 29M10 17l5.5 12M38 17l-5.5 12M38 17l5.5 12"/><path fill="#FFC21A" d="M2 28.5h16a8 7 0 0 1-16 0zM30 28.5h16a8 7 0 0 1-16 0z"/>
     </symbol>
     <symbol id="logo-tile" viewBox="0 0 48 48">
       <rect width="48" height="48" rx="12" fill="#16171B"/><use href="#logo" x="6" y="6" width="36" height="36"/>
@@ -186,9 +186,9 @@
 
 <header class="top">
   <div class="wrap topbar">
-    <a class="brand" href="#" data-action="home" aria-label="VyaparBoss home">
+    <a class="brand" href="#" data-action="home" aria-label="KaantaMandi home">
       <svg class="logo"><use href="#logo"/></svg>
-      <span class="lockup"><span class="wordmark">Vyapar<span class="boss">Boss</span></span><span class="tagline" data-i18n="tagline">Vyapar bada, jhanjhat chhota!</span></span>
+      <span class="lockup"><span class="wordmark">Kaanta<span class="boss">Mandi</span></span><span class="tagline" data-i18n="tagline">Vyapar bada, jhanjhat chhota!</span></span>
     </a>
     <!-- Tabs are drawn by roles.js: one set for buyers, another for suppliers, plus Team when unlocked. -->
     <nav class="tabs" id="tabs" aria-label="Main"></nav>
@@ -212,7 +212,7 @@
     <div id="dirInvite"></div>
   </section>
   <section class="view" id="v-insights" aria-label="Insights" hidden>
-    <div class="pagehead"><div><h1>Insights</h1><p class="muted">What you've bought through VyaparBoss, and what you saved.</p></div></div>
+    <div class="pagehead"><div><h1>Insights</h1><p class="muted">What you've bought through KaantaMandi, and what you saved.</p></div></div>
     <div class="kpis" id="kpis"></div>
     <div class="panel pad"><h3>Spend by category</h3><div class="bars" id="catBars"></div></div>
     <details class="howcalc">
@@ -274,19 +274,19 @@
     <div id="s-apps" hidden><div id="appsList"></div></div>
     <div id="i-outreach" hidden><div id="outreachBox" class="outbox"></div></div>
     <div id="s-desk" hidden>
-      <p class="muted lede-sm">See VyaparBoss as a supplier does: the requests they qualified for, their automatic quote, and a reply Bhai drafts.</p>
+      <p class="muted lede-sm">See KaantaMandi as a supplier does: the requests they qualified for, their automatic quote, and a reply Bhai drafts.</p>
       <div class="field narrow"><label for="deskSel">Viewing as</label><select id="deskSel"></select></div>
       <div class="desklist" id="deskList"></div>
     </div>
     <div id="t-wa" hidden><div class="panel pad" id="waPanel"></div></div>
   </section>
 
-  <section class="view" id="v-public" aria-label="VyaparBoss" hidden></section>
+  <section class="view" id="v-public" aria-label="KaantaMandi" hidden></section>
 </main>
 
 <nav class="bottomnav" id="bottomnav" aria-label="Main"></nav>
 
-<footer class="wrap foot"><b>VyaparBoss. <span data-i18n="tagline">Vyapar bada, jhanjhat chhota!</span></b> <a href="#join/s">List your business free</a> · <a href="#join/b">Join as a buyer</a> · <a href="privacy.html">Privacy</a> · <a href="terms.html">Terms</a> · <a href="contact.html">Contact</a> · <a href="#" data-action="team-open">Team</a><br>By House of 24 Pvt. Ltd. The 20 sample suppliers, their GSTINs and prices, and the GST rates are illustrative.</footer>
+<footer class="wrap foot"><b>KaantaMandi. <span data-i18n="tagline">Vyapar bada, jhanjhat chhota!</span></b> <a href="#join/s">List your business free</a> · <a href="#join/b">Join as a buyer</a> · <a href="privacy.html">Privacy</a> · <a href="terms.html">Terms</a> · <a href="contact.html">Contact</a> · <a href="#" data-action="team-open">Team</a><br>By House of 24 Pvt. Ltd. The 20 sample suppliers, their GSTINs and prices, and the GST rates are illustrative.</footer>
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="js/data.js"></script>

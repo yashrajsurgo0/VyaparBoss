@@ -1,4 +1,4 @@
-/* VyaparBoss has two sides, chosen on the welcome screen:
+/* KaantaMandi has two sides, chosen on the welcome screen:
      Buyers    → Buy, Orders, Suppliers (directory with filters), Insights
      Suppliers → Requests (quote in the app), Orders (move them along), My listing, Insights
    Team tools (network, sign-ups, outreach, supplier view, WhatsApp) sit behind the admin key.
@@ -46,7 +46,7 @@ function renderAcct(){
       <p class="rp-note">${esc(me.business||"")}${me.business?"<br>":""}${ROLE_NAME[me.role]} account${me.email?` · ${esc(me.email)}`:""}${me.demo?"<br>Demo account, saved in this browser":""}</p>
       <button data-action="go" data-tab="account">Account settings</button>
       <button data-action="acct-logout">Log out</button>`
-    :`<p class="rp-note">${r?"You're looking around as a guest buyer. Create an account to keep your requests and orders.":"Buy or supply on VyaparBoss."}</p>
+    :`<p class="rp-note">${r?"You're looking around as a guest buyer. Create an account to keep your requests and orders.":"Buy or supply on KaantaMandi."}</p>
       <button data-action="acct-auth" data-v="signup">Create an account</button>
       <button data-action="acct-auth" data-v="login">Log in</button>`;
   const team=teamOn()?`<p class="rp-h">Team</p><button data-action="go" data-tab="team">Team tools</button>`:"";
@@ -99,7 +99,7 @@ function renderAuth(){
   const legal=signup?`<p class="hint consent">By continuing you agree to the <a href="terms.html" target="_blank" rel="noopener">Terms</a> and <a href="privacy.html" target="_blank" rel="noopener">Privacy policy</a>.</p>`:"";
   const recover=au.mode==="forgot"?`<div class="card authcard">
       <p class="q-title">Reset your password</p>
-      ${au.sent?`<p>If <b>${esc(au.sent)}</b> has a VyaparBoss account, we've emailed a link to choose a new password. It works for one hour. Check spam too.</p>`
+      ${au.sent?`<p>If <b>${esc(au.sent)}</b> has a KaantaMandi account, we've emailed a link to choose a new password. It works for one hour. Check spam too.</p>`
         :`<form class="authform" data-form="au-forgot" novalidate><div class="fields"><div class="field wide"><label for="auEmail">Email you signed up with</label><input id="auEmail" type="email" autocomplete="email"></div></div>
         <button class="btn primary big" ${au.busy?"disabled":""}>${au.busy?"Sending…":"Email me a reset link"}</button></form>`}
       ${errs}<p class="hint"><button class="link" data-action="au-mode" data-v="login">Back to log in</button></p></div>`
@@ -110,13 +110,13 @@ function renderAuth(){
       ${errs}<p class="hint">This signs you out on other devices.</p></div>`:"";
   const panel=recover||(!r?"":`<div class="card authcard">
       <div class="seg" role="tablist" aria-label="Sign up or log in"><button data-action="au-mode" data-v="signup" aria-selected="${signup}">Sign up</button><button data-action="au-mode" data-v="login" aria-selected="${!signup}">Log in</button></div>
-      ${au.inviteNote&&!sup?`<p class="note">You've been invited to buy for a team on VyaparBoss. Sign up or log in as a buyer to accept.</p>`:""}
+      ${au.inviteNote&&!sup?`<p class="note">You've been invited to buy for a team on KaantaMandi. Sign up or log in as a buyer to accept.</p>`:""}
       <p class="q-title">${signup?(sup?"Create your supplier account":"Create your buyer account"):(sup?"Log in as a supplier":"Log in as a buyer")}</p>
       ${providers}${emailForm}${errs}${legal}
       ${cfg.demo?`<p class="hint">This demo copy keeps your account in this browser only. Google, Apple and Facebook work on the live app once they're switched on.</p>`:""}
       <p class="hint authalt">${sup?`Prefer a call? <a href="#join/s">Leave your number</a> and we'll set you up.`:`Just looking? <button class="link" data-action="au-guest">Explore without an account</button>`}</p>
     </div>`);
-  const h1=au.mode==="reset"||au.mode==="forgot"?"Let's get you back in.":!r?"Welcome to VyaparBoss.":sup?"Get orders you can actually serve.":"Buy smarter, delivered.";
+  const h1=au.mode==="reset"||au.mode==="forgot"?"Let's get you back in.":!r?"Welcome to KaantaMandi.":sup?"Get orders you can actually serve.":"Buy smarter, delivered.";
   const lede=recover?"It happens to everyone.":!r?`${t("tagline")} Are you here to buy, or to supply?`:sup?"List free. Get only requests that fit what you make and where you deliver. Pay a small fee only when an order closes."
     :"Tell Bhai what you need. Compare verified suppliers on the full delivered price. Nothing is ordered until you approve.";
   // Keep what someone already typed when this screen redraws.
@@ -305,7 +305,7 @@ function renderRequests(){
 /* Supplier: each order shows the one next step (confirm → dispatch with LR number → on the way), then the buyer's receipt and rating. */
 function supplierNext(o){
   const k=okey(o.po),po=esc(o.po),sh=o.shipment||{};
-  if(o.cancelled)return `<p class="issue">Cancelled by ${o.cancelled.by==="supplier"?"you":o.cancelled.by==="buyer"?"the buyer":"the VyaparBoss team"}${o.cancelled.reason?`: ${esc(o.cancelled.reason)}`:""}.</p>`;
+  if(o.cancelled)return `<p class="issue">Cancelled by ${o.cancelled.by==="supplier"?"you":o.cancelled.by==="buyer"?"the buyer":"the KaantaMandi team"}${o.cancelled.reason?`: ${esc(o.cancelled.reason)}`:""}.</p>`;
   const shipForm=(act,label)=>`<form class="oform" data-form="oact" data-act="${act}" data-po="${po}" data-side="supplier" novalidate><div class="fields">
       <div class="field"><label for="tr-${k}">Transporter or courier</label><input id="tr-${k}" name="transporter" maxlength="80" value="${esc(sh.transporter||"")}" placeholder="e.g. VRL Logistics"></div>
       <div class="field"><label for="lr-${k}">LR / AWB / docket no.</label><input id="lr-${k}" name="lr" maxlength="40" value="${esc(sh.lr||"")}" class="num"></div>
@@ -354,7 +354,7 @@ function renderListing(){
     renderSupplierForm({name:acct.business||"",city:CITIES[acct.city]?acct.city:"",contact:acct.phone||""});
     return;
   }
-  setHTML(el,`<div class="pagehead"><div><h1>My listing</h1><p class="muted">${me.verified?"Verified by VyaparBoss.":"Live. VyaparBoss will call to verify you; until then buyers see \"Not yet verified\"."}</p></div><button class="btn primary" data-action="listing-edit">Edit listing</button></div>
+  setHTML(el,`<div class="pagehead"><div><h1>My listing</h1><p class="muted">${me.verified?"Verified by KaantaMandi.":"Live. KaantaMandi will call to verify you; until then buyers see \"Not yet verified\"."}</p></div><button class="btn primary" data-action="listing-edit">Edit listing</button></div>
     <div class="sgrid">${supplierCard({...me,sample:true,_own:true})}</div>
     <div id="listingForm"></div>`);
 }
@@ -483,7 +483,7 @@ function showTeamView(v,quiet){
 /* Team → Setup: what's switched on, and the one thing to do for each item that isn't. */
 async function renderSetup(){
   const el=document.getElementById("s-setup");if(!el)return;
-  if(Repo.mode!=="server"){setHTML(el,`<div class="panel empty">${ico("art-shop","")}<h2>Setup lives on the live app</h2><p>Open VyaparBoss on its server to see which keys are set.</p></div>`);return;}
+  if(Repo.mode!=="server"){setHTML(el,`<div class="panel empty">${ico("art-shop","")}<h2>Setup lives on the live app</h2><p>Open KaantaMandi on its server to see which keys are set.</p></div>`);return;}
   if(!el.innerHTML)el.innerHTML=`<p class="muted">Checking the server…</p>`;
   let s;try{s=await Repo.setup();}catch(e){el.innerHTML=`<div class="errors">${esc(e.message)}</div>`;el._html=null;return;}
   const c=s.counts,ago=t=>t?`${Math.max(1,Math.round((Date.now()-t)/6e4))} min ago`:"not yet";
@@ -501,7 +501,7 @@ async function renderSetup(){
       ${item(s.signIn.facebook,"Sign in with Facebook",s.signIn.facebook?"On.":"Off.","Needs a Meta developer app. Add <code>FACEBOOK_APP_ID</code> and <code>FACEBOOK_APP_SECRET</code>.")}
       ${item(!!s.ai,"Bhai's AI",s.ai?`Reading requests with ${esc(s.ai)}.`:"Off: Bhai uses the built-in rule reader.","Add <code>GEMINI_API_KEY</code> from aistudio.google.com.")}
       ${item(s.payments?.on&&s.payments?.webhook,"Online payments",s.payments?.on?`Razorpay ${s.payments.test?"in test mode (no real money)":"live"}${s.payments.webhook?".":", but the webhook secret is missing, so paid links won't be recorded."}`:"Off: buyers pay suppliers directly and record it.",
-        `Razorpay dashboard → API keys (start with test keys) → add <code>RAZORPAY_KEY_ID</code> and <code>RAZORPAY_KEY_SECRET</code>; Webhooks → URL <code>${esc(s.publicUrl)}/webhooks/razorpay</code>, event payment_link.paid → add <code>RAZORPAY_WEBHOOK_SECRET</code>. Before taking real money, set up Razorpay Route so payments go to suppliers, not to VyaparBoss.`)}
+        `Razorpay dashboard → API keys (start with test keys) → add <code>RAZORPAY_KEY_ID</code> and <code>RAZORPAY_KEY_SECRET</code>; Webhooks → URL <code>${esc(s.publicUrl)}/webhooks/razorpay</code>, event payment_link.paid → add <code>RAZORPAY_WEBHOOK_SECRET</code>. Before taking real money, set up Razorpay Route so payments go to suppliers, not to KaantaMandi.`)}
       ${item(s.whatsapp,"WhatsApp",s.whatsapp?"Connected.":"Not connected.","Needs a Meta business account. Steps in docs/WHATSAPP_SETUP.md.")}
       ${item(!c.samplesShown,"Real suppliers only",c.samplesShown?`The 20 example suppliers still show to buyers. ${c.listings} supplier${c.listings===1?"":"s"} listed themselves.`:"Example suppliers are hidden.","Once you have real suppliers for your first category, hide the examples in Network.")}
     </ol>
@@ -551,7 +551,7 @@ async function renderOps(){
         <div class="field"><label for="rt-${okey(d.po)}">Note to both sides</label><input id="rt-${okey(d.po)}" maxlength="300"></div></div>
         <div class="actions"><button class="btn sm primary">Close the problem</button><button class="btn sm ghost" type="button" data-action="ops-msg" data-po="${esc(d.po)}">Send note only</button></div></form></div>`).join("")}</section>`:""}
     ${r.toSettle.length?`<section class="topsec"><h2 class="sub">Paid online, to settle</h2><ul class="memberlist">${r.toSettle.map(p=>`<li><div><b>${inr(p.amount)} to ${esc(p.supplier)}</b><small>${esc(p.po)} · ${fdate(p.at)}${p.test?" · test mode, no real money":""}</small></div><button class="btn sm" data-action="ops-settle" data-po="${esc(p.po)}" data-id="${esc(p.id)}">Mark settled</button></li>`).join("")}</ul></section>`:""}
-    <section class="topsec"><h2 class="sub">VyaparBoss fees</h2>
+    <section class="topsec"><h2 class="sub">KaantaMandi fees</h2>
       <p class="muted">A fee applies only to suppliers who agreed to it, from their next order. ${lakh(k.feesDue)} due, ${lakh(k.feesCollected)} collected.</p>
       <form class="replyrow feerate" data-form="ops-feerate" novalidate><label for="feeRate">Standard fee (% of goods)</label><input id="feeRate" type="number" min="0" max="10" step="0.1" value="${fee}"><button class="btn sm">Save</button></form>
       ${r.suppliers.length?`<ul class="memberlist">${r.suppliers.map(x=>`<li><div><b>${esc(x.name)}</b><small>${esc(x.city)}${x.verified?" · verified":""}${x.delivered?` · ${x.onTime}% on time over ${x.delivered}`:""}</small></div>

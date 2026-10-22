@@ -1,4 +1,4 @@
-// VyaparBoss server: serves the app from src/ and the JSON API the app uses when it finds /api/health.
+// KaantaMandi server: serves the app from src/ and the JSON API the app uses when it finds /api/health.
 // Zero dependencies. Run: npm start   (Node 18+)
 const http = require("http");
 const fs = require("fs");
@@ -327,7 +327,7 @@ function createApp(opts = {}) {
       if (msg.text.length < 5) throw bad("Write a short message");
       if (b.website) return { ok: true }; // honeypot: bots fill every field
       store.data.messages = store.data.messages.concat(msg).slice(-500); store.save();
-      if (mailer.configured && env.CONTACT_TO) mailer.send({ to: env.CONTACT_TO, subject: `[VyaparBoss ${msg.topic}] ${msg.name || msg.email}`, text: `${msg.text}\n\nFrom: ${msg.name} <${msg.email}>` }).catch(e => console.warn("contact mail:", e.message));
+      if (mailer.configured && env.CONTACT_TO) mailer.send({ to: env.CONTACT_TO, subject: `[KaantaMandi ${msg.topic}] ${msg.name || msg.email}`, text: `${msg.text}\n\nFrom: ${msg.name} <${msg.email}>` }).catch(e => console.warn("contact mail:", e.message));
       return { ok: true };
     }],
     // What's switched on, for the Team → Setup checklist. Says whether keys are set, never their values.
@@ -448,16 +448,16 @@ function createApp(opts = {}) {
     ["GET", /^\/api\/admin\/backup$/, (req, m, url, res) => {
       admin(req);
       res.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store",
-        "content-disposition": `attachment; filename="vyaparboss-backup-${new Date().toISOString().slice(0, 10)}.json"` });
+        "content-disposition": `attachment; filename="kaantamandi-backup-${new Date().toISOString().slice(0, 10)}.json"` });
       res.end(JSON.stringify({ app: "vyaparboss", version: 1, at: Date.now(), data: store.data }));
     }],
     ["POST", /^\/api\/admin\/restore$/, async req => {
       admin(req);
       const raw = await readBody(req, 2e7);
-      let b; try { b = JSON.parse(raw); } catch { throw bad("That isn't a VyaparBoss backup file"); }
+      let b; try { b = JSON.parse(raw); } catch { throw bad("That isn't a KaantaMandi backup file"); }
       const d = b && b.app === "vyaparboss" && b.data;
       const lists = ["orders", "rfqs", "suppliers", "applications", "leads"];
-      if (!d || !d.seq || lists.some(k => k in d && !Array.isArray(d[k]))) throw bad("That isn't a VyaparBoss backup file");
+      if (!d || !d.seq || lists.some(k => k in d && !Array.isArray(d[k]))) throw bad("That isn't a KaantaMandi backup file");
       store.data = d;
       store.data.suppliers ||= []; store.data.applications ||= []; store.data.leads ||= [];
       store.data.outreach ||= { settings: {}, log: [], unsub: [] }; store.data.whatsapp ||= { sessions: {}, log: [] };
@@ -745,7 +745,7 @@ function createApp(opts = {}) {
       if (evId) store.data.rzEvents = store.data.rzEvents.concat(evId).slice(-500);
       store.save(); return { ok: true };
     }],
-    // Team: VyaparBoss's fee per order, settling online payments to suppliers, fee terms per supplier.
+    // Team: KaantaMandi's fee per order, settling online payments to suppliers, fee terms per supplier.
     ["PATCH", /^\/api\/admin\/orders\/(.+)$/, async (req, m) => {
       admin(req); const o = store.data.orders.find(x => x.po === m[1]); if (!o) throw notFound("Order");
       const b = await jsonBody(req);
@@ -844,7 +844,7 @@ function createApp(opts = {}) {
       store.save();
     }
     res.writeHead(ok ? 200 : 400, { "content-type": "text/html; charset=utf-8" });
-    res.end(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>VyaparBoss</title><body style="font:17px/1.5 system-ui,sans-serif;max-width:520px;margin:12vh auto;padding:0 20px;color:#1E1F25;background:#FBF7EF"><h1 style="font-size:24px">${ok ? "You're unsubscribed" : "This link didn't work"}</h1><p>${ok ? "VyaparBoss won't email this address again. Sorry for the trouble." : "Reply to the email with \"unsubscribe\" and we'll remove you by hand."}</p><p style="color:#6b6b6b;font-size:14px">VyaparBoss, House of 24 Pvt. Ltd.</p></body>`);
+    res.end(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>KaantaMandi</title><body style="font:17px/1.5 system-ui,sans-serif;max-width:520px;margin:12vh auto;padding:0 20px;color:#1E1F25;background:#FBF7EF"><h1 style="font-size:24px">${ok ? "You're unsubscribed" : "This link didn't work"}</h1><p>${ok ? "KaantaMandi won't email this address again. Sorry for the trouble." : "Reply to the email with \"unsubscribe\" and we'll remove you by hand."}</p><p style="color:#6b6b6b;font-size:14px">KaantaMandi, House of 24 Pvt. Ltd.</p></body>`);
   }
 
   // Static files: ETag + revalidation (no build hashes, so browsers always check), gzip for text, branded 404.
@@ -965,7 +965,7 @@ if (require.main === module) {
     const { ctx, server, store, sync } = createApp({ remote, dataFile });
     if (pulled === "empty") store.save(); // first run with remote storage: push what we have
     server.listen(port, () => {
-      console.log(`VyaparBoss running at http://localhost:${port}`);
+      console.log(`KaantaMandi running at http://localhost:${port}`);
       console.log(`  AI parsing: ${ctx.claude ? `${ctx.claude.provider} (${ctx.claude.model})` : "rule parser (set GEMINI_API_KEY or ANTHROPIC_API_KEY in .env)"}`);
       console.log(`  WhatsApp:   ${process.env.WHATSAPP_TOKEN ? "configured" : "not configured (see docs/WHATSAPP_SETUP.md)"}`);
       console.log(`  Storage:    ${remote ? `disk + Upstash copy (${pulled})` : "disk only (data/db.json; set UPSTASH_REDIS_REST_URL to keep data across redeploys)"}`);

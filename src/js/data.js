@@ -1,4 +1,4 @@
-/* VyaparBoss — catalog, cities and sample supplier network. Plain browser script (no build step); loaded in order by index.html. */
+/* KaantaMandi — catalog, cities and sample supplier network. Plain browser script (no build step); loaded in order by index.html. */
 /* ===================== DATA ===================== */
 const CATS={pack:"Packaging",ind:"Industrial consumables",agri:"Agri inputs",elec:"Electrical and lighting",build:"Building and plumbing"};
 const PRODUCTS=[
@@ -88,10 +88,10 @@ const EXAMPLES=[
    Honest by design: no invented numbers, no price or delivery promises, sender identity and opt-out in every mail. */
 const OUTREACH_TEMPLATES=[
  {id:"supplier_free",label:"Supplier: free listing",audience:"supplier",
-  subject:"Free listing for {{business}} on VyaparBoss ({{product}})",
+  subject:"Free listing for {{business}} on KaantaMandi ({{product}})",
   body:`Namaste {{greeting}},
 
-I'm {{sender_name}} from VyaparBoss (House of 24 Pvt. Ltd.). We're building a buying assistant for Indian MSMEs: a business tells our assistant, Bhai, what it needs, and we pass the request only to suppliers who make that product, can handle that quantity and deliver to that city.
+I'm {{sender_name}} from KaantaMandi (House of 24 Pvt. Ltd.). We're building a buying assistant for Indian MSMEs: a business tells our assistant, Bhai, what it needs, and we pass the request only to suppliers who make that product, can handle that quantity and deliver to that city.
 
 We're inviting a small group of {{product}} makers around {{city}} into our pilot:
 - Listing is free. No annual package.
@@ -103,7 +103,7 @@ Or reply to this email with your WhatsApp number and I'll call you.
 
 Dhanyavaad,
 {{sender_name}}
-VyaparBoss, House of 24 Pvt. Ltd.
+KaantaMandi, House of 24 Pvt. Ltd.
 {{sender_address}}
 
 Don't want these emails? {{unsub_link}}`},
@@ -111,7 +111,7 @@ Don't want these emails? {{unsub_link}}`},
   subject:"Export cartons and packaging for {{business}}, compared in one message",
   body:`Namaste {{greeting}},
 
-I'm {{sender_name}} from VyaparBoss (House of 24 Pvt. Ltd.). We help growing exporters in places like {{city}} buy export packaging and consumables without calling ten vendors: 5-ply export cartons, heat-treated pallets, stretch film, tape and container desiccants.
+I'm {{sender_name}} from KaantaMandi (House of 24 Pvt. Ltd.). We help growing exporters in places like {{city}} buy export packaging and consumables without calling ten vendors: 5-ply export cartons, heat-treated pallets, stretch film, tape and container desiccants.
 
 You tell our assistant, Bhai, what you need, in English or Hinglish. Bhai compares suppliers on the full delivered price (rate + GST + freight) and their delivery time, and nothing is ordered until you approve it. It's free for buyers.
 
@@ -119,19 +119,19 @@ We're running a small pilot with {{product}} exporters. Would a 10-minute call t
 
 Dhanyavaad,
 {{sender_name}}
-VyaparBoss, House of 24 Pvt. Ltd.
+KaantaMandi, House of 24 Pvt. Ltd.
 {{sender_address}}
 
 Don't want these emails? {{unsub_link}}`},
  {id:"followup",label:"Follow-up (short)",audience:"any",
-  subject:"Re: {{business}} and VyaparBoss",
+  subject:"Re: {{business}} and KaantaMandi",
   body:`Namaste {{greeting}},
 
 Just following up on my note from last week. If it's useful, the 2-minute sign-up is here: {{join_link}}
 If it's not a fit, no problem at all; reply "no" and I won't write again.
 
 {{sender_name}}
-VyaparBoss, House of 24 Pvt. Ltd.
+KaantaMandi, House of 24 Pvt. Ltd.
 {{sender_address}}
 
 Unsubscribe: {{unsub_link}}`}
@@ -143,19 +143,19 @@ const EXPORT_STAGES=["Already exporting","Starting exports","Not exporting"];
 /* Lead pipeline, phone-first outreach. Small Indian firms answer WhatsApp and calls far more than email. */
 const LEAD_STATUSES=["new","contacted","emailed","replied","joined","not_interested","unsubscribed","bounced"];
 const WA_TEMPLATES={
- supplier:`Namaste {{greeting}}, main {{sender_name}}, VyaparBoss se (House of 24 Pvt. Ltd.). Hum MSME buyers ke liye buying assistant bana rahe hain. {{city}} ke aas-paas ke {{product}} makers ko pilot mein free listing de rahe hain: sirf woh orders milenge jo aap serve kar sakein, aur fee sirf closed order par (pehle se tay). 2 minute ka sign-up: {{join_link}}
+ supplier:`Namaste {{greeting}}, main {{sender_name}}, KaantaMandi se (House of 24 Pvt. Ltd.). Hum MSME buyers ke liye buying assistant bana rahe hain. {{city}} ke aas-paas ke {{product}} makers ko pilot mein free listing de rahe hain: sirf woh orders milenge jo aap serve kar sakein, aur fee sirf closed order par (pehle se tay). 2 minute ka sign-up: {{join_link}}
 Interest na ho to "no" likh dijiye, dobara message nahi karenge.`,
- exporter:`Namaste {{greeting}}, main {{sender_name}}, VyaparBoss se (House of 24 Pvt. Ltd.). Export cartons, pallets, stretch film jaise items ke liye hum kai suppliers ka delivered price (rate + GST + freight) ek saath dikhate hain; aapki approval ke bina kuch order nahi hota, aur buyers ke liye free hai. {{product}} exporters ke saath chhota pilot chal raha hai. Dekhna chahenge? {{join_link}}
+ exporter:`Namaste {{greeting}}, main {{sender_name}}, KaantaMandi se (House of 24 Pvt. Ltd.). Export cartons, pallets, stretch film jaise items ke liye hum kai suppliers ka delivered price (rate + GST + freight) ek saath dikhate hain; aapki approval ke bina kuch order nahi hota, aur buyers ke liye free hai. {{product}} exporters ke saath chhota pilot chal raha hai. Dekhna chahenge? {{join_link}}
 Interest na ho to "no" likh dijiye, dobara message nahi karenge.`
 };
 const CALL_SCRIPTS={
- supplier:["Namaste, main {{sender_name}}, VyaparBoss se bol raha hoon. Kya {{business}} ke owner ya sales head se baat ho sakti hai?",
+ supplier:["Namaste, main {{sender_name}}, KaantaMandi se bol raha hoon. Kya {{business}} ke owner ya sales head se baat ho sakti hai?",
   "Hum MSME buyers ke liye buying assistant bana rahe hain. Buyer apni zaroorat batata hai, aur request sirf un suppliers ko jaati hai jo woh product, woh quantity aur woh city serve kar sakte hain.",
   "Listing free hai. Koi annual package nahi. Fee sirf us order par jo close ho, aur woh pehle aapke saath tay karenge.",
   "Ask: kaunse products, minimum order kitna, kitne km tak delivery, rough rate kya hai?",
   "Close: main aapko WhatsApp par 2-minute sign-up link bhejta hoon. Pehli buyer request aate hi call karunga.",
   "Don't promise orders, volumes or prices. If they say no, thank them and mark 'not interested'."],
- exporter:["Namaste, main {{sender_name}}, VyaparBoss se. Kya {{business}} mein packaging ya purchase dekhne wale se baat ho sakti hai?",
+ exporter:["Namaste, main {{sender_name}}, KaantaMandi se. Kya {{business}} mein packaging ya purchase dekhne wale se baat ho sakti hai?",
   "Export cartons, pallets, stretch film, desiccants: aap abhi kahan se lete hain, aur kitne vendors ko call karna padta hai?",
   "Hum kai verified suppliers ka delivered price (rate + GST + freight) ek message mein dikhate hain. Aapki approval ke bina kuch order nahi hota. Buyers ke liye free.",
   "Ask: monthly kitna lagta hai, kaunsa item sabse zyada pareshan karta hai, last price kya tha?",

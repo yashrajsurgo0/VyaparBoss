@@ -9,7 +9,7 @@ The server has no dependencies, so any host that runs Node 18+ works. The one re
 The repo includes a `render.yaml` blueprint.
 
 1. Sign up at **render.com** with your GitHub account.
-2. **New → Blueprint**, pick the **VyaparBoss** repo, and click **Apply**. Render reads `render.yaml` and creates the web service on the **free** plan.
+2. **New → Blueprint**, pick the **KaantaMandi** repo, and click **Apply**. Render reads `render.yaml` and creates the web service on the **free** plan.
 3. When asked for environment values, paste your `GEMINI_API_KEY` (from aistudio.google.com → Get API key). Add the WhatsApp ones later, following WHATSAPP_SETUP.md.
 4. After the first deploy you get an address like `https://vyaparboss.onrender.com`. Open `/api/health` on it to check: it should show `"app":"vyaparboss"`.
 
@@ -32,7 +32,7 @@ Every push to `main` redeploys automatically.
 Every push to `main` runs the tests on GitHub. When they pass, the workflow publishes `src/` to GitHub Pages and, if you've added the hook below, redeploys Render. No more Manual Deploy clicks.
 
 1. Render → vyaparboss → **Settings → Deploy Hook** → copy the URL. Treat it like a password: anyone with it can trigger a deploy.
-2. GitHub → VyaparBoss → **Settings → Secrets and variables → Actions → New repository secret**. Name `RENDER_DEPLOY_HOOK`, paste the URL, save.
+2. GitHub → KaantaMandi → **Settings → Secrets and variables → Actions → New repository secret**. Name `RENDER_DEPLOY_HOOK`, paste the URL, save.
 3. Push anything to `main`. GitHub → Actions shows "test" then "deploy"; Render shows a new deploy a few seconds later.
 
 If a test fails, nothing is deployed.
@@ -61,7 +61,7 @@ Put it behind Caddy or nginx for HTTPS, since WhatsApp requires `https://`.
 | `CONTACT_TO` | Where contact-page messages and new problems are forwarded | Your inbox |
 | `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET` | "Pay online" on orders (test keys first) | Razorpay dashboard → API keys; Webhooks → `<PUBLIC_URL>/webhooks/razorpay`, event `payment_link.paid` |
 
-**Before real online payments:** with plain Payment Links the money lands in VyaparBoss's Razorpay account and the team settles it to the supplier (Team → Ops → Paid online, to settle). For a marketplace that usually needs Razorpay Route (or a similar split-payment product) and legal advice, so suppliers are paid directly. Keep test keys until that's in place.
+**Before real online payments:** with plain Payment Links the money lands in KaantaMandi's Razorpay account and the team settles it to the supplier (Team → Ops → Paid online, to settle). For a marketplace that usually needs Razorpay Route (or a similar split-payment product) and legal advice, so suppliers are paid directly. Keep test keys until that's in place.
 | `WHATSAPP_*` | WhatsApp intake | docs/WHATSAPP_SETUP.md |
 
 ## Backups

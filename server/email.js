@@ -6,7 +6,7 @@ function createMailer(env, fetchImpl = globalThis.fetch) {
   const provider = String(env.EMAIL_PROVIDER || "").toLowerCase();
   const apiKey = env.EMAIL_API_KEY;
   const from = env.OUTREACH_FROM_EMAIL;
-  const fromName = env.OUTREACH_FROM_NAME || "VyaparBoss";
+  const fromName = env.OUTREACH_FROM_NAME || "KaantaMandi";
   const replyTo = env.OUTREACH_REPLY_TO || from;
   const configured = !!(apiKey && from && ["brevo", "resend"].includes(provider));
 

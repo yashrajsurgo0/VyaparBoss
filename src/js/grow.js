@@ -1,4 +1,4 @@
-/* VyaparBoss growth tools. Loaded after app.js and uses its helpers (ico, esc, toast, flow, ACTIONS…).
+/* KaantaMandi growth tools. Loaded after app.js and uses its helpers (ico, esc, toast, flow, ACTIONS…).
    Public pages (no tabs):  #join[/s|/b[/leadId]]  free sign-up for suppliers and buyers
                             #quote/<token>          a supplier sends their own price for one request
    Ops pages (admin key):   Suppliers → Sign-ups,  Insights → Outreach,  live quote links on the quotes card. */
@@ -21,11 +21,11 @@ function route(){
   }else{
     pub={view:"quote",token:m[2]||"",q:null,err:[],sent:null,busy:true};renderQuotePage();
     Repo.getQuote(pub.token).then(j=>{pub.q=j;pub.busy=false;renderQuotePage();})
-      .catch(e=>{pub.busy=false;pub.err=[e.status===404?"This quote link isn't valid any more. Ask VyaparBoss for a new one.":"Couldn't load the request. Check your internet and refresh."];renderQuotePage();});
+      .catch(e=>{pub.busy=false;pub.err=[e.status===404?"This quote link isn't valid any more. Ask KaantaMandi for a new one.":"Couldn't load the request. Check your internet and refresh."];renderQuotePage();});
   }
   window.scrollTo({top:0});
 }
-const pubShell=(inner)=>`<div class="pubwrap">${inner}<p class="pubfoot">VyaparBoss by House of 24 Pvt. Ltd. · <a href="#">Open the app</a></p></div>`;
+const pubShell=(inner)=>`<div class="pubwrap">${inner}<p class="pubfoot">KaantaMandi by House of 24 Pvt. Ltd. · <a href="#">Open the app</a></p></div>`;
 
 function renderJoin(){
   const el=$("#v-public");el.hidden=false;
@@ -34,7 +34,7 @@ function renderJoin(){
       <p>${pub.role==="supplier"?"We'll call or WhatsApp you to add your rates and products. After that, you'll get buyer requests that match what you make, where you deliver."
         :"We'll call or WhatsApp you to understand what you buy. Meanwhile, you can try Bhai right now."}</p>
       <p class="hint">Sign-up number <b class="num">${esc(pub.sent)}</b></p>
-      <div class="actions" style="justify-content:center"><a class="btn primary" href="#">${pub.role==="supplier"?"See how VyaparBoss works":"Try Bhai now"}</a></div></div>`);
+      <div class="actions" style="justify-content:center"><a class="btn primary" href="#">${pub.role==="supplier"?"See how KaantaMandi works":"Try Bhai now"}</a></div></div>`);
     return;
   }
   const roleBtn=(r,t,s,icon)=>`<button class="rolecard" data-action="join-role" data-v="${r}" aria-pressed="${pub.role===r}">${ico(icon,"")}<b>${t}</b><span>${s}</span></button>`;
@@ -67,14 +67,14 @@ function renderJoin(){
         ${sup?`<div class="field"><label for="jGst">GSTIN</label><input id="jGst" maxlength="15" class="num" autocapitalize="characters"></div>`:""}
       </div></details>
       <input id="jHp" name="company_site" tabindex="-1" autocomplete="off" class="hp" aria-hidden="true">
-      <label class="approve"><input type="checkbox" id="jOk"><span>VyaparBoss can contact me by phone, WhatsApp or email about ${sup?"buyer requests":"my purchases"}. ${sup?"Listing is free; a small fee applies only on orders that close, agreed before the first one.":"It's free for buyers."}</span></label>
+      <label class="approve"><input type="checkbox" id="jOk"><span>KaantaMandi can contact me by phone, WhatsApp or email about ${sup?"buyer requests":"my purchases"}. ${sup?"Listing is free; a small fee applies only on orders that close, agreed before the first one.":"It's free for buyers."}</span></label>
       ${pub.err.length?`<ul class="errors" role="alert">${pub.err.map(e=>`<li>${esc(e)}</li>`).join("")}</ul>`:""}
       <div class="actions"><button class="btn primary big" ${pub.busy?"disabled":""}>${pub.busy?"Sending…":sup?"List my business free":"Join free"}</button></div>
       ${pub.busy&&Repo.mode!=="server"?`<p class="hint">Waking up the server. This can take up to a minute the first time.</p>`:""}
     </form>`;
   }
   el.innerHTML=pubShell(`<section class="pubhero">
-      <div><p class="hello">${esc(t("hello"))}</p><h1>${pub.role==="supplier"?"Buyers, without the lead packages.":pub.role==="buyer"?"Buy smarter, delivered.":"Join VyaparBoss, free."}</h1>
+      <div><p class="hello">${esc(t("hello"))}</p><h1>${pub.role==="supplier"?"Buyers, without the lead packages.":pub.role==="buyer"?"Buy smarter, delivered.":"Join KaantaMandi, free."}</h1>
       <p class="lede">${pub.role==="supplier"?"List free. Get only requests you can actually serve. Pay a small fee only when an order closes."
         :pub.role==="buyer"?(isGlobal()?t("buyerLede"):"Tell Bhai what you need. Compare verified suppliers on the full delivered price. Nothing is ordered until you approve.")
         :t("tagline")+" Pick one to start."}</p></div>
@@ -100,7 +100,7 @@ async function submitJoin(){
   if(!ok){pub.err=errors;rerenderJoin();try{document.querySelector(".joinform .errors")?.scrollIntoView({block:"center"});}catch(e){}return;}
   pub.err=[];pub.busy=true;rerenderJoin();
   try{const j=await Repo.join(form);pub.sent=j.id||"received";joinDraft=null;renderJoin();}
-  catch(e){pub.busy=false;pub.err=[e.message==="Failed to fetch"?"Couldn't reach VyaparBoss. Check your internet and try again.":e.message];rerenderJoin();}
+  catch(e){pub.busy=false;pub.err=[e.message==="Failed to fetch"?"Couldn't reach KaantaMandi. Check your internet and try again.":e.message];rerenderJoin();}
 }
 
 function renderQuotePage(){
@@ -295,7 +295,7 @@ function exportMailMerge(){
   const {leads,outreach:o}=out.data;const st=o.settings||{};const base=Repo.mode==="server"?(o.publicUrl||location.origin)+"/":LIVE_API;
   const rows=leads.filter(l=>out.sel.has(l.id)&&l.email).map(l=>{const m=renderOutreach(out.tpl,l,{senderName:st.senderName,senderAddress:st.senderAddress,joinBase:base,
     unsubLink:()=>"Reply \"unsubscribe\" and we won't write again."});return {email:l.email,business:l.business,city:l.city,subject:m.subject,body:m.text};});
-  download(`vyaparboss-outreach-${out.tpl}.csv`,toCSV(rows,["email","business","city","subject","body"]));
+  download(`kaantamandi-outreach-${out.tpl}.csv`,toCSV(rows,["email","business","city","subject","body"]));
   out.exported=leads.filter(l=>out.sel.has(l.id)&&l.email).map(l=>l.id);out.exportedTpl=out.tpl;renderOutreachView();
   toast(`${rows.length} emails ready. Mark them "emailed" after you send.`);
 }
@@ -322,7 +322,7 @@ function liveQuotesHTML(res){
   if(inv.rfq!==flow.r.id){inv={rfq:flow.r.id,list:null,busy:false};Repo.invites(flow.r.id).then(l=>{if(inv.rfq===flow.r.id){inv.list=l;if(flow.stage==="quotes")renderBuy();}}).catch(()=>{});}
   const asked=new Set((inv.list||[]).map(i=>i.sid)),toAsk=real.filter(q=>!asked.has(q.s.id));
   const p=PMAP[flow.r.productId];
-  const msg=i=>encodeURIComponent(`Namaste ${i.sname}, VyaparBoss se. Ek buyer ko ${qfmt(flow.r.qty)} ${p.unit} ${p.name} chahiye, delivery ${flow.r.city}${flow.r.deadline?`, ${flow.r.deadline} din mein`:""}. Apna rate yahan bhejiye (1 minute): ${i.url}`);
+  const msg=i=>encodeURIComponent(`Namaste ${i.sname}, KaantaMandi se. Ek buyer ko ${qfmt(flow.r.qty)} ${p.unit} ${p.name} chahiye, delivery ${flow.r.city}${flow.r.deadline?`, ${flow.r.deadline} din mein`:""}. Apna rate yahan bhejiye (1 minute): ${i.url}`);
   return `<details class="more" ${inv.list?.length?"open":""}><summary>Team: get real quotes from suppliers ${ico("i-chev","")}</summary><div>
     ${real.length?`<p class="hint">Send each onboarded supplier a link. Their price replaces the rate-card estimate as soon as they answer.</p>`:`<p class="hint">Only sample suppliers can serve this request. Onboard real ones from Suppliers → Sign-ups.</p>`}
     ${(inv.list||[]).length?`<ul class="invlist">${inv.list.map(i=>{const ph=phoneDigits(i.contact);return `<li><b>${esc(i.sname)}</b> ${i.quote?`<span class="pill good">Quoted ${inr(i.quote.unit,2)}, ready in ${i.quote.lead} d</span>`:`<span class="pill gold">Waiting</span>`}
@@ -349,7 +349,7 @@ Object.assign(ACTIONS,{
   "quote-edit":()=>{pub.edit=true;renderQuotePage();},
   "copy-join":()=>copyText(joinUrl()),
   "copy-text":a=>copyText(a.dataset.v),
-  "apps-csv":()=>download("vyaparboss-signups.csv",toCSV(appsCache.map(a=>({...a,cats:a.cats.map(c=>CATS[c]).join("; "),at:new Date(a.at).toISOString()})),["id","at","role","status","business","name","phone","email","city","cats","what","gstin","exports","monthly","ref"])),
+  "apps-csv":()=>download("kaantamandi-signups.csv",toCSV(appsCache.map(a=>({...a,cats:a.cats.map(c=>CATS[c]).join("; "),at:new Date(a.at).toISOString()})),["id","at","role","status","business","name","phone","email","city","cats","what","gstin","exports","monthly","ref"])),
   "app-onboard":a=>onboardFromApp(a.dataset.id),
   "app-status":a=>Repo.updateApplication(a.dataset.id,{status:a.dataset.v}).then(renderApps).catch(fail),
   "o-filter":a=>{out.filter=a.dataset.v;renderOutreachView();},
@@ -358,7 +358,7 @@ Object.assign(ACTIONS,{
   "o-call":a=>{location.href=a.href;markContacted(a.dataset.id);},
   "o-settings":()=>Repo.saveOutreachSettings({senderName:$("#oName").value,senderAddress:$("#oAddr").value}).then(()=>{toast("Saved");renderOutreachView();}).catch(fail),
   "o-export":()=>exportMailMerge(),
-  backup:()=>Repo.backup().then(b=>{const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=`vyaparboss-backup-${new Date().toISOString().slice(0,10)}.json`;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},500);toast("Backup downloaded");}).catch(fail),
+  backup:()=>Repo.backup().then(b=>{const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=`kaantamandi-backup-${new Date().toISOString().slice(0,10)}.json`;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},500);toast("Backup downloaded");}).catch(fail),
   "o-due":()=>{out.status="due";out.filter="all";renderOutreachView();},
   "o-mark-emailed":()=>{const ids=out.exported||[];Promise.all(ids.map(id=>Repo.updateLead(id,{emailed:true,template:out.exportedTpl})))
     .then(()=>{toast(`Marked ${ids.length} as emailed. They'll show under "Call next" in 4 days if they don't reply.`);out.exported=null;out.sel.clear();renderOutreachView();}).catch(fail);},

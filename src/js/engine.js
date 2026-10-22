@@ -1,4 +1,4 @@
-/* VyaparBoss — supplier discovery, freight, GST, landed-cost ranking, negotiation and record builders.
+/* KaantaMandi — supplier discovery, freight, GST, landed-cost ranking, negotiation and record builders.
    Pure logic, no DOM: loaded by the browser (index.html) and by the server/tests (server/core.js). */
 
 /* ===================== PRICING ===================== */
@@ -160,7 +160,7 @@ function outreachVars(lead,ctx){
   if(br&&city&&br[1].trim().toLowerCase().startsWith(city.toLowerCase().split(" ")[0]))raw=br[2].split("/")[0];
   const product=raw.split(/[;|,(:]/)[0].replace(/\s+/g," ").trim().toLowerCase().slice(0,50).trim();
   return {business:lead.business,city:city||"your city",product:product||(lead.segment==="supplier"?"packaging":"export"),
-    greeting:first?first+" ji":lead.business+" team",sender_name:ctx.senderName||"Team VyaparBoss",sender_address:ctx.senderAddress||"",
+    greeting:first?first+" ji":lead.business+" team",sender_name:ctx.senderName||"Team KaantaMandi",sender_address:ctx.senderAddress||"",
     join_link:`${base}#join/${lead.segment==="supplier"?"s":"b"}/${lead.id||""}`,unsub_link:ctx.unsubLink?ctx.unsubLink(lead):""};
 }
 function renderOutreach(tplId,lead,ctx){
@@ -174,7 +174,7 @@ function renderWhatsAppPitch(lead,ctx){
 }
 function renderCallScript(lead,ctx){
   const v=outreachVars(lead,ctx);const lines=CALL_SCRIPTS[lead.segment==="supplier"?"supplier":"exporter"].map(l=>fillTemplate(l,v));
-  if(lead.lastEmailed)lines.splice(1,0,`Maine ${dstr(lead.lastEmailed)} ko aapko VyaparBoss ke baare mein email bheja tha. Kya aapne dekha? Ek minute mein bata deta hoon.`);
+  if(lead.lastEmailed)lines.splice(1,0,`Maine ${dstr(lead.lastEmailed)} ko aapko KaantaMandi ke baare mein email bheja tha. Kya aapne dekha? Ek minute mein bata deta hoon.`);
   return lines;
 }
 /* Self-serve sign-up from the public "Join" page. role: supplier | buyer. */
@@ -193,7 +193,7 @@ function normalizeJoin(x){
   if(a.city.length<2)errors.push("Enter your city");
   if(!a.cats.length&&a.what.length<3)errors.push(a.role==="supplier"?"Tell us what you make or sell":"Tell us what you buy");
   if(a.gstin){const g=checkGstin(a.gstin,CITIES[a.city]?a.city:null);if(!g.ok)errors.push(g.why);}
-  if(x.consent!==true)errors.push("Please agree that VyaparBoss can contact you");
+  if(x.consent!==true)errors.push("Please agree that KaantaMandi can contact you");
   // Optional rate card from suppliers, so the team doesn't have to collect it by phone.
   a.offers=[];
   if(a.role==="supplier")(Array.isArray(x.offers)?x.offers:[]).slice(0,4).forEach(o=>{
@@ -307,13 +307,13 @@ function applyOrderAction(o,a,who,now=Date.now()){
       if(o.dispute?.status!=="open")return err("There's no open problem on this order");
       Object.assign(o.dispute,{status:"resolved",resolution:"withdrawn",resolvedAt:now});break;
     case "resolve":
-      if(who!=="team")return err("The VyaparBoss team closes problems");
+      if(who!=="team")return err("The KaantaMandi team closes problems");
       if(o.dispute?.status!=="open")return err("There's no open problem on this order");
       if(!RESOLUTIONS[a.resolution]||a.resolution==="withdrawn")return err("Pick how it was resolved");
       Object.assign(o.dispute,{status:"resolved",resolution:a.resolution,note:txt(a.note,300),resolvedAt:now});break;
     case "cancel":
       if(who==="buyer"&&o.stage>=2)return err("It's already dispatched. Raise a problem instead.");
-      if(who==="supplier"&&o.stage!==0)return err("You can decline only before confirming. Talk to the VyaparBoss team.");
+      if(who==="supplier"&&o.stage!==0)return err("You can decline only before confirming. Talk to the KaantaMandi team.");
       if(o.stage>=4)return err("Delivered orders can't be cancelled");
       o.cancelled={by:who,reason:txt(a.reason,200),at:now};break;
     default:return err("Unknown action");

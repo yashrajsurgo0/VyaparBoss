@@ -1,4 +1,4 @@
-// Send a test WhatsApp message to a running VyaparBoss server, as if a buyer texted it.
+// Send a test WhatsApp message to a running KaantaMandi server, as if a buyer texted it.
 // Usage: node scripts/wa-simulate.js "5000 3-ply boxes Pune 7 din"  [--from 919800000002] [--url http://localhost:5173]
 const args = process.argv.slice(2);
 const opt = k => { const i = args.indexOf(k); return i > -1 ? args.splice(i, 2)[1] : null; };
