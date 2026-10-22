@@ -105,7 +105,7 @@ let LOCALE=LOCALES[detectLocale()];
 const THEME_KEY="vyaparboss.v1.theme";
 let THEME=(()=>{try{return localStorage.getItem(THEME_KEY)==="dark"?"dark":"light";}catch(e){return "light";}})();
 function applyTheme(){
-  try{document.documentElement.dataset.look=THEME;const m=document.querySelector('meta[name="theme-color"]');if(m)m.content=THEME==="dark"?"#1C140E":"#F1E4CC";}catch(e){}
+  try{document.documentElement.dataset.look=THEME;const m=document.querySelector('meta[name="theme-color"]');if(m)m.content=THEME==="dark"?"#12142A":"#F8F4EC";}catch(e){}
 }
 function setTheme(v){THEME=v==="dark"?"dark":"light";try{localStorage.setItem(THEME_KEY,THEME);}catch(e){}applyTheme();renderRegionPicker();}
 applyTheme();

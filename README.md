@@ -4,7 +4,7 @@
 
 **AI-assisted B2B procurement for Indian small businesses.** A buyer types what they need in plain English or Hinglish; KaantaMandi finds suppliers who can actually serve that quantity and city, compares them on the **full delivered price** (rate + GST + freight), and places a purchase order only after the buyer approves. Then it tracks delivery, invoices and payments, and builds each supplier's real track record.
 
-[![Live demo](https://img.shields.io/badge/%E2%96%B6%20Live%20demo-open%20in%20browser-B4501A?style=for-the-badge)](https://yashrajsurgo0.github.io/VyaparBoss/?lang=en)
+[![Live demo](https://img.shields.io/badge/%E2%96%B6%20Live%20demo-open%20in%20browser-2F3A9E?style=for-the-badge)](https://yashrajsurgo0.github.io/VyaparBoss/?lang=en)
 [![Tests](https://github.com/yashrajsurgo0/VyaparBoss/actions/workflows/test.yml/badge.svg)](https://github.com/yashrajsurgo0/VyaparBoss/actions/workflows/test.yml)
 ![No dependencies](https://img.shields.io/badge/npm%20dependencies-0-3E2615)
 ![Node](https://img.shields.io/badge/Node.js-18%2B-3E2615)
