@@ -224,7 +224,7 @@ function quotesCard(){
       <button class="btn sm" data-action="choose" data-sid="${esc(q.s.id)}">Choose</button></div>`).join("")}</div>`;
   const sorters={pick:null,price:(a,b)=>a.landed-b.landed,fast:(a,b)=>a.eta-b.eta||a.landed-b.landed,rated:(a,b)=>(b.s.rating??0)-(a.s.rating??0)||a.landed-b.landed};
   const cmp=sorters[flow.cmpSort||"pick"]?ranked.slice().sort(sorters[flow.cmpSort]):ranked;
-  html+=`<details class="more" ${flow.cmpOpen?"open":""} data-cmp><summary>Compare all ${res.eligible.length} quotes${res.excluded.length?` and ${res.excluded.length} that couldn't quote`:""} ${ico("i-chev","")}</summary><div>
+  html+=`<details class="more" ${flow.cmpOpen?"open":""} data-cmp><summary>${res.eligible.length>1?`Compare all ${res.eligible.length} quotes`:"See the full quote"}${res.excluded.length?` and ${res.excluded.length} supplier${res.excluded.length>1?"s":""} that couldn't quote`:""} ${ico("i-chev","")}</summary><div>
       <div class="chips sortchips" role="group" aria-label="Sort quotes">${[["pick","Bhai's order"],["price","Cheapest"],["fast","Fastest"],["rated","Top rated"]].map(([k,l])=>`<button class="chip" data-action="cmp-sort" data-v="${k}" aria-pressed="${(flow.cmpSort||"pick")===k}">${l}</button>`).join("")}</div>
       <div class="tablewrap"><table class="cmp"><thead><tr><th>Supplier</th><th>Rate</th><th>Goods</th><th>GST</th><th>Freight</th><th>Delivered</th><th>Days</th></tr></thead><tbody>
       ${cmp.map(q=>`<tr><td>${esc(q.s.name)}</td><td>${inr(q.unit,2)}</td><td>${inr(q.subtotal)}</td><td>${inr(q.gst)}</td><td>${inr(q.freight)}</td><td><b>${inr(q.landed)}</b></td><td>${q.eta}${q.meets?"":" (late)"}</td></tr>`).join("")}

@@ -96,7 +96,7 @@ const buy=()=>els["v-buy"].innerHTML;
   T.df={...T.df,city:"Pune",maxKm:300};T.renderDirectory();
   check(grid().includes("km from Pune")&&!grid().includes("Ludhiana Safety")&&els.dcount.textContent.includes("deliver to Pune"),"filter: delivers to Pune within 300 km");
   T.df={...T.df,city:"",maxKm:0,product:"box3",qty:5000,maxPrice:15.5,sort:"price"};T.renderDirectory();
-  const prices=[...grid().matchAll(/<b>₹([\d.,]+)<\/b> per pc/g)].map(m=>+m[1].replace(/,/g,""));
+  const prices=[...grid().matchAll(/<b>₹([\d.,]+)<\/b> per piece/g)].map(m=>+m[1].replace(/,/g,""));
   check(prices.length>0&&prices.every(p=>p<=15.5)&&prices.every((p,i)=>!i||p>=prices[i-1]),"filter: product, quantity and max price; sorted by price "+prices.join(","));
   T.df={...T.df,product:"",qty:0,maxPrice:0,sort:"best",state:"TN"};T.renderDirectory();
   check(grid().includes("Chennai")&&!grid().includes("Chakan"),"filter: ships from Tamil Nadu");

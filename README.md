@@ -1,15 +1,50 @@
 # VyaparBoss
-VyaparBoss | AI-powered B2B procurement and supply chain platform connecting Indian businesses with verified suppliers through intelligent sourcing, price comparison, automated negotiation, and seamless fulfillment.
 
-**Vyapar bada, jhanjhat chhota!**
+**AI-assisted B2B procurement for Indian small businesses.** A buyer types what they need in plain English or Hinglish; VyaparBoss finds suppliers who can actually serve that quantity and city, compares them on the **full delivered price** (rate + GST + freight), and places a purchase order only after the buyer approves. Then it tracks delivery, invoices and payments, and builds each supplier's real track record.
 
-Meet **Bhai**, the built-in buying assistant: *Tu business badha, jugaad mera!*
+[![Live demo](https://img.shields.io/badge/%E2%96%B6%20Live%20demo-open%20in%20browser-B4501A?style=for-the-badge)](https://yashrajsurgo0.github.io/VyaparBoss/?lang=en)
+[![Tests](https://github.com/yashrajsurgo0/VyaparBoss/actions/workflows/test.yml/badge.svg)](https://github.com/yashrajsurgo0/VyaparBoss/actions/workflows/test.yml)
+![No dependencies](https://img.shields.io/badge/npm%20dependencies-0-3E2615)
+![Node](https://img.shields.io/badge/Node.js-18%2B-3E2615)
 
-AI-powered B2B procurement for Indian MSMEs: a buyer describes what they need in English, Hindi or Hinglish, and VyaparBoss turns it into a structured RFQ, finds qualified verified suppliers, compares total landed cost, negotiates within the buyer's target, and raises a purchase order only after the buyer approves.
+![VyaparBoss demo: a buyer types a request, compares delivered prices, approves and tracks the order](docs/screenshots/demo.gif)
 
-An initiative of House of 24 Pvt. Ltd. Current stage: pre-MVP prototype.
+> **Try it in a minute:** open the [live demo](https://yashrajsurgo0.github.io/VyaparBoss/?lang=en) → **I'm buying** → **Explore without an account** → type *"5000 corrugated boxes to Pune in 7 days"* → pick a supplier → tick approve → **Place order** → follow it under **Orders**. The demo runs entirely in your browser with example suppliers; nothing is sent anywhere. Pick **I'm supplying** instead to see the supplier side.
+>
+> Full version with shared data, AI and team tools: [vyaparboss.onrender.com](https://vyaparboss.onrender.com) (free hosting, so the first visit can take about a minute to wake up).
 
-## Run it
+## What it does
+
+| | |
+|---|---|
+| **Buyers** | Ask in plain words (AI turns it into a structured request) · compare suppliers on delivered price and delivery time · ask every supplier for a better price within their own discount limits · approve, then track dispatch with the LR number · confirm receipt, rate the supplier, raise problems · repeat orders on a schedule · monthly budget · team members with approval limits · GST invoices and payments |
+| **Suppliers** | Free self-listing with price tiers, minimum order, capacity and delivery range · only requests they can serve · quote in the app and see their rank (never rivals' prices) · confirm, dispatch, invoice, confirm payments · a track record earned from real deliveries |
+| **Operations** | KPI dashboard (order value, conversion, supplier reply time, on-time rate, problem rate, repeat buyers) · alerts for late orders, sourcing gaps and unconfirmed payments · problem resolution · fees and payment settlement · supplier outreach pipeline · setup checklist |
+
+| Buying | Comparing delivered prices |
+|---|---|
+| ![Buy screen](docs/screenshots/buy.png) | ![Quotes](docs/screenshots/quotes.png) |
+| **Orders: delivery, problems, payments** | **Supplier side** |
+| ![Buyer orders](docs/screenshots/orders.png) | ![Supplier orders](docs/screenshots/supplier.png) |
+| **Ops command center** | **GST tax invoice** |
+| ![Ops dashboard](docs/screenshots/ops.png) | ![Tax invoice](docs/screenshots/invoice.png) |
+
+## How it's built
+
+- **One engine, two runtimes.** Pricing, freight, GST, ranking, negotiation and the order rulebook are plain JavaScript shared by the browser and a zero-dependency Node.js server, so the static demo and the live server behave the same.
+- **AI with guardrails.** Gemini or Claude only reads requests and drafts messages. Prices, availability and suppliers always come from structured supplier data, and nothing is ordered without explicit approval.
+- **Ranking that's earned.** Suppliers rank on delivered cost (60%), on-time rate (25%) and rating (15%); real records are blended with neutral defaults so one order can't make or break a new supplier.
+- **Built like a real service.** Buyer and supplier accounts (email, Google, Apple, Facebook), per-person data scoping, server-side price checks, hashed sessions, CSP and security headers, signed payment webhooks, account deletion, and a privacy policy written for India's DPDP Act.
+- **Tested and shipped automatically.** 61 engine and API tests plus 70+ UI checks run on every push; when they pass, GitHub Actions deploys the demo and the server.
+- **Made for India.** Hinglish, Indian English and global English modes, lakh/crore formatting, GSTIN checksums, CGST/SGST vs IGST, nearly 60 cities and export ports.
+
+Built by **Yashraj Surgoniwar**. The 20 example suppliers, their GSTINs and prices are illustrative.
+
+---
+
+## For developers
+
+### Run it
 
 ```bash
 cp .env.example .env     # optional: add GEMINI_API_KEY (or ANTHROPIC_API_KEY) to switch on AI parsing
