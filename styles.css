@@ -543,6 +543,7 @@ body.welcome{padding-bottom:0}
 .authcard .errors{list-style:none;padding:10px 12px}
 
 /* Account button in the header */
+.acctpick:empty{display:none}
 .acctpick summary{padding:4px 10px}
 .acct-av{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:50%;background:var(--brand);color:var(--on-brand);font-family:var(--f-display);font-weight:800;font-size:13px;letter-spacing:.02em}
 .acctpick summary:has(.acct-av){padding:3px}
