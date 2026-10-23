@@ -29,7 +29,7 @@ const b64urlJson = s => JSON.parse(Buffer.from(s, "base64url").toString("utf8"))
 function createAuth({ store, env, fetchImpl = globalThis.fetch, now = () => Date.now() }) {
   const providers = {
     google: env.GOOGLE_CLIENT_ID ? { clientId: env.GOOGLE_CLIENT_ID } : null,
-    apple: env.APPLE_CLIENT_ID ? { clientId: env.APPLE_CLIENT_ID, redirectURI: env.APPLE_REDIRECT_URI || String(env.PUBLIC_URL || "https://vyaparboss.onrender.com").replace(/\/+$/, "") + "/" } : null,
+    apple: env.APPLE_CLIENT_ID ? { clientId: env.APPLE_CLIENT_ID, redirectURI: env.APPLE_REDIRECT_URI || String(env.PUBLIC_URL || "https://kaantamandi.com").replace(/\/+$/, "") + "/" } : null,
     facebook: env.FACEBOOK_APP_ID && env.FACEBOOK_APP_SECRET ? { appId: env.FACEBOOK_APP_ID } : null,
   };
   store.data.users ||= [];

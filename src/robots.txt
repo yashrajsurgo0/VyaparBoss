@@ -3,4 +3,4 @@ Allow: /
 Disallow: /api/
 Disallow: /webhooks/
 
-Sitemap: https://vyaparboss.onrender.com/sitemap.xml
+Sitemap: https://kaantamandi.com/sitemap.xml

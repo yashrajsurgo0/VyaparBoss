@@ -36,7 +36,7 @@ services:
       - key: ADMIN_KEY
         sync: false
       - key: PUBLIC_URL
-        value: https://vyaparboss.onrender.com
+        value: https://kaantamandi.com
       - key: EMAIL_PROVIDER
         value: brevo
       - key: EMAIL_API_KEY

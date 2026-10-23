@@ -58,7 +58,7 @@ function createApp(opts = {}) {
   const sync = remote ? attachRemote(store, remote) : null;
   ctx.services = makeServices(ctx);
   const mailer = createMailer(env, opts.fetch);
-  const PUBLIC_URL = String(env.PUBLIC_URL || "https://vyaparboss.onrender.com").replace(/\/+$/, "");
+  const PUBLIC_URL = String(env.PUBLIC_URL || "https://kaantamandi.com").replace(/\/+$/, "");
   const PUBLIC_HOST = (() => { try { const h = new URL(PUBLIC_URL).host.toLowerCase(); return /\.onrender\.com$|^localhost|^127\./.test(h) ? "" : h; } catch { return ""; } })();
   const ORIGINS = String(env.ALLOWED_ORIGINS || "https://yashrajsurgo0.github.io").split(",").map(s => s.trim()).filter(Boolean);
   const DAILY_CAP = Number(env.OUTREACH_DAILY_CAP) || 30;

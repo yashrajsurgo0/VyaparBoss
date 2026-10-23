@@ -352,7 +352,7 @@ const { createApp } = require("../server");
       const nf = await fetch(base + "/no-such-page");
       assert.strictEqual(nf.status, 404); assert.match(await nf.text(), /KaantaMandi/);
       const sm = await fetch(base + "/sitemap.xml").then(x => x.text());
-      assert.match(sm, /<loc>https:\/\/vyaparboss\.onrender\.com\/privacy\.html<\/loc>/);
+      assert.match(sm, /<loc>https:\/\/kaantamandi\.com\/privacy\.html<\/loc>/);
       for (const f of ["/robots.txt", "/privacy.html", "/terms.html", "/contact.html"]) assert.strictEqual((await fetch(base + f)).status, 200, f);
     });
     await test("custom domain: old Render address redirects pages to kaantamandi.com, never the API", async () => {

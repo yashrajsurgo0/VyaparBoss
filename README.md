@@ -1,6 +1,6 @@
 # KaantaMandi
 
-*Formerly VyaparBoss. Domain: kaantamandi.com.*
+*Formerly VyaparBoss. Live at [kaantamandi.com](https://kaantamandi.com).*
 
 **AI-assisted B2B procurement for Indian small businesses.** A buyer types what they need in plain English or Hinglish; KaantaMandi finds suppliers who can actually serve that quantity and city, compares them on the **full delivered price** (rate + GST + freight), and places a purchase order only after the buyer approves. Then it tracks delivery, invoices and payments, and builds each supplier's real track record.
 
@@ -13,7 +13,7 @@
 
 > **Try it in a minute:** open the [live demo](https://yashrajsurgo0.github.io/VyaparBoss/?lang=en) → **I'm buying** → **Explore without an account** → type *"5000 corrugated boxes to Pune in 7 days"* → pick a supplier → tick approve → **Place order** → follow it under **Orders**. The demo runs entirely in your browser with example suppliers; nothing is sent anywhere. Pick **I'm supplying** instead to see the supplier side.
 >
-> Full version with shared data, AI and team tools: [vyaparboss.onrender.com](https://vyaparboss.onrender.com) (free hosting, so the first visit can take about a minute to wake up).
+> Full version with shared data, AI and team tools: [kaantamandi.com](https://kaantamandi.com) (free hosting, so the first visit can take about a minute to wake up).
 
 ## What it does
 
@@ -60,7 +60,7 @@ npm run build:single     # dist/kaantamandi.html: whole app in one file, for sha
 
 **Regions and languages:** one app, switch in the header. India · Hinglish (default in India), India · English, and Global · English for buyers anywhere sourcing from Indian suppliers (delivery to Indian cities and ports: Nhava Sheva, Mundra, Chennai, Tuticorin…). Link straight to one with `?region=global` or `?lang=en`.
 
-**Live server:** https://vyaparboss.onrender.com (shared data, Gemini AI; Render free plan, so it sleeps when idle and data resets on redeploy).
+**Live site:** https://kaantamandi.com (also at vyaparboss.onrender.com, which redirects; shared data, Gemini AI; Render free plan, so it sleeps when idle and data resets on redeploy).
 **Static demo:** https://yashrajsurgo0.github.io/VyaparBoss/ (data stays in your browser). Redeploy with `npm run deploy:pages`.
 
 Two ways the same app runs:

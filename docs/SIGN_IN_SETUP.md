@@ -12,21 +12,21 @@ includes everyone's accounts.
 2. APIs & Services → OAuth consent screen → External → app name KaantaMandi, support email, logo optional → add your
    domain(s) under Authorized domains (`onrender.com` for now, your own domain later). Publish the app.
 3. Credentials → Create credentials → OAuth client ID → Web application.
-   Authorized JavaScript origins: `https://vyaparboss.onrender.com` (and your own domain later). No redirect URI needed.
+   Authorized JavaScript origins: `https://kaantamandi.com` (and `https://vyaparboss.onrender.com`). No redirect URI needed.
 4. Copy the Client ID into `GOOGLE_CLIENT_ID`. (No secret is needed: the server checks Google's signed ID token.)
 
 ## Apple (needs the Apple Developer Program, US$99/year)
 1. developer.apple.com → Certificates, IDs & Profiles → Identifiers → add an App ID with "Sign in with Apple".
 2. Add a **Services ID** (e.g. `com.houseof24.vyaparboss.web`), enable Sign in with Apple, configure:
-   Domains `vyaparboss.onrender.com`, Return URL `https://vyaparboss.onrender.com/`.
+   Domains `kaantamandi.com`, Return URL `https://kaantamandi.com/`.
 3. Set `APPLE_CLIENT_ID` to the Services ID. `APPLE_REDIRECT_URI` defaults to `PUBLIC_URL/`; set it if different.
    Apple shares the person's name only on their first sign-in; the app saves it then.
 
 ## Facebook (free; needs a Facebook account in good standing)
 Yashraj's personal account is disabled, so a trusted team member must do this (same as WhatsApp).
 1. developers.facebook.com → Create app → "Authenticate and request data from users with Facebook Login".
-2. Facebook Login → Settings: Valid OAuth redirect URIs `https://vyaparboss.onrender.com/`; Allowed domains for the
-   JavaScript SDK: `vyaparboss.onrender.com`.
+2. Facebook Login → Settings: Valid OAuth redirect URIs `https://kaantamandi.com/`; Allowed domains for the
+   JavaScript SDK: `kaantamandi.com`.
 3. App settings → Basic: copy App ID → `FACEBOOK_APP_ID`, App secret → `FACEBOOK_APP_SECRET`. Add a privacy policy URL,
    then switch the app to Live.
 
