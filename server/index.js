@@ -59,6 +59,7 @@ function createApp(opts = {}) {
   ctx.services = makeServices(ctx);
   const mailer = createMailer(env, opts.fetch);
   const PUBLIC_URL = String(env.PUBLIC_URL || "https://vyaparboss.onrender.com").replace(/\/+$/, "");
+  const PUBLIC_HOST = (() => { try { const h = new URL(PUBLIC_URL).host.toLowerCase(); return /\.onrender\.com$|^localhost|^127\./.test(h) ? "" : h; } catch { return ""; } })();
   const ORIGINS = String(env.ALLOWED_ORIGINS || "https://yashrajsurgo0.github.io").split(",").map(s => s.trim()).filter(Boolean);
   const DAILY_CAP = Number(env.OUTREACH_DAILY_CAP) || 30;
   const secret = env.OUTREACH_SECRET || env.ADMIN_KEY || "";
@@ -890,6 +891,13 @@ function createApp(opts = {}) {
     for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.setHeader(k, v);
     res.setHeader("content-security-policy", CSP);
     if (String(req.headers["x-forwarded-proto"] || "").includes("https")) res.setHeader("strict-transport-security", "max-age=31536000; includeSubDomains");
+    // Pages opened on the old Render address move to the public domain (kaantamandi.com) once PUBLIC_URL points there.
+    // API calls and webhooks stay put so the Pages demo, Razorpay and WhatsApp keep working on either address.
+    const host = String(req.headers.host || "").toLowerCase();
+    if ((req.method === "GET" || req.method === "HEAD") && /\.onrender\.com$/.test(host) && PUBLIC_HOST && PUBLIC_HOST !== host
+        && !url.pathname.startsWith("/api/") && !url.pathname.startsWith("/webhooks/")) {
+      res.writeHead(301, { location: PUBLIC_URL + url.pathname + url.search, "cache-control": "max-age=3600" }).end(); return;
+    }
     // The static copy on GitHub Pages posts sign-ups and supplier quotes here.
     const origin = req.headers.origin;
     if (origin && ORIGINS.includes(origin) && /^\/api\/(join|quote\/|health|track|contact)/.test(url.pathname)) {

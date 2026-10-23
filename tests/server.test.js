@@ -355,6 +355,26 @@ const { createApp } = require("../server");
       assert.match(sm, /<loc>https:\/\/vyaparboss\.onrender\.com\/privacy\.html<\/loc>/);
       for (const f of ["/robots.txt", "/privacy.html", "/terms.html", "/contact.html"]) assert.strictEqual((await fetch(base + f)).status, 200, f);
     });
+    await test("custom domain: old Render address redirects pages to kaantamandi.com, never the API", async () => {
+      const http = require("http");
+      const { server: s7 } = createApp({ dataFile: path.join(dir, "db7.json"), claude: null, env: { PUBLIC_URL: "https://kaantamandi.com/" } });
+      await new Promise(r => s7.listen(0, r));
+      const get = (p, host, method = "GET") => new Promise((ok, bad) => http.request({ port: s7.address().port, path: p, method, headers: { host } }, r => { r.resume(); ok(r); }).on("error", bad).end());
+      try {
+        let r = await get("/privacy.html?lang=en", "vyaparboss.onrender.com");
+        assert.deepStrictEqual([r.statusCode, r.headers.location], [301, "https://kaantamandi.com/privacy.html?lang=en"]);
+        assert.strictEqual((await get("/api/health", "vyaparboss.onrender.com")).statusCode, 200, "API answers on the old address");
+        assert.strictEqual((await get("/webhooks/razorpay", "vyaparboss.onrender.com", "POST")).statusCode !== 301, true, "webhooks never redirect");
+        assert.strictEqual((await get("/", "kaantamandi.com")).statusCode, 200, "the domain itself serves the app");
+        assert.strictEqual((await get("/", "localhost")).statusCode, 200, "local runs are left alone");
+      } finally { s7.close(); }
+      const { server: s8 } = createApp({ dataFile: path.join(dir, "db8.json"), claude: null, env: { PUBLIC_URL: "https://vyaparboss.onrender.com" } });
+      await new Promise(r => s8.listen(0, r));
+      try {
+        const r = await new Promise((ok, bad) => require("http").request({ port: s8.address().port, path: "/", headers: { host: "vyaparboss.onrender.com" } }, x => { x.resume(); ok(x); }).on("error", bad).end());
+        assert.strictEqual(r.statusCode, 200, "no redirect while PUBLIC_URL is still the Render address");
+      } finally { s8.close(); }
+    });
     await test("remote storage: pulls on boot, pushes after changes, never starts empty on a failed read", async () => {
       const { createRemote, pullSnapshot, attachRemote } = require("../server/remote");
       const kv = {}; let down = false; const seen = [];

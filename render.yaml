@@ -13,6 +13,8 @@ services:
     buildCommand: echo "no build step"
     startCommand: node server/index.js
     healthCheckPath: /api/health
+    domains: # Render adds www.kaantamandi.com too and redirects it to the root
+      - kaantamandi.com
     autoDeploy: true
     envVars:
       - key: NODE_VERSION
