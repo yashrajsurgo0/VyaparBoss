@@ -208,4 +208,60 @@ test("track record: on time against the promised date, ratings averaged, samples
   assert.strictEqual(C.onTimeOf({ onTime: null }), 85, "new suppliers get the neutral default");
 });
 
+test("plans: limits by plan, paid plans lapse to Free, ranking ignores plans", () => {
+  const P = C.PRICING, now = Date.now();
+  assert.strictEqual(C.planOf({ plan: "pro", planUntil: now + 1e6 }, now), "pro");
+  assert.strictEqual(C.planOf({ plan: "pro", planUntil: now - 1 }, now), "free", "expired plan is Free");
+  assert.strictEqual(C.planOf({ plan: "gold" }, now), "free");
+  const six = { offers: ["box3", "box5", "ldpe", "tape", "stretch", "pallet"].map(p => ({ p })) };
+  assert.match(plain(C.planLimitErrors(six, P, now))[0], /up to 5 products/);
+  assert.deepStrictEqual(plain(C.planLimitErrors({ ...six, plan: "growth", planUntil: now + 1e6 }, P, now)), []);
+  assert.match(plain(C.planLimitErrors({ offers: [{ p: "box3" }, { p: "gloves" }] }, P, now))[0], /1 category/);
+  const r = { productId: "box3", qty: 6000, city: "Pune" }, a = plain(C.discover(r).eligible.map(q => q.s.id));
+  C.getSuppliers().forEach(s => { s.plan = "pro"; s.planUntil = now + 1e6; });
+  assert.deepStrictEqual(plain(C.discover(r).eligible.map(q => q.s.id)), a, "a paid plan never changes the ranking");
+  C.getSuppliers().forEach(s => { delete s.plan; delete s.planUntil; });
+});
+test("commission: by category, big-order and plan discounts, min and cap, only when agreed", () => {
+  const P = C.PRICING, now = Date.now();
+  assert.strictEqual(C.commissionFor({ productId: "box3", subtotal: 100000 }, {}), null, "no fee without agreement");
+  assert.deepStrictEqual(plain(C.commissionFor({ productId: "box3", subtotal: 100000 }, { feeAgreed: true }, P, now)), { rate: 0.02, amount: 2000, plan: "free", status: "due" });
+  assert.strictEqual(C.commissionFor({ productId: "cement", subtotal: 100000 }, { feeAgreed: true }, P, now).rate, 0.01, "building is 1%");
+  assert.strictEqual(C.commissionFor({ productId: "box3", subtotal: 600000 }, { feeAgreed: true }, P, now).rate, 0.015, "big orders 0.5 points off");
+  assert.strictEqual(C.commissionFor({ productId: "box3", subtotal: 100000 }, { feeAgreed: true, plan: "pro", planUntil: now + 1e6 }, P, now).rate, 0.015, "Pro 0.5 points off");
+  assert.strictEqual(C.commissionFor({ productId: "box3", subtotal: 1000 }, { feeAgreed: true }, P, now).amount, 99, "minimum fee");
+  assert.strictEqual(C.commissionFor({ productId: "box3", subtotal: 5e6 }, { feeAgreed: true }, P, now).amount, 25000, "capped");
+  assert.strictEqual(C.commissionFor({ productId: "box3", subtotal: 100000 }, { feeAgreed: true, feeRate: 0.03 }, P, now).rate, 0.03, "a negotiated rate wins");
+});
+test("buyer services: freight replaces the supplier's, GST on our invoice, revenue net of partner costs", () => {
+  const r = { productId: "box3", qty: 6000, city: "Pune" }, res = C.discover(r), q = res.eligible[0];
+  const o = plain(C.orderRecord(r, res, q)), before = o.landed, freight = o.freight;
+  C.applyServices(o, q, { freight: true, assured: true });
+  assert.strictEqual(o.freight, 0); assert.strictEqual(o.landed, before - freight, "supplier invoice is goods + GST");
+  const f = o.services.lines.find(l => l.k === "freight"), a = o.services.lines.find(l => l.k === "assured");
+  assert.ok(f.amount < freight, "KaantaMandi Freight is below the usual freight");
+  assert.strictEqual(f.gst, Math.round(f.amount * 0.05), "freight at 5% GST"); assert.strictEqual(a.gst, Math.round(a.amount * 0.18));
+  assert.strictEqual(C.orderTotal(o), o.landed + o.services.total);
+  const rev = plain(C.orderRevenue(o));
+  assert.deepStrictEqual([rev.freight, rev.assured], [f.amount - f.cost, a.amount]);
+  o.stage = 4; o.history = [0, 1, 2, 3, o.promisedBy + 3 * 864e5];
+  assert.strictEqual(C.orderRevenue(o).assured, 0, "Assured is refunded on a late delivery");
+  assert.strictEqual(C.orderRevenue({ ...o, cancelled: { by: "buyer" } }).freight, 0, "cancelled orders earn nothing");
+  const o2 = plain(C.orderRecord(r, res, q)); C.applyServices(o2, q, {}); assert.strictEqual(o2.services, undefined, "nothing ticked, nothing added");
+});
+test("economics report: GMV, streams, take rate, cohorts; pricing edits are checked", () => {
+  const d = 864e5, now = Date.UTC(2026, 9, 20), mk = (owner, daysAgo, extra = {}) => ({ ownerId: owner, date: now - daysAgo * d, productId: "box3", subtotal: 100000, landed: 110000, stage: 0, fee: { amount: 2000, status: "due" }, ...extra });
+  const orders = [mk("a", 5), mk("a", 40), mk("b", 3, { services: { lines: [{ k: "assured", amount: 1000, gst: 180, cost: 0 }], total: 1180, status: "due" } }), mk("c", 2, { sample: true }), mk("d", 1, { cancelled: { by: "buyer" } })];
+  const e = plain(C.economicsReport({ orders, rfqs: [{ date: now - d }, { date: now - 2 * d }], suppliers: [{ plan: "growth", planUntil: now + 9e9 }], planPayments: [{ at: now - d, amount: 1499, status: "paid" }], now }));
+  assert.deepStrictEqual([e.orders, e.gmv, e.streams.commission, e.streams.assured, e.streams.plans, e.revenue], [2, 221180, 4000, 1000, 1499, 6499]);
+  assert.strictEqual(+e.takeRate.toFixed(4), +(6499 / 221180).toFixed(4));
+  assert.deepStrictEqual([e.newBuyers, e.activeBuyers, e.mrr, e.payingSuppliers], [1, 2, 1499, 1]);
+  assert.strictEqual(e.contribution, 6499 - 2 * 150 - 2 * 2, "revenue minus ops and AI costs");
+  assert.ok(e.cohorts.length >= 1);
+  assert.ok(!C.normalizePricing({ take: { byCat: { pack: 0.5 } } }).ok, "50% commission is refused");
+  assert.ok(C.normalizePricing({ plans: { growth: { monthly: 999 } } }).ok);
+  const m = plain(C.projectMonth({ orders: 100, aov: 100000, takeRate: 0.02, feeShare: 1 }));
+  assert.ok(m.revenue > 0 && m.gmv === 1e7);
+});
+
 console.log(`\n${passed} engine tests passed`);

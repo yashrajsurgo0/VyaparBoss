@@ -78,6 +78,19 @@ function createApp(opts = {}) {
   const notify = createNotifier({ store, mailer, core, publicUrl: PUBLIC_URL });
   const razorpay = opts.razorpay !== undefined ? opts.razorpay : createRazorpay(env, opts.fetch);
   store.data.fees ||= { rate: 0.015 };
+  store.data.pricing ||= {};       // team overrides over core.PRICING (Team → Pricing)
+  store.data.planPayments ||= [];  // supplier plan purchases: pending until paid online or confirmed by the team
+  const pricing = () => core.pricingWith(store.data.pricing);
+  const publicPricing = () => { const { costs, ...pub } = plainJ(pricing()); return pub; }; // cost assumptions stay with the team
+  const PLAN_DAYS = { monthly: 30, yearly: 365 };
+  /** Switches a supplier onto a paid plan (extends it when they renew the same plan). */
+  function activatePlan(pay, via) {
+    const s = store.data.suppliers.find(x => x.id === pay.sid); if (!s) return null;
+    const now = Date.now(), from = s.plan === pay.plan && s.planUntil > now ? s.planUntil : now;
+    Object.assign(s, { plan: pay.plan, planPeriod: pay.period, planUntil: from + PLAN_DAYS[pay.period] * 864e5 });
+    Object.assign(pay, { status: "paid", paidAt: now, via, until: s.planUntil });
+    syncSuppliers(); return s;
+  }
   store.data.rzEvents ||= [];
   // Sends the confirm-your-email link (only when email sending is set up). Never blocks the request.
   const sendVerify = u => { if (!notify.on) return; const tok = auth.startVerify(u); if (tok) notify.verifyEmail(u, `${PUBLIC_URL}/#verify/${tok}`).catch(() => {}); };
@@ -123,8 +136,9 @@ function createApp(opts = {}) {
   function stateFor(req) {
     const base = store.publicState();
     const u = auth.userOf(req), me = auth.publicUser(u);
-    if (isAdmin(req)) return { ...base, me, team: true, schedules: store.data.schedules };
-    const strip = s => { const { contact, ownerId, ...rest } = s; return u && ownerId === u.id ? { ...rest, contact, mine: true } : rest; };
+    if (isAdmin(req)) return { ...base, me, team: true, schedules: store.data.schedules, pricing: publicPricing() };
+    const strip = s => { const { contact, ownerId, plan, planUntil, planPeriod, ...rest } = s;
+      return u && ownerId === u.id ? { ...rest, contact, plan: core.planOf(s), planUntil, planPeriod, mine: true } : rest; };
     const suppliers = base.suppliers.map(strip);
     if (u && u.role === "supplier") {
       const sid = u.supplierId;
@@ -134,13 +148,15 @@ function createApp(opts = {}) {
         return { ...rest, quotes: r.quotes.filter(q => q.sid === sid), rank: ranked.findIndex(q => q.sid === sid) + 1, of: ranked.length,
           myQuote: (invites || []).find(i => i.sid === sid)?.quote || null };
       });
-      return { orders: base.orders.filter(o => sid && o.sid === sid && !hiddenFromSupplier(o)).map(({ ownerId, orgId, approval, ...o }) => o), rfqs, seq: base.seq, suppliers, useSamples: base.useSamples, me };
+      const planPayments = store.data.planPayments.filter(x => sid && x.sid === sid).map(({ link, ...x }) => ({ ...x, url: x.status === "pending" ? link?.url : undefined }));
+      return { orders: base.orders.filter(o => sid && o.sid === sid && !hiddenFromSupplier(o)).map(({ ownerId, orgId, approval, services, ...o }) => o), rfqs, seq: base.seq, suppliers, useSamples: base.useSamples, me,
+        pricing: publicPricing(), planPayments, payOnline: !!razorpay };
     }
     const org = auth.orgOf(u);
     const mine = r => r.sample || (u && (r.ownerId === u.id || (r.orgId && r.orgId === org)));
     const schedules = u ? store.data.schedules.filter(x => x.orgId === org) : [];
     return { orders: base.orders.filter(mine).map(({ fee, ...o }) => o), rfqs: base.rfqs.filter(mine), seq: base.seq, suppliers, useSamples: base.useSamples, me, schedules,
-      payOnline: !!razorpay };
+      payOnline: !!razorpay, pricing: publicPricing() };
   }
   const sameOrg = (u, rec) => !!(u && u.role === "buyer" && (rec.ownerId === u.id || (rec.orgId && rec.orgId === auth.orgOf(u))));
   const hiddenFromSupplier = o => ["pending", "rejected"].includes(o.approval?.status);
@@ -149,10 +165,10 @@ function createApp(opts = {}) {
   function approvalNeeded(u, order) {
     if (!u?.orgOwner) return "";
     const owner = store.data.users.find(x => x.id === u.orgOwner); if (!owner) return "";
-    if (u.memberLimit != null && order.landed > u.memberLimit) return `Above ${u.name || "this member"}'s limit of ${core.inr(u.memberLimit)} per order`;
+    if (u.memberLimit != null && core.orderTotal(order) > u.memberLimit) return `Above ${u.name || "this member"}'s limit of ${core.inr(u.memberLimit)} per order`;
     if (owner.budgetMonthly) {
       const spent = core.monthSpend(store.data.orders.filter(o => o.orgId === owner.id));
-      if (spent + order.landed > owner.budgetMonthly) return `Takes this month's spend past the ${core.inr(owner.budgetMonthly)} budget`;
+      if (spent + core.orderTotal(order) > owner.budgetMonthly) return `Takes this month's spend past the ${core.inr(owner.budgetMonthly)} budget`;
     }
     return "";
   }
@@ -194,7 +210,12 @@ function createApp(opts = {}) {
     const orgsWith = n => { const c = {}; for (const o of live) { const k = o.orgId || o.ownerId; if (k) c[k] = (c[k] || 0) + 1; } return Object.values(c).filter(x => x >= n).length; };
     const recent = t => t > now - 30 * D;
     const fees = live.filter(o => o.fee); // only orders that actually went to the supplier
-    const toSettle = orders.flatMap(o => (o.payments || []).filter(p => p.method === "razorpay" && !p.settled).map(p => ({ po: o.po, supplier: o.sname, amount: p.amount, id: p.id, at: p.at, test: !!p.test })));
+    // Payout promise by plan: Free 7 days, Growth 3, Pro next day (Team → Pricing).
+    const P = pricing(), supOf = id => store.data.suppliers.find(x => x.id === id);
+    const toSettle = orders.flatMap(o => (o.payments || []).filter(p => p.method === "razorpay" && !p.settled).map(p => {
+      const days = P.plans[core.planOf(supOf(o.sid))].payoutDays;
+      return { po: o.po, supplier: o.sname, amount: p.amount, id: p.id, at: p.at, test: !!p.test, dueBy: p.at + days * 864e5 };
+    })).sort((x, y) => x.dueBy - y.dueBy);
     const alerts = [];
     const add = (level, kind, title, detail, ref) => alerts.push({ level, kind, title, detail, ref });
     const ago = t => { const h = (now - t) / H; return h < 1 ? "under an hour" : h < 48 ? `${Math.round(h)} h` : `${Math.round(h / 24)} days`; };
@@ -205,7 +226,9 @@ function createApp(opts = {}) {
       if (o.dispute?.status === "open") add(now - o.dispute.opened > 48 * H ? "critical" : "warning", "dispute", `Problem on ${o.po}: ${o.issue}`, `Open ${ago(o.dispute.opened)}. ${o.dispute.msgs?.length || 0} message${o.dispute.msgs?.length === 1 ? "" : "s"}.`, o.po);
       for (const p of o.payments || []) if (p.status === "claimed" && now - p.at > 3 * D) add("warning", "payment", `${o.sname} hasn't confirmed a payment on ${o.po}`, `Buyer paid ${core.inr(p.amount)} ${Math.round((now - p.at) / D)} days ago${p.ref ? ` (ref ${p.ref})` : ""}.`, o.po);
     }
-    if (toSettle.length) add("warning", "settle", `${core.inr(toSettle.reduce((a, p) => a + p.amount, 0))} paid online waits to be settled to suppliers`, `${toSettle.length} payment${toSettle.length > 1 ? "s" : ""}. Pay the supplier, then mark it settled below.`, null);
+    const lateSettle = toSettle.filter(p => p.dueBy < now);
+    if (lateSettle.length) add("serious", "settle", `${lateSettle.length} supplier payout${lateSettle.length > 1 ? "s are" : " is"} past the plan's promised date`, `${core.inr(lateSettle.reduce((a, p) => a + p.amount, 0))} in all. Settle the oldest first.`, null);
+    else if (toSettle.length) add("warning", "settle", `${core.inr(toSettle.reduce((a, p) => a + p.amount, 0))} paid online waits to be settled to suppliers`, `${toSettle.length} payment${toSettle.length > 1 ? "s" : ""}. Pay the supplier, then mark it settled below.`, null);
     const rank = { critical: 0, serious: 1, warning: 2 };
     alerts.sort((a, b) => rank[a.level] - rank[b.level]);
     return {
@@ -378,7 +401,11 @@ function createApp(opts = {}) {
       s.id ||= "c" + Date.now().toString(36);
       Object.assign(s, { orders: prev?.orders || 0, ownerId: u.id, selfListed: true, verified: !!prev?.verified });
       if (prev?.track) Object.assign(s, { track: prev.track, onTime: prev.onTime, rating: prev.rating }); // earned, not editable
-      if (prev) Object.assign(s, { feeAgreed: !!prev.feeAgreed, feeRate: prev.feeRate ?? null });
+      if (prev) Object.assign(s, { feeAgreed: !!prev.feeAgreed, feeRate: prev.feeRate ?? null, plan: prev.plan, planUntil: prev.planUntil, planPeriod: prev.planPeriod });
+      // Plan limits apply to what's being added: a listing that grew under a lapsed plan can be edited down but not up.
+      const over = core.planLimitErrors(s, pricing());
+      const grew = !prev || s.offers.length > prev.offers.length || new Set(s.offers.map(o => core.PMAP[o.p].cat)).size > new Set(prev.offers.map(o => core.PMAP[o.p]?.cat)).size;
+      if (over.length && grew) throw Object.assign(new Error(over.join(". ") + ". See Plans to upgrade."), { status: 402 });
       store.data.suppliers = store.data.suppliers.filter(x => x.id !== s.id).concat(plainJ(s));
       u.supplierId = s.id; store.save(); syncSuppliers();
       const { ownerId, ...pub } = s; return { ...plainJ(pub), mine: true };
@@ -672,7 +699,8 @@ function createApp(opts = {}) {
       const biz = (u.orgOwner && store.data.users.find(x => x.id === u.orgOwner)) || u;
       clean.billTo = { business: biz.business || "", gstin: biz.gstin || "", address: biz.address || "", city: rec.city };
       const supRec = store.data.suppliers.find(x => x.id === clean.sid);
-      if (supRec?.feeAgreed) { const rate = supRec.feeRate ?? store.data.fees.rate; clean.fee = { rate, amount: Math.round(clean.subtotal * rate), status: "due" }; }
+      core.applyServices(clean, q, plainJ(order.extras || {}), pricing()); // optional buyer services, priced here, never by the client
+      const commission = core.commissionFor(clean, supRec, pricing()); if (commission) clean.fee = plainJ(commission);
       const why = approvalNeeded(u, clean);
       if (why) clean.approval = { status: "pending", by: u.id, name: u.name || "", why, at: Date.now() };
       const placed = ctx.services.createOrder(clean, { status: "ordered", wonBy: q.s.id, quotes: plainJ(core.quoteSummary(qres)) });
@@ -734,7 +762,10 @@ function createApp(opts = {}) {
       const evId = String(req.headers["x-razorpay-event-id"] || "");
       if (evId && store.data.rzEvents.includes(evId)) return { ok: true, duplicate: true };
       let j; try { j = JSON.parse(raw); } catch { throw bad("Body must be JSON"); }
-      if (j.event === "payment_link.paid") {
+      if (j.event === "payment_link.paid" && j.payload?.payment_link?.entity?.notes?.kind === "plan") {
+        const link = j.payload.payment_link.entity, pp = store.data.planPayments.find(x => x.id === link.notes.planPayment);
+        if (pp && pp.status === "pending") activatePlan(pp, "razorpay");
+      } else if (j.event === "payment_link.paid") {
         const link = j.payload?.payment_link?.entity || {}, pay = j.payload?.payment?.entity || {};
         const o = store.data.orders.find(x => x.po === link.notes?.po);
         if (o && pay.id && !(o.payments || []).some(x => x.ref === pay.id)) {
@@ -751,6 +782,8 @@ function createApp(opts = {}) {
       admin(req); const o = store.data.orders.find(x => x.po === m[1]); if (!o) throw notFound("Order");
       const b = await jsonBody(req);
       if (b.fee && o.fee && ["due", "invoiced", "collected", "waived"].includes(b.fee.status)) o.fee.status = b.fee.status;
+      if (b.services && o.services && ["due", "paid", "waived"].includes(b.services.status)) o.services.status = b.services.status;
+      if (b.inspection && o.inspection && ["booked", "passed", "failed"].includes(b.inspection.status)) Object.assign(o.inspection, { status: b.inspection.status, note: String(b.inspection.note || "").slice(0, 200), at: Date.now() });
       if (b.settle) { const p = (o.payments || []).find(x => x.id === b.settle && x.method === "razorpay"); if (!p) throw notFound("Payment"); p.settled = Date.now(); }
       store.save(); return o;
     }],
@@ -758,6 +791,51 @@ function createApp(opts = {}) {
       admin(req); const r = Number((await jsonBody(req)).ratePct);
       if (!(r >= 0 && r <= 10)) throw bad("Fee must be 0–10%");
       store.data.fees.rate = Math.round(r * 100) / 10000; store.save(); return store.data.fees;
+    }],
+    // ---------- Pricing, plans and the economics view ----------
+    ["GET", /^\/api\/pricing$/, () => publicPricing()],
+    ["GET", /^\/api\/admin\/pricing$/, req => { admin(req); return pricing(); }],
+    ["PUT", /^\/api\/admin\/pricing$/, async req => {
+      admin(req); const { ok, p, errors } = core.normalizePricing(await jsonBody(req));
+      if (!ok) throw bad(errors.join(". "));
+      store.data.pricing = plainJ(p); store.save(); return pricing();
+    }],
+    ["DELETE", /^\/api\/admin\/pricing$/, req => { admin(req); store.data.pricing = {}; store.save(); return pricing(); }],
+    ["GET", /^\/api\/admin\/economics$/, (req, m, url) => {
+      admin(req); const days = Math.min(365, Math.max(7, Math.round(Number(url.searchParams.get("days")) || 30)));
+      const rep = core.economicsReport({ orders: store.data.orders, rfqs: store.data.rfqs, suppliers: store.data.suppliers, planPayments: store.data.planPayments, pricing: pricing(), days });
+      const names = Object.fromEntries(store.data.suppliers.map(s => [s.id, s.name]));
+      return { ...plainJ(rep), pricing: pricing(),
+        planPayments: store.data.planPayments.slice(-100).reverse().map(({ link, ...x }) => ({ ...x, supplier: names[x.sid] || x.sid })),
+        services: store.data.orders.filter(o => o.services && !o.sample && !o.cancelled).slice(0, 100).map(o => ({ po: o.po, date: o.date, buyer: o.billTo?.business || "", lines: o.services.lines.map(l => l.label), total: o.services.total, status: o.services.status, inspection: o.inspection?.status || null })) };
+    }],
+    // Supplier buys or renews a plan: a Razorpay link when online payment is on, otherwise the team collects and confirms.
+    ["POST", /^\/api\/my\/plan$/, async req => {
+      const u = needUser(req, "supplier"); const b = await jsonBody(req);
+      const s = u.supplierId && store.data.suppliers.find(x => x.id === u.supplierId);
+      if (!s) throw bad("Create your listing first");
+      if (!core.PLAN_KEYS.includes(b.plan) || b.plan === "free") throw bad("Pick Growth or Pro");
+      const period = b.period === "yearly" ? "yearly" : "monthly", pl = pricing().plans[b.plan], amount = period === "yearly" ? pl.yearly : pl.monthly;
+      if (!(amount > 0)) throw bad("That plan has no price set");
+      limit(req, "plan", 10, 36e5);
+      const old = store.data.planPayments.find(x => x.sid === s.id && x.status === "pending");
+      if (old) old.status = "replaced";
+      const pay = { id: "PP" + Date.now().toString(36), sid: s.id, plan: b.plan, period, amount, gst: Math.round(amount * pricing().serviceGst), status: "pending", at: Date.now() };
+      if (razorpay) {
+        pay.link = await razorpay.createLink({ amount: amount + pay.gst, po: "PLAN-" + s.id, description: `KaantaMandi ${pl.name} plan, ${period} (incl. 18% GST)`, callbackUrl: `${PUBLIC_URL}/#plan`, notes: { kind: "plan", planPayment: pay.id, sid: s.id } });
+      }
+      store.data.planPayments.push(pay); store.save();
+      if (!razorpay && env.CONTACT_TO && mailer.configured) // no online payment yet: tell the team to collect it
+        mailer.send({ to: env.CONTACT_TO, subject: `[KaantaMandi] ${s.name} wants the ${pl.name} plan (${period})`, text: `${s.name}, ${s.city}\nPlan: ${pl.name}, ${period}: ${core.inr(amount)} + GST ${core.inr(pay.gst)}\n\nCollect the payment, then confirm it in Team → Economics → Plan payments.` }).catch(() => {});
+      return { id: pay.id, plan: pay.plan, period, amount, gst: pay.gst, status: pay.status, url: pay.link?.url || null };
+    }],
+    ["PATCH", /^\/api\/admin\/plan-payments\/(.+)$/, async (req, m) => {
+      admin(req); const pay = store.data.planPayments.find(x => x.id === m[1]); if (!pay) throw notFound("Plan payment");
+      const b = await jsonBody(req);
+      if (b.status === "paid") { if (pay.status !== "pending") throw Object.assign(new Error("Only pending payments can be confirmed"), { status: 409 }); activatePlan(pay, "team"); }
+      else if (b.status === "cancelled") pay.status = "cancelled";
+      else throw bad("status must be paid or cancelled");
+      store.save(); return pay;
     }],
     ["DELETE", /^\/api\/samples$/, req => {
       admin(req);
@@ -777,7 +855,7 @@ function createApp(opts = {}) {
       Object.assign(s, { orders: prev?.orders || 0, verified: "verified" in input ? !!input.verified : prev ? !!prev.verified : true });
       if (prev?.ownerId) Object.assign(s, { ownerId: prev.ownerId, selfListed: true });
       if (prev?.track) Object.assign(s, { track: prev.track, onTime: prev.onTime, rating: prev.rating });
-      if (prev) Object.assign(s, { feeAgreed: !!prev.feeAgreed, feeRate: prev.feeRate ?? null });
+      if (prev) Object.assign(s, { feeAgreed: !!prev.feeAgreed, feeRate: prev.feeRate ?? null, plan: prev.plan, planUntil: prev.planUntil, planPeriod: prev.planPeriod });
       store.data.suppliers = store.data.suppliers.filter(x => x.id !== s.id).concat(plainJ(s));
       store.save(); syncSuppliers(); return s;
     }],
@@ -785,6 +863,11 @@ function createApp(opts = {}) {
       admin(req); const s = store.data.suppliers.find(x => x.id === m[1]); if (!s) throw notFound("Supplier");
       const p = await jsonBody(req); if ("verified" in p) s.verified = !!p.verified;
       if ("feeAgreed" in p) s.feeAgreed = !!p.feeAgreed;
+      if ("plan" in p) { // team switches a plan by hand (e.g. a pilot offer); days from today
+        if (!core.PLAN_KEYS.includes(p.plan)) throw bad("Unknown plan");
+        const days = Math.round(Number(p.days ?? 30)); if (p.plan !== "free" && !(days >= 1 && days <= 730)) throw bad("Days must be 1–730");
+        Object.assign(s, p.plan === "free" ? { plan: "free", planUntil: null } : { plan: p.plan, planPeriod: days >= 365 ? "yearly" : "monthly", planUntil: Date.now() + days * 864e5 });
+      }
       if ("feeRatePct" in p) { const r = p.feeRatePct === "" || p.feeRatePct == null ? null : Number(p.feeRatePct); if (r != null && !(r >= 0 && r <= 10)) throw bad("Fee must be 0–10%"); s.feeRate = r == null ? null : Math.round(r * 100) / 10000; }
       store.save(); syncSuppliers(); return s;
     }],

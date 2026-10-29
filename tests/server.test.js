@@ -738,6 +738,77 @@ const { createApp } = require("../server");
         assert.strictEqual((await team("PUT", "/api/admin/fees", { ratePct: 1.2 })).body.rate, 0.012);
       } finally { s9.close(); }
     });
+    await test("business model: plans and limits, plan billing, buyer services, category commission, economics, pricing", async () => {
+      const crypto = require("crypto");
+      const fakeRzp = async () => ({ ok: true, json: async () => ({ id: "plink_P1", short_url: "https://rzp.io/i/P1" }) });
+      const mkApp = (file, env) => createApp({ dataFile: path.join(dir, file), claude: null, fetch: fakeRzp, noTimers: true, env });
+      const { server: sA, store: stA } = mkApp("dbA.json", { ADMIN_KEY: "kA", PUBLIC_URL: "https://vb.test" }); // no online payment
+      const { server: sB, store: stB } = mkApp("dbB.json", { ADMIN_KEY: "kB", RAZORPAY_KEY_ID: "rzp_test_x", RAZORPAY_KEY_SECRET: "s", RAZORPAY_WEBHOOK_SECRET: "wh", PUBLIC_URL: "https://vb.test" });
+      await new Promise(r => sA.listen(0, r)); await new Promise(r => sB.listen(0, r));
+      const agent = (srv, key) => { let cookie = ""; return async (method, p, body) => {
+        const r = await fetch(`http://127.0.0.1:${srv.address().port}` + p, { method, headers: { "content-type": "application/json", ...(cookie ? { cookie } : {}), ...(key ? { "x-admin-key": key } : {}) }, body: body ? JSON.stringify(body) : undefined });
+        const sc = r.headers.get("set-cookie"); if (sc) cookie = sc.split(";")[0];
+        return { status: r.status, body: await r.json() }; }; };
+      const listing = offers => ({ name: "Meera Packs", city: "Chakan", gstin: "27AAPFU0939F1ZV", lead: 2, coverage: 400, offers });
+      const box = { p: "box3", tiersText: "500:14.5, 5000:14", cap: 50000 };
+      try {
+        // --- Plans without online payment: limits, request, team confirms ---
+        const sup = agent(sA), team = agent(sA, "kA"), buyer = agent(sA);
+        await sup("POST", "/api/auth/signup", { role: "supplier", name: "Meera", business: "Meera Packs", email: "meera@p.in", password: "longenough1" });
+        const twoCats = (await sup("PUT", "/api/my/listing", listing([box, { p: "gloves", tiersText: "50:300", cap: 5000 }])));
+        assert.strictEqual(twoCats.status, 402); assert.match(twoCats.body.error, /Free plan covers 1 category/);
+        const sid = (await sup("PUT", "/api/my/listing", listing([box]))).body.id;
+        const pub = (await sup("GET", "/api/pricing")).body;
+        assert.ok(pub.plans.growth.monthly > 0 && !("costs" in pub), "public pricing hides cost assumptions");
+        assert.strictEqual((await sup("POST", "/api/my/plan", { plan: "free" })).status, 400);
+        const req1 = (await sup("POST", "/api/my/plan", { plan: "growth", period: "monthly" })).body;
+        assert.deepStrictEqual([req1.status, req1.url, req1.amount, req1.gst], ["pending", null, pub.plans.growth.monthly, Math.round(pub.plans.growth.monthly * 0.18)]);
+        assert.strictEqual((await sup("GET", "/api/state")).body.planPayments[0].status, "pending", "suppliers see their own plan payments");
+        assert.strictEqual((await team("PATCH", "/api/admin/plan-payments/" + req1.id, { status: "paid" })).body.status, "paid");
+        const mine = (await sup("GET", "/api/state")).body.suppliers.find(s => s.id === sid);
+        assert.ok(mine.plan === "growth" && mine.planUntil > Date.now() + 29 * 864e5, "Growth for 30 days");
+        assert.strictEqual((await sup("PUT", "/api/my/listing", listing([box, { p: "gloves", tiersText: "50:300", cap: 5000 }]))).status, 200, "Growth covers 3 categories");
+        await buyer("POST", "/api/auth/signup", { role: "buyer", name: "Ravi", business: "Ravi Exports", email: "ravi@b.in", password: "longenough1" });
+        assert.ok(!("plan" in (await buyer("GET", "/api/state")).body.suppliers.find(s => s.id === sid)), "buyers don't see suppliers' plans");
+        // --- Buyer services priced on the server; category commission with the plan discount ---
+        await team("PATCH", "/api/admin/suppliers/" + sid, { feeAgreed: true });
+        const r = (await buyer("POST", "/api/rfqs", { productId: "box3", qty: 6000, city: "Pune", quotes: [] })).body;
+        const o = (await buyer("POST", "/api/orders", { order: { productId: "box3", sid, rfqId: r.id, extras: { freight: true, assured: true, inspection: true, insurance: false, services: { total: 1 } } } })).body;
+        const raw = stA.data.orders.find(x => x.po === o.po);
+        assert.strictEqual(raw.services.lines.map(l => l.k).join(), "freight,assured,inspection", "only real services, priced server-side");
+        assert.ok(raw.services.total > 1 && raw.freight === 0 && raw.kmFreight.usual > 0 && raw.inspection.status === "booked");
+        assert.deepStrictEqual([raw.fee.rate, raw.fee.plan], [0.0175, "growth"], "packaging 2% minus Growth's 0.25 points");
+        assert.ok(!("fee" in o) && o.services.total === raw.services.total, "buyer sees their services bill, not the supplier's fee");
+        const sv = (await sup("GET", "/api/state")).body.orders.find(x => x.po === o.po);
+        assert.ok(!("services" in sv) && sv.kmFreight && sv.inspection, "supplier sees the freight and inspection plan, not the buyer's bill");
+        assert.strictEqual((await team("PATCH", "/api/admin/orders/" + encodeURIComponent(o.po), { services: { status: "paid" }, inspection: { status: "passed" } })).body.inspection.status, "passed");
+        // --- Economics and pricing (team only) ---
+        assert.strictEqual((await buyer("GET", "/api/admin/economics")).status, 401);
+        const ec = (await team("GET", "/api/admin/economics?days=30")).body;
+        assert.deepStrictEqual([ec.orders, ec.payingSuppliers, ec.streams.plans, ec.streams.commission], [1, 1, pub.plans.growth.monthly, raw.fee.amount]);
+        assert.ok(ec.streams.freight > 0 && ec.streams.assured > 0 && ec.revenue > ec.streams.commission && ec.takeRate > 0);
+        assert.strictEqual(ec.gmv, raw.landed + raw.services.total, "GMV is what the buyer pays in all");
+        assert.ok(ec.services[0].po === o.po && ec.planPayments[0].supplier === "Meera Packs");
+        assert.strictEqual((await team("PUT", "/api/admin/pricing", { take: { byCat: { pack: 0.4 } } })).status, 400, "absurd commission refused");
+        const np = (await team("PUT", "/api/admin/pricing", { plans: { growth: { monthly: 999 } }, costs: { opsPerOrder: 90 } })).body;
+        assert.deepStrictEqual([np.plans.growth.monthly, np.costs.opsPerOrder, np.plans.pro.monthly], [999, 90, pub.plans.pro.monthly]);
+        assert.strictEqual((await sup("GET", "/api/pricing")).body.plans.growth.monthly, 999);
+        assert.strictEqual((await team("PATCH", "/api/admin/suppliers/" + sid, { plan: "pro", days: 14 })).body.plan, "pro", "team can switch plans by hand");
+        // --- Online plan purchase: Razorpay link, signed webhook switches the plan on once ---
+        const sup2 = agent(sB);
+        await sup2("POST", "/api/auth/signup", { role: "supplier", name: "Om", business: "Om Traders", email: "om@p.in", password: "longenough1" });
+        const sid2 = (await sup2("PUT", "/api/my/listing", { ...listing([box]), name: "Om Traders" })).body.id;
+        const req2 = (await sup2("POST", "/api/my/plan", { plan: "pro", period: "yearly" })).body;
+        assert.strictEqual(req2.url, "https://rzp.io/i/P1");
+        const ev = JSON.stringify({ event: "payment_link.paid", payload: { payment_link: { entity: { id: "plink_P1", notes: { kind: "plan", planPayment: req2.id, sid: sid2 } } }, payment: { entity: { id: "pay_P1" } } } });
+        const sig = crypto.createHmac("sha256", "wh").update(ev).digest("hex");
+        const hook = id => fetch(`http://127.0.0.1:${sB.address().port}/webhooks/razorpay`, { method: "POST", headers: { "content-type": "application/json", "x-razorpay-signature": sig, "x-razorpay-event-id": id }, body: ev });
+        assert.strictEqual((await hook("p1")).status, 200); await hook("p1");
+        const s2 = stB.data.suppliers.find(s => s.id === sid2);
+        assert.ok(s2.plan === "pro" && s2.planPeriod === "yearly" && s2.planUntil > Date.now() + 360 * 864e5, "a year of Pro");
+        assert.strictEqual(stB.data.planPayments.filter(p => p.status === "paid").length, 1, "paid once");
+      } finally { sA.close(); sB.close(); }
+    });
     await test("unknown API path is a JSON 404", async () => {
       const { status, body } = await call("GET", "/api/nope");
       assert.deepStrictEqual([status, body.error], [404, "No such endpoint"]);

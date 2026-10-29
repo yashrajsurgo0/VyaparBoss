@@ -299,5 +299,32 @@ const Repo={
     if(this.ops)return this.api("PUT","api/admin/outreach/settings",st);
     const o=await this.leads();o.outreach.settings={...o.outreach.settings,...st};this.saveLocalLeads(o);return o.outreach.settings;
   },
-  async outreach(leadIds,templateId,send){return this.api("POST","api/admin/outreach",{leadIds,templateId,send:!!send});}
+  async outreach(leadIds,templateId,send){return this.api("POST","api/admin/outreach",{leadIds,templateId,send:!!send});},
+
+  /* Pricing, plans and economics. The demo in this browser uses the default pricing and computes the economics locally. */
+  get pricing(){return pricingWith(this.data.pricing||(this.mode==="server"?null:this.localPricing()));},
+  localPricing(){try{return JSON.parse(localStorage.getItem(KEY+".pricing")||"null");}catch(e){return null;}},
+  async fetchPricing(){if(this.mode!=="server")return this.pricing;const p=await this.api("GET","api/pricing",null,this.publicBase);this.data.pricing=p;return this.pricing;},
+  async teamPricing(){return this.mode==="server"?this.api("GET","api/admin/pricing"):pricingWith(this.localPricing());},
+  async savePricing(p){
+    if(this.mode==="server"){const out=await this.api("PUT","api/admin/pricing",p);const {costs,...pub}=out;this.data.pricing=pub;return out;}
+    const r=normalizePricing(p);if(!r.ok)throw new Error(r.errors.join(". "));try{localStorage.setItem(KEY+".pricing",JSON.stringify(r.p));}catch(e){}return r.p;
+  },
+  async resetPricing(){if(this.mode==="server"){const out=await this.api("DELETE","api/admin/pricing");this.data.pricing=null;return out;}try{localStorage.removeItem(KEY+".pricing");}catch(e){}return PRICING;},
+  async economics(days){
+    if(this.mode==="server")return this.api("GET","api/admin/economics?days="+(days||30));
+    const pricing=pricingWith(this.localPricing());
+    return {...economicsReport({orders:this.data.orders,rfqs:this.data.rfqs,suppliers:SUPPLIERS,planPayments:[],pricing,days}),pricing,planPayments:[],services:this.data.orders.filter(o=>o.services&&!o.sample&&!o.cancelled).map(o=>({po:o.po,date:o.date,buyer:"",lines:o.services.lines.map(l=>l.label),total:o.services.total,status:o.services.status,inspection:o.inspection?.status||null})),local:true};
+  },
+  async buyPlan(plan,period){
+    if(this.mode!=="server")throw new Error("Plans are bought on the live site, kaantamandi.com. This demo keeps everything in your browser.");
+    const out=await this.api("POST","api/my/plan",{plan,period});await this.refresh();return out;
+  },
+  async decidePlanPayment(id,status){return this.api("PATCH","api/admin/plan-payments/"+encodeURIComponent(id),{status});},
+  async setSupplierPlan(sid,plan,days){const s=await this.api("PATCH","api/admin/suppliers/"+encodeURIComponent(sid),{plan,days});const i=this.data.suppliers.findIndex(x=>x.id===sid);if(i>=0)this.data.suppliers[i]=s;return s;},
+  async serviceStatus(po,patch){
+    if(this.mode==="server")return this.teamOrder(po,patch);
+    const o=this.data.orders.find(x=>x.po===po);if(o){if(patch.services&&o.services)o.services.status=patch.services.status;if(patch.inspection&&o.inspection)Object.assign(o.inspection,patch.inspection,{at:Date.now()});}
+    this.saveLocal();return o;
+  }
 };

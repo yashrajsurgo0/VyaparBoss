@@ -21,7 +21,8 @@
 |---|---|
 | **Buyers** | Ask in plain words (AI turns it into a structured request) · compare suppliers on delivered price and delivery time · ask every supplier for a better price within their own discount limits · approve, then track dispatch with the LR number · confirm receipt, rate the supplier, raise problems · repeat orders on a schedule · monthly budget · team members with approval limits · GST invoices and payments |
 | **Suppliers** | Free self-listing with price tiers, minimum order, capacity and delivery range · only requests they can serve · quote in the app and see their rank (never rivals' prices) · confirm, dispatch, invoice, confirm payments · a track record earned from real deliveries |
-| **Operations** | KPI dashboard (order value, conversion, supplier reply time, on-time rate, problem rate, repeat buyers) · alerts for late orders, sourcing gaps and unconfirmed payments · problem resolution · fees and payment settlement · supplier outreach pipeline · setup checklist |
+| **Business model** | Supplier plans (Free / Growth / Pro) with listing limits, lower commission and faster payouts, paid by Razorpay link · commission by category with big-order and plan discounts, only where agreed · buyer add-ons at checkout: KaantaMandi Freight, Assured (refunded if late), pre-dispatch inspection, transit insurance · public pricing page · **ranking is never for sale** (tested) |
+| **Operations** | Unit economics: GMV, revenue by stream, take rate, contribution per order, CAC and payback, buyer cohorts, MRR, a what-if calculator and an editable price list · KPI dashboard (order value, conversion, supplier reply time, on-time rate, problem rate, repeat buyers) · alerts for late orders, sourcing gaps and unconfirmed payments · problem resolution · fees and payment settlement · supplier outreach pipeline · setup checklist |
 
 | Buying | Comparing delivered prices |
 |---|---|

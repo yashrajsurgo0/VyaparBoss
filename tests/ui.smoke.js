@@ -16,8 +16,8 @@ const ctx=vm.createContext({console:{log(){},warn(){},error:(...a)=>errors.push(
   location:loc,URLSearchParams,history:{replaceState(){loc.hash="";}},sessionStorage:{getItem:()=>null,setItem(){},removeItem(){}},addEventListener(){},fetch:async(u,o={})=>{const r=await fetch(new URL(u,BASE+"/"),{...o,headers:{...(o.headers||{}),...(jar.c?{cookie:jar.c}:{})}});const sc=r.headers.get("set-cookie");if(sc)jar.c=sc.split(";")[0];return r;},AbortController,setTimeout,clearTimeout,setInterval:()=>0,requestAnimationFrame:f=>f(),
   matchMedia:()=>({matches:false}),scrollTo(){},navigator:{},Date,Math,Intl,JSON,URL,Promise});
 ctx.window=ctx;
-const src=["data","util","engine","parser","repo","i18n","app","grow","roles"].map(f=>fs.readFileSync(path.join(ROOT,"src/js",f+".js"),"utf8")).join("\n;\n");
-vm.runInContext(src+"\nthis.__t={say:sayToBhai,Repo,get flow(){return flow},ACTIONS,renderAll,route,loc:location,get pub(){return pub},submitJoin,showInsightsView,showSupplierView,setLocale,get LOCALE(){return LOCALE},showAuth,get au(){return au},submitAuth,get df(){return df},set df(v){df=v},renderDirectory,role,renderRequests,renderListing,renderSOrders,showTab,navFor,get rq(){return rq},renderAccount,submitRecover};",ctx);
+const src=["data","util","engine","parser","repo","i18n","app","grow","roles","biz"].map(f=>fs.readFileSync(path.join(ROOT,"src/js",f+".js"),"utf8")).join("\n;\n");
+vm.runInContext(src+"\nthis.__t={say:sayToBhai,Repo,get flow(){return flow},ACTIONS,renderAll,route,loc:location,get pub(){return pub},submitJoin,showInsightsView,showSupplierView,setLocale,get LOCALE(){return LOCALE},showAuth,get au(){return au},submitAuth,get df(){return df},set df(v){df=v},renderDirectory,role,renderRequests,renderListing,renderSOrders,showTab,navFor,get rq(){return rq},renderAccount,submitRecover,renderBuy,renderPricingPage,renderEconomics,renderPlan};",ctx);
 const T=ctx.__t,wait=ms=>new Promise(r=>setTimeout(r,ms));
 let fails=0;const check=(c,m)=>{console.log((c?"ok - ":"FAIL - ")+m);if(!c)fails++;};
 const act=(name,ds={})=>T.ACTIONS[name]({dataset:ds,disabled:false,textContent:"",classList:{add(){},remove(){}},isConnected:true});
@@ -38,11 +38,16 @@ const buy=()=>els["v-buy"].innerHTML;
   check(T.flow.negLast&&T.flow.negLast.length>0,"negotiation ran");
   const sid=T.flow.r&&buy().match(/data-action="choose" data-sid="([^"]+)"/)[1];
   act("choose",{sid});check(T.flow.stage==="confirm"&&buy().includes("Place order"),"choose leads to confirm");
+  check(buy().includes("Add-ons from KaantaMandi")&&buy().includes("KaantaMandi Assured")&&buy().includes("Pre-dispatch inspection"),"confirm offers optional add-ons");
+  T.flow.extras={assured:true,freight:true};T.renderBuy();
+  check(buy().includes("You pay in all")&&buy().includes("KaantaMandi Assured + GST"),"ticked add-ons show in the total");
   const before=T.Repo.data.orders.length;
   T.ACTIONS.approve({dataset:{},disabled:false});await wait(100);
   check(T.Repo.data.orders.length===before,"no order without the approval tick");
   el("okBox").checked=true;T.ACTIONS.approve({dataset:{},disabled:false});await wait(300);
   check(T.flow.stage==="done"&&T.Repo.data.orders.length===before+1,"order placed after approval: "+T.flow.po);
+  if(T.Repo.mode==="local"){const o=T.Repo.data.orders.find(x=>x.po===T.flow.po);check(o.services&&o.services.lines.length===2&&o.freight===0&&o.kmFreight,"add-ons saved on the order; partner freight replaces the supplier's");}
+  else {const o=T.Repo.data.orders.find(x=>x.po===T.flow.po);check(o.services&&o.services.lines.length===2,"server priced the add-ons");}
   act("print-po",{po:T.flow.po});check(els.printArea.innerHTML.includes("Purchase order")&&els.printArea.innerHTML.includes(T.flow.po)&&els.printArea.innerHTML.includes("Total delivered"),"printable purchase order");
   { const po=T.flow.po;
     let err=null;try{await T.Repo.orderAction(po,{action:"review",stars:5},"buyer");}catch(e){err=e;}
@@ -150,6 +155,9 @@ const buy=()=>els["v-buy"].innerHTML;
     check(els["v-requests"].innerHTML.includes("RFQ-TEST-1")&&els["v-requests"].innerHTML.includes("#1 of 2 on price")&&els["v-requests"].innerHTML.includes("Send quote"),"supplier sees the request, rank and a quote form");
     await T.Repo.myQuote("RFQ-TEST-1",{unit:13.9,lead:2,note:"ready stock"});T.renderRequests();
     check(els["v-requests"].innerHTML.includes("Quote sent")&&els["v-requests"].innerHTML.includes("Update quote"),"in-app quote is recorded");
+    els["v-plan"].hidden=false;T.renderPlan();
+    check(els["v-plan"].innerHTML.includes("Current plan")&&els["v-plan"].innerHTML.includes("Switch to Growth")&&els["v-plan"].innerHTML.includes("Products"),"supplier sees their plan, usage and upgrades");
+    els["v-plan"].hidden=true;
     T.showTab("buy");check(T.flow&&!els["v-buy"].hidden===false||true,"buyer tab redirects for suppliers");
     els["v-account"].hidden=false;T.renderAccount();check(els["v-account"].innerHTML.includes("Delete my account")&&els["v-account"].innerHTML.includes("privacy.html"),"account settings offer delete and link the policy");
     await T.Repo.logout();check(T.role()===null,"logout returns to the welcome screen");
@@ -162,6 +170,10 @@ const buy=()=>els["v-buy"].innerHTML;
     T.au.role="supplier";await T.submitAuth("login");check(T.role()==="supplier","log back in as the supplier");
     await T.Repo.logout();
   }
+  loc.hash="#pricing";T.route();
+  check(els["v-public"].innerHTML.includes("Ranking is never for sale")&&els["v-public"].innerHTML.includes("Growth")&&els["v-public"].innerHTML.includes("Commission on orders you win"),"public pricing page");
+  loc.hash="";T.route();
+  if(T.Repo.mode==="local"){await T.renderEconomics();const ec=els["s-econ"].innerHTML;check(ec.includes("Revenue by stream")&&ec.includes("What if?")&&ec.includes("Save pricing"),"economics dashboard works in the demo");}
   check(!errors.length,"no console errors "+errors.join(" | "));
   process.exitCode=fails?1:0;
 })();

@@ -233,6 +233,7 @@
   <section class="view" id="v-sorders" aria-label="Orders" hidden></section>
   <section class="view" id="v-listing" aria-label="My listing" hidden></section>
   <section class="view" id="v-sinsights" aria-label="Insights" hidden></section>
+  <section class="view" id="v-plan" aria-label="Your plan" hidden></section>
 
   <!-- ===== Everyone ===== -->
   <section class="view" id="v-account" aria-label="Account" hidden></section>
@@ -244,6 +245,7 @@
       <div class="seg" role="tablist" aria-label="Team pages">
         <button data-tview="setup" aria-selected="false">Setup</button>
         <button data-tview="ops" aria-selected="false">Ops</button>
+        <button data-tview="econ" aria-selected="false">Economics</button>
         <button data-tview="network" aria-selected="true">Network</button>
         <button data-tview="apps" aria-selected="false">Sign-ups</button>
         <button data-tview="outreach" aria-selected="false">Outreach</button>
@@ -254,6 +256,7 @@
     <div id="teamGate"></div>
     <div id="s-setup" hidden></div>
     <div id="s-ops" hidden></div>
+    <div id="s-econ" hidden></div>
     <div id="s-network">
       <p id="snetIntro" class="muted lede-sm"></p>
       <div class="toolbar">
@@ -287,7 +290,7 @@
 
 <nav class="bottomnav" id="bottomnav" aria-label="Main"></nav>
 
-<footer class="wrap foot"><b>KaantaMandi. <span data-i18n="tagline">Vyapar bada, jhanjhat chhota!</span></b> <a href="#join/s">List your business free</a> · <a href="#join/b">Join as a buyer</a> · <a href="privacy.html">Privacy</a> · <a href="terms.html">Terms</a> · <a href="contact.html">Contact</a> · <a href="#" data-action="team-open">Team</a><br>By House of 24 Pvt. Ltd. The 20 sample suppliers, their GSTINs and prices, and the GST rates are illustrative.</footer>
+<footer class="wrap foot"><b>KaantaMandi. <span data-i18n="tagline">Vyapar bada, jhanjhat chhota!</span></b> <a href="#join/s">List your business free</a> · <a href="#join/b">Join as a buyer</a> · <a href="#pricing">Pricing</a> · <a href="privacy.html">Privacy</a> · <a href="terms.html">Terms</a> · <a href="contact.html">Contact</a> · <a href="#" data-action="team-open">Team</a><br>By House of 24 Pvt. Ltd. The 20 sample suppliers, their GSTINs and prices, and the GST rates are illustrative.</footer>
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="js/data.js"></script>
@@ -299,5 +302,6 @@
 <script src="js/app.js"></script>
 <script src="js/grow.js"></script>
 <script src="js/roles.js"></script>
+<script src="js/biz.js"></script>
 </body>
 </html>

@@ -11,12 +11,12 @@ function createRazorpay(env, fetchImpl = globalThis.fetch) {
     test: String(id).startsWith("rzp_test_"),
     webhookOn: !!env.RAZORPAY_WEBHOOK_SECRET,
     /** Creates a hosted payment link for one order's amount due. Amount in rupees. */
-    async createLink({ amount, po, description, callbackUrl }) {
+    async createLink({ amount, po, description, callbackUrl, notes = {} }) {
       const body = {
         amount: Math.round(amount * 100), currency: "INR", accept_partial: false, upi_link: false,
         reference_id: (String(po).replace(/\W/g, "") + "-" + Date.now().toString(36)).slice(0, 40),
         description: String(description).slice(0, 2000), notify: { sms: false, email: false }, reminder_enable: false,
-        notes: { po: String(po) }, callback_url: callbackUrl, callback_method: "get",
+        notes: { po: String(po), ...notes }, callback_url: callbackUrl, callback_method: "get",
         expire_by: Math.floor(Date.now() / 1000) + 7 * 86400,
       };
       const r = await fetchImpl("https://api.razorpay.com/v1/payment_links", { method: "POST", headers: { authorization: auth, "content-type": "application/json" }, body: JSON.stringify(body) });

@@ -3,7 +3,7 @@
    then quotes (best pick first, details on demand), then approval. Plain browser script, loaded last. */
 
 /* ===================== STATE ===================== */
-const freshFlow=()=>({stage:"start",r:{},msgs:[],open:null,cat:null,sel:null,neg:{},negLast:null,showNeg:false,po:null,busy:false,newCard:true});
+const freshFlow=()=>({stage:"start",r:{},msgs:[],open:null,cat:null,sel:null,neg:{},negLast:null,showNeg:false,po:null,busy:false,newCard:true,extras:{}});
 let flow=freshFlow();
 let ai=null;           // claude.ai artifact runtime `sample` function, or null
 let aiState="pending"; // pending | server | live | off
@@ -94,7 +94,9 @@ async function approve(btn){
   const r=flow.r,res=discoverNow(),q=res.eligible.find(x=>x.s.id===flow.sel);if(!q)return;
   btn.disabled=true;
   try{
-    const o=await Repo.createOrder(orderRecord(r,res,q),{status:"ordered",wonBy:q.s.id,quotes:quoteSummary(res)});
+    const rec=orderRecord(r,res,q),extras={...(flow.extras||{})};
+    if(Repo.mode==="server")rec.extras=extras;else applyServices(rec,q,extras,Repo.pricing);
+    const o=await Repo.createOrder(rec,{status:"ordered",wonBy:q.s.id,quotes:quoteSummary(res)});flow.extras={};
     flow.po=o.po;flow.stage="done";flow.newCard=true;
     if(o.approval?.status==="pending"){bhai(`Sent to ${Repo.me?.org?.ownerName||"the account owner"} for approval (${o.approval.why.toLowerCase()}). ${q.s.name} gets the order once it's approved.`);toast("Sent for approval");}
     else{bhai(t("placed",{po:o.po,name:q.s.name}));toast(`Order placed: ${o.po}`);}
@@ -256,7 +258,7 @@ function budgetNote(amount){
 function confirmCard(){
   const r=flow.r,p=PMAP[r.productId],q=discoverNow().eligible.find(x=>x.s.id===flow.sel);
   if(!q){flow.stage="quotes";return quotesCard();}
-  const by=new Date(Date.now()+q.eta*864e5);
+  const by=new Date(Date.now()+q.eta*864e5),tot=checkoutTotals(q);
   return `<div class="card${flow.newCard?" fresh":""}">
     <p class="q-title">Your order</p>
     <dl class="summary">
@@ -264,12 +266,14 @@ function confirmCard(){
       <dt>Quantity</dt><dd>${qfmt(r.qty)} ${p.unit}</dd>
       <dt>Supplier</dt><dd>${esc(q.s.name)}, ${q.s.city}</dd>
       <dt>Deliver to</dt><dd>${r.city}, by about ${by.toLocaleDateString("en-IN",{day:"numeric",month:"long"})}</dd>
-      <dt>Total</dt><dd class="num">${inr(q.landed)} <span class="muted" style="font-weight:400">with GST and freight${isGlobal()?`, ${usd(q.landed)}`:""}</span></dd>
+      <dt>Total</dt><dd class="num">${inr(tot.total)} <span class="muted" style="font-weight:400">${tot.services?"with GST, freight and add-ons":"with GST and freight"}${isGlobal()?`, ${usd(tot.total)}`:""}</span></dd>
     </dl>
+    ${checkoutBreakdown(q,tot)}
     <details class="more"><summary>Cost breakdown ${ico("i-chev","")}</summary><div>${breakdownTable(q,p,r)}</div></details>
-    ${budgetNote(q.landed)}
-    <label class="approve"><input type="checkbox" id="okBox"><span>I approve this purchase of ${qfmt(r.qty)} ${p.unit} for ${inr(q.landed)}.</span></label>
-    <div class="actions"><button class="btn primary big" id="approveBtn" data-action="approve" disabled>${needsOwner(q.landed)?"Send for approval":"Place order"}</button><button class="btn ghost" data-action="back-quotes">Back to quotes</button></div>
+    ${addonsHTML(q)}
+    ${budgetNote(tot.total)}
+    <label class="approve"><input type="checkbox" id="okBox"><span>I approve this purchase of ${qfmt(r.qty)} ${p.unit} for ${inr(tot.total)}${tot.services?" (supplier and KaantaMandi add-ons)":""}.</span></label>
+    <div class="actions"><button class="btn primary big" id="approveBtn" data-action="approve" disabled>${needsOwner(tot.total)?"Send for approval":"Place order"}</button><button class="btn ghost" data-action="back-quotes">Back to quotes</button></div>
   </div>`;
 }
 function doneCard(){
@@ -359,7 +363,7 @@ function moneyHTML(o,side){
       <div class="field"><label for="id-${k}">Invoice date</label><input id="id-${k}" name="date" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
     </div><p class="hint">Bhai fills in the GST split, HSN and the buyer's billing details from the order. Check it before you send it.</p><button class="btn sm">Create invoice</button></form></div></details>`:"";
   const fee=side==="supplier"&&o.fee?`<p class="hint">KaantaMandi fee on this order: ${inr(o.fee.amount)} (${(o.fee.rate*100).toFixed(1)}% of goods, as agreed) · ${esc(o.fee.status)}</p>`:"";
-  return `<div class="moneybox"><div class="ohead"><b>Payment</b><span class="pill ${pc}">${pl}</span></div>
+  return `<div class="moneybox"><div class="ohead"><b>${o.services&&side==="buyer"?"Payment to the supplier":"Payment"}</b><span class="pill ${pc}">${pl}</span></div>
     <p class="hint">${inr(paidOf(o))} paid of ${inr(o.landed)}${due>0?` · <b>${inr(due)} due</b>`:""}${claimed?` · ${inr(claimed)} waiting for ${side==="supplier"?"you":"the supplier"} to confirm`:""}</p>${list}${online?`<div class="actions">${online}</div>`:""}${payForm}${inv}${invForm}${fee}</div>`;
 }
 /* Printable GST tax invoice, issued by the supplier from the order. */
@@ -407,7 +411,7 @@ function ordersTopHTML(){
   if(pend.length){
     const owner=!org.member;
     parts.push(`<section class="topsec"><h2 class="sub">${owner?"Waiting for your approval":"Waiting for approval"}</h2>${pend.map(o=>{const p=PMAP[o.productId],k=okey(o.po);
-      return `<div class="panel ocard approvalcard"><div class="ohead"><div><h3>${qfmt(o.qty)} ${p.unit} ${esc(p.name)}</h3><p class="meta">${esc(o.approval.name||"A team member")} · ${esc(o.sname)} to ${esc(o.city)} · ${fdate(o.approval.at)}</p></div><div class="amt num">${inr(o.landed)}</div></div>
+      return `<div class="panel ocard approvalcard"><div class="ohead"><div><h3>${qfmt(o.qty)} ${p.unit} ${esc(p.name)}</h3><p class="meta">${esc(o.approval.name||"A team member")} · ${esc(o.sname)} to ${esc(o.city)} · ${fdate(o.approval.at)}</p></div><div class="amt num">${inr(orderTotal(o))}</div></div>
         <p class="note">${esc(o.approval.why)}.</p>
         ${owner?`<form class="oform replyrow" data-form="decide" data-po="${esc(o.po)}" novalidate><label class="sr" for="dn-${k}">Note (optional)</label><input id="dn-${k}" name="note" maxlength="200" placeholder="Note for ${esc(o.approval.name||"them")} (optional)"><button class="btn sm primary" name="go" value="approve">Approve</button><button class="btn sm danger" type="button" data-action="decide-no" data-po="${esc(o.po)}">Decline</button></form>`
           :`<p class="hint">${esc(org.ownerName||"The account owner")} decides; you'll get an email. The supplier hasn't been sent anything yet.</p>`}</div>`;}).join("")}</section>`);
@@ -441,16 +445,16 @@ function renderOrders(){
     const status=o.cancelled?`<b>Cancelled</b>`:`<b>${STAGES[o.stage]}</b><span class="muted">${deliv?`Delivered ${fdate(o.history?.[4]||Date.now())}${o.history?.[4]>promisedBy(o)+432e5?' <span class="pill warn">Late</span>':""}`:`Promised by ${fdate(promisedBy(o))}`}${isLate(o)?' <span class="pill bad">Running late</span>':o.deadline&&o.eta>o.deadline&&!deliv?' <span class="pill bad">After your date</span>':""}</span>`;
     return `<div class="panel ocard${o.cancelled?" cancelled":""}">
       <div class="ohead"><div><h3>${qfmt(o.qty)} ${p.unit} ${esc(p.name)}</h3><p class="meta">${esc(sname)}${scity?`, ${scity}`:""} to ${o.city}${o.sample?' <span class="pill">Example</span>':""}${o.source==="whatsapp"?' <span class="pill good">WhatsApp</span>':""}</p></div>
-        <div class="amt num">${inr(o.landed)}${saved&&!o.cancelled?`<small>You saved ${inr(saved)}</small>`:""}</div></div>
+        <div class="amt num">${inr(orderTotal(o))}${saved&&!o.cancelled?`<small>You saved ${inr(saved)}</small>`:""}</div></div>
       ${o.cancelled?"":`<div class="track" aria-hidden="true">${STAGES.map((_,i)=>`<i class="${i<o.stage||deliv?"on":i===o.stage?"now":""}"></i>`).join("")}</div>`}
       <div class="ostatus">${status}</div>
       ${shipmentHTML(o)}${receiptHTML(o)}
       ${o.sample?"":buyerNext(o,sname)}
       ${disputeHTML(o,"buyer")}
-      ${o.sample?"":moneyHTML(o,"buyer")}
+      ${o.sample?"":moneyHTML(o,"buyer")}${servicesHTML(o,"buyer")}
       <details class="more"><summary>Details ${ico("i-chev","")}</summary><div>
         <p class="hint">Purchase order <b class="num">${po}</b>, placed ${dstr(o.date)}</p>
-        <table class="breakdown"><tbody><tr><td>Goods</td><td>${inr(o.subtotal)}</td></tr><tr><td>GST</td><td>${inr(o.gst)}</td></tr><tr><td>Freight</td><td>${inr(o.freight)}</td></tr><tr class="tot"><td>Total</td><td>${inr(o.landed)}</td></tr></tbody></table>
+        <table class="breakdown"><tbody><tr><td>Goods</td><td>${inr(o.subtotal)}</td></tr><tr><td>GST</td><td>${inr(o.gst)}</td></tr><tr><td>Freight${o.kmFreight?" (KaantaMandi Freight, below)":""}</td><td>${inr(o.freight)}</td></tr>${(o.services?.lines||[]).map(l=>`<tr><td>${esc(l.label)} + GST</td><td>${inr(l.amount+l.gst)}</td></tr>`).join("")}<tr class="tot"><td>Total</td><td>${inr(orderTotal(o))}</td></tr></tbody></table>
         <div class="steps">${STAGES.map((st,i)=>`<div class="${i<=o.stage?"on":""}">${st}${o.history?.[i]?`<br><span class="muted">${dstr(o.history[i])}</span>`:""}</div>`).join("")}</div>
         <div class="actions"><button class="btn sm" data-action="reorder" data-po="${po}">Order again</button><button class="btn sm ghost" data-action="print-po" data-po="${po}">Print PO</button></div>
         ${!o.sample&&canRepeat()?`<details class="more sub"><summary>Repeat this order ${ico("i-chev","")}</summary><div>
@@ -719,7 +723,7 @@ function poHTML(o){
       <div><small>Buyer</small><p>${buyer}</p></div><div><small>Deliver to</small><p>${esc(o.city)}${o.deadline?`<br>Needed within ${o.deadline} days`:""}<br>Expected by ${new Date(o.date+o.eta*864e5).toLocaleDateString("en-IN",{day:"numeric",month:"long",year:"numeric"})}</p></div></div>
     <table class="po-lines"><thead><tr><th>Item</th><th>Quantity</th><th>Rate</th><th>Amount</th></tr></thead>
       <tbody><tr><td><b>${esc(p.name)}</b><br><small>${esc(p.spec||"")}</small></td><td>${qfmt(o.qty)} ${p.unit}</td><td>${inr(per,2)} / ${unitOne(p.unit)}</td><td>${inr(o.subtotal)}</td></tr></tbody>
-      <tfoot><tr><td colspan="3">GST (${p.gst}%)</td><td>${inr(o.gst)}</td></tr><tr><td colspan="3">Freight</td><td>${inr(o.freight)}</td></tr><tr class="tot"><td colspan="3">Total delivered</td><td>${inr(o.landed)}</td></tr></tfoot></table>
+      <tfoot><tr><td colspan="3">GST (${p.gst}%)</td><td>${inr(o.gst)}</td></tr><tr><td colspan="3">${o.kmFreight?"Freight: KaantaMandi's partner carrier collects":"Freight"}</td><td>${inr(o.freight)}</td></tr>${o.inspection?`<tr><td colspan="3">Pre-dispatch inspection booked by the buyer</td><td>–</td></tr>`:""}<tr class="tot"><td colspan="3">Total delivered</td><td>${inr(o.landed)}</td></tr></tfoot></table>
     ${s.terms?`<p><small>Payment terms</small><br>${esc(s.terms)}</p>`:""}
     <p class="po-fine">Approved by the buyer on KaantaMandi. This order is between the buyer and the supplier; the supplier's tax invoice is the bill. KaantaMandi, House of 24 Pvt. Ltd.</p>
   </div>`;
