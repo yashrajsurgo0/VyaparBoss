@@ -23,7 +23,7 @@ function addonsHTML(q){
     ${sq.freight.usual>0?row("freight","KaantaMandi Freight",`${inr(sq.freight.price)} <s class="muted">${inr(sq.freight.usual)}</s>`,`Our partner carrier collects from ${esc(q.s.name)} and you track it here. ${inr(sq.freight.saves)} less than the supplier's freight, before 5% GST.`):""}
     ${row("assured","KaantaMandi Assured",inr(sq.assured.price),"Our team takes up any problem with this order (short, damaged or wrong goods) with the supplier until it's sorted. Arrives after the promised date? This fee comes back.")}
     ${row("inspection","Pre-dispatch inspection",inr(sq.inspection.price),`An inspector checks quantity and spec at ${esc(q.s.city)} before it leaves. The result shows on your order.`)}
-    ${row("insurance","Transit insurance",inr(sq.insurance.price),"Cover for loss or damage on the way, for the goods value with GST, through our insurance partner. We confirm the cover before dispatch.")}
+    ${Repo.pricing.insurance.enabled?row("insurance","Transit insurance",inr(sq.insurance.price),"Cover for loss or damage on the way, for the goods value with GST, through our insurance partner. We confirm the cover before dispatch."):""}
     <p class="hint">Billed by KaantaMandi on its own invoice with GST (18%, freight 5%), claimable as input credit. Indicative prices: our team confirms partner bookings with you. <a href="#pricing">How pricing works</a></p>
   </div></details>`;
 }
@@ -89,7 +89,7 @@ function renderPricingPage(){
         <tr><td><b>KaantaMandi Freight</b><br><small class="muted">Partner carrier, booked for you</small></td><td>${rpct(P.freight.discount,0)} below the supplier's freight</td></tr>
         <tr><td><b>KaantaMandi Assured</b><br><small class="muted">We take up problems with the supplier; refunded if late</small></td><td>${rpct(P.assured.rate)} of goods (${inr(P.assured.min)}–${inr(P.assured.cap)})</td></tr>
         <tr><td><b>Pre-dispatch inspection</b><br><small class="muted">Quantity and spec checked at the supplier</small></td><td>${inr(P.inspection.base)} + ${rpct(P.inspection.rate)} of goods</td></tr>
-        <tr><td><b>Transit insurance</b><br><small class="muted">Through a licensed insurance partner</small></td><td>${rpct(P.insurance.rate)} of goods + GST (min ${inr(P.insurance.min)})</td></tr>
+        <tr><td><b>Transit insurance</b><br><small class="muted">Through a licensed insurance partner</small></td><td>${P.insurance.enabled?`${rpct(P.insurance.rate)} of goods + GST (min ${inr(P.insurance.min)})`:"Coming soon"}</td></tr>
       </tbody></table><p class="hint">Add-ons are billed by KaantaMandi with GST (18%; freight 5%), claimable as input credit.</p></div>
     <div class="actions" style="justify-content:center"><a class="btn primary big" href="#">Start buying</a><a class="btn big" href="#join/s">List your business free</a></div>
     <p class="hint" style="text-align:center">Prices in Indian rupees. We'll tell you before any price changes for you.</p>`);
@@ -186,13 +186,13 @@ function pricingForm(P){
     <h4>Buyer add-ons</h4><div class="fields">${f("assured.rate","Assured rate",P.assured.rate,0.001)}${f("assured.min","Assured minimum (₹)",P.assured.min,1)}${f("assured.cap","Assured cap (₹)",P.assured.cap,100)}
       ${f("freight.discount","Freight: below supplier's rate",P.freight.discount,0.01)}${f("freight.costShare","Freight: partner cost share",P.freight.costShare,0.01,"of the supplier's usual freight")}
       ${f("inspection.base","Inspection base (₹)",P.inspection.base,50)}${f("inspection.rate","Inspection rate",P.inspection.rate,0.0005)}${f("inspection.costShare","Inspection: inspector's share",P.inspection.costShare,0.05)}
-      ${f("insurance.rate","Insurance rate",P.insurance.rate,0.0005)}${f("insurance.min","Insurance minimum (₹)",P.insurance.min,10)}${f("insurance.costShare","Insurance: insurer's share",P.insurance.costShare,0.05)}</div>
+      <div class="field checks"><label class="toggle"><input type="checkbox" name="insurance.enabled" ${P.insurance.enabled?"checked":""}> Offer transit insurance (only with a licensed partner signed)</label></div>${f("insurance.rate","Insurance rate",P.insurance.rate,0.0005)}${f("insurance.min","Insurance minimum (₹)",P.insurance.min,10)}${f("insurance.costShare","Insurance: insurer's share",P.insurance.costShare,0.05)}</div>
     <h4>Cost assumptions (team only)</h4><div class="fields">${f("costs.gatewayPct","Payment gateway",P.costs.gatewayPct,0.001)}${f("costs.opsPerOrder","Ops cost per order (₹)",P.costs.opsPerOrder,10)}${f("costs.aiPerRequest","AI cost per request (₹)",P.costs.aiPerRequest,0.5)}${f("costs.marketingMonthly","Marketing a month (₹)",P.costs.marketingMonthly,1000)}</div>
     <div class="actions"><button class="btn primary">Save pricing</button><button class="btn ghost" type="button" data-action="pricing-reset">Back to defaults</button></div>
     <p class="hint">New prices apply to new orders and plan purchases. Orders already placed keep the rate they were placed at.</p></form>`;
 }
 /* Reads a form of "a.b.c"-named number inputs into a nested object. */
-function formNested(f){const out={};f.querySelectorAll("input[name]").forEach(i=>{if(i.value==="")return;const ks=i.name.split(".");let o=out;ks.slice(0,-1).forEach(k=>o=o[k]||={});o[ks[ks.length-1]]=Number(i.value);});return out;}
+function formNested(f){const out={};f.querySelectorAll("input[name]").forEach(i=>{if(i.type!=="checkbox"&&i.value==="")return;const ks=i.name.split(".");let o=out;ks.slice(0,-1).forEach(k=>o=o[k]||={});o[ks[ks.length-1]]=i.type==="checkbox"?i.checked:Number(i.value);});return out;}
 
 /* ===================== WIRING ===================== */
 function renderBizViews(){if(!document.getElementById("v-plan")?.hidden)renderPlan();}
