@@ -17,6 +17,7 @@ const navFor=()=>(NAV[role()]||[]).concat(teamOn()?[["team","Team","i-shield"]]:
 /* Only tabs that belong to the current side can open; anything else lands on that side's first tab. */
 function allowedTab(t){
   if(t==="team"||t==="account")return t==="account"&&!role()?"auth":t;
+  if(t==="plan")return role()==="supplier"?t:role()?navFor()[0][0]:"auth";
   const n=navFor();if(!role())return "auth";
   return n.some(x=>x[0]===t)?t:n[0][0];
 }
@@ -44,7 +45,7 @@ function renderAcct(){
     :`<summary aria-label="Log in or sign up"><span class="rp-long">${r?"Guest":"Log in"}</span><span class="rp-short">${r?"Guest":"Log in"}</span></summary>`;
   const body=signedIn()?`<p class="rp-h">${esc(me.name||me.email)}</p>
       <p class="rp-note">${esc(me.business||"")}${me.business?"<br>":""}${ROLE_NAME[me.role]} account${me.email?` · ${esc(me.email)}`:""}${me.demo?"<br>Demo account, saved in this browser":""}</p>
-      <button data-action="go" data-tab="account">Account settings</button>
+      ${me.role==="supplier"?`<button data-action="go" data-tab="plan">Plan and billing</button>`:""}<button data-action="go" data-tab="account">Account settings</button>
       <button data-action="acct-logout">Log out</button>`
     :`<p class="rp-note">${r?"You're looking around as a guest buyer. Create an account to keep your requests and orders.":"Buy or supply on KaantaMandi."}</p>
       <button data-action="acct-auth" data-v="signup">Create an account</button>
@@ -338,7 +339,7 @@ function renderSOrders(){
       <div class="ohead"><div><h3>${qfmt(o.qty)} ${p.unit} ${esc(p.name)}</h3><p class="meta">To a buyer in ${esc(o.city)} · PO ${esc(o.po)} · ${dstr(o.date)}${o.sample?" · example":""}</p></div><div class="amt num">${inr(o.subtotal)}<small style="color:var(--muted)">goods, before GST</small></div></div>
       ${o.cancelled?"":`<div class="track" aria-hidden="true">${STAGES.map((_,i)=>`<i class="${i<o.stage||o.stage===4?"on":i===o.stage?"now":""}"></i>`).join("")}</div>`}
       <div class="ostatus"><b>${o.cancelled?"Cancelled":STAGES[o.stage]}</b><span class="muted">${o.stage===4?`Delivered ${fdate(o.history?.[4]||Date.now())}${o.history?.[4]>promisedBy(o)+432e5?' <span class="pill warn">Late</span>':' <span class="pill good">On time</span>'}`:o.cancelled?"":`You promised ${fdate(promisedBy(o))}${isLate(o)?' <span class="pill bad">Running late</span>':""}`}</span></div>
-      ${shipmentHTML(o)}${receiptHTML(o)}
+      ${shipmentHTML(o)}${receiptHTML(o)}${servicesHTML(o,"supplier")}
       ${supplierNext(o)}
       ${disputeHTML(o,"supplier")}
       ${moneyHTML(o,"supplier")}
@@ -354,7 +355,7 @@ function renderListing(){
     renderSupplierForm({name:acct.business||"",city:CITIES[acct.city]?acct.city:"",contact:acct.phone||""});
     return;
   }
-  setHTML(el,`<div class="pagehead"><div><h1>My listing</h1><p class="muted">${me.verified?"Verified by KaantaMandi.":"Live. KaantaMandi will call to verify you; until then buyers see \"Not yet verified\"."}</p></div><button class="btn primary" data-action="listing-edit">Edit listing</button></div>
+  setHTML(el,`<div class="pagehead"><div><h1>My listing</h1><p class="muted">${me.verified?"Verified by KaantaMandi.":"Live. KaantaMandi will call to verify you; until then buyers see \"Not yet verified\"."}</p></div><div class="actions"><button class="btn" data-action="go" data-tab="plan">${esc(Repo.pricing.plans[planOf(me)].name)} plan</button><button class="btn primary" data-action="listing-edit">Edit listing</button></div></div>
     <div class="sgrid">${supplierCard({...me,sample:true,_own:true})}</div>
     <div id="listingForm"></div>`);
 }
@@ -365,7 +366,8 @@ function renderSInsights(){
   const k=[["Requests you qualified for",String(rs.length),"matched to your products and delivery area"],["Quotes you sent",String(sent),rs.length?`${Math.round(sent/rs.length*100)}% of requests`:"—"],["Orders won",String(won.length),rs.length?`${Math.round(won.length/rs.length*100)}% of requests`:"—"],["Value of orders",lakh(val),"goods, before GST"]];
   setHTML(el,`<div class="pagehead"><div><h1>Insights</h1><p class="muted">How your listing and quotes are doing.</p></div></div>
     <div class="kpis">${k.map(([a,b,c])=>`<div class="panel kpi"><span>${a}</span><b>${b}</b><small>${c}</small></div>`).join("")}</div>
-    <p class="hint">Tip: requests where you're not #1 on price often go to the cheapest delivered quote. Check your rates in My listing, or send a sharper quote from Requests.</p>`);
+    <p class="hint">Tip: requests where you're not #1 on price often go to the cheapest delivered quote. Check your rates in My listing, or send a sharper quote from Requests.</p>
+    ${winLossHTML(me)}`);
 }
 
 /* ===================== BUYER SIDE: supplier directory with filters ===================== */
@@ -472,11 +474,12 @@ function showTeamView(v,quiet){
   if(locked){gate.innerHTML=`<div class="panel pad gate"><h3>Team only</h3><p class="muted">Enter the admin key set on the server (ADMIN_KEY) to manage suppliers, sign-ups and outreach.</p>
       <form class="warow" data-form="admin-key"><input id="adminKey" type="password" autocomplete="current-password" placeholder="Admin key" aria-label="Admin key"><button class="btn primary">Unlock</button></form></div>`;}
   else gate.innerHTML="";
-  const show={setup:"s-setup",ops:"s-ops",network:"s-network",apps:"s-apps",outreach:"i-outreach",desk:"s-desk",wa:"t-wa"};
+  const show={setup:"s-setup",ops:"s-ops",econ:"s-econ",network:"s-network",apps:"s-apps",outreach:"i-outreach",desk:"s-desk",wa:"t-wa"};
   Object.entries(show).forEach(([k,id])=>{const e=document.getElementById(id);if(e)e.hidden=locked||k!==v;});
   if(locked)return;
   if(v==="setup"&&!quiet)renderSetup();
   if(v==="ops"&&!quiet)renderOps();
+  if(v==="econ"&&!quiet){econ.data=null;renderEconomics();}
   if(v==="network")renderSuppliers();if(v==="desk")renderDesk();if(v==="wa")renderWhatsApp();
   if(!quiet){if(v==="apps")renderApps();if(v==="outreach")renderOutreachView();}
 }
@@ -568,6 +571,7 @@ function renderRoleViews(){
   if(r==="buyer"&&vis("v-suppliers"))renderDirectory();
   if(r==="supplier"){if(vis("v-requests"))renderRequests();if(vis("v-sorders"))renderSOrders();if(vis("v-listing"))renderListing();if(vis("v-sinsights"))renderSInsights();}
   if(vis("v-account"))renderAccount();
+  if(typeof renderBizViews==="function")renderBizViews();
   if(vis("v-team"))showTeamView(teamView,!$("#teamGate").innerHTML&&document.getElementById(teamView==="apps"?"s-apps":"i-outreach")?.innerHTML!=="");
 }
 /* #reset/<token> from a password-reset email. The token leaves the address bar straight away. */
@@ -593,7 +597,8 @@ function goHome(){const r=role();if(!r){showAuth();return;}showTab(navFor()[0][0
 function rolesBoot(){
   renderNav();renderAcct();
   if(Repo.mode==="server")Repo.authConfig().then(()=>{if(!document.getElementById("v-account")?.hidden){$("#v-account")._html=null;renderAccount();}}).catch(()=>{});
-  if(/^#(join|quote)/.test(location.hash)){growBoot();return;}
+  if(/^#(join|quote|pricing)/.test(location.hash)){growBoot();return;}
+  if(location.hash==="#plan"&&role()==="supplier"){history.replaceState(null,"",location.pathname+location.search);showTab("plan");return;}
   if(resetRoute())return;
   if(!role()){showAuth();return;}
   let t=null;try{t=localStorage.getItem(KEY+".tab");}catch(e){}

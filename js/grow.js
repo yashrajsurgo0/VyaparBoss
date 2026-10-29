@@ -7,11 +7,12 @@
 let pub={view:null,role:null,ref:"",cats:[],sent:null,err:[],busy:false,q:null,token:null};
 function route(){
   const h=decodeURIComponent(location.hash||"");
-  const m=h.match(/^#(join|quote)(?:\/([^/]*))?(?:\/([^/]*))?/);
+  const m=h.match(/^#(join|quote|pricing)(?:\/([^/]*))?(?:\/([^/]*))?/);
   document.body.classList.toggle("public",!!m);
   if(!m){if(pub.view){pub.view=null;$("#v-public").hidden=true;showTab("buy");}return;}
   document.querySelectorAll(".view").forEach(v=>v.hidden=v.id!=="v-public");
-  if(m[1]==="join"){
+  if(m[1]==="pricing"){pub={view:"pricing"};renderPricingPage();if(Repo.mode==="server")Repo.fetchPricing().then(()=>{if(pub.view==="pricing")renderPricingPage();}).catch(()=>{});}
+  else if(m[1]==="join"){
     if(pub.view!=="join"){
       pub={view:"join",role:m[2]==="s"?"supplier":m[2]==="b"?"buyer":null,ref:m[3]||"",cats:[],sent:null,err:[],busy:false};
       // Count the click on a personal outreach link once per browser session.
@@ -390,4 +391,4 @@ document.addEventListener("change",e=>{
 });
 document.addEventListener("input",e=>{if(e.target.id==="oSearch"){out.q=e.target.value.toLowerCase().trim();clearTimeout(out._t);out._t=setTimeout(()=>{renderOutreachView().then(()=>{const s=$("#oSearch");if(s){s.focus();s.setSelectionRange(s.value.length,s.value.length);}});},250);}});
 window.addEventListener("hashchange",route);
-function growBoot(){if(/^#(join|quote)/.test(location.hash))route();}
+function growBoot(){if(/^#(join|quote|pricing)/.test(location.hash))route();}

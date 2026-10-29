@@ -759,3 +759,44 @@ details.schedlist>summary{color:var(--ink)}
 @media(min-width:700px){.hero .cats{grid-template-columns:repeat(5,minmax(0,1fr));max-width:none}.hero .cats .cat{padding:12px}.hero .cats .cat span{font-size:13px}}
 .cats.small{grid-template-columns:repeat(auto-fill,minmax(104px,1fr))}
 @media(max-width:480px){.rate .replyrow,.memberlist .replyrow{flex-wrap:wrap}.rate .replyrow input,.memberlist .replyrow input{flex-basis:100%}}
+
+/* ===================== BUSINESS MODEL: add-ons, services, plans, pricing, economics ===================== */
+.addons>div{gap:8px}
+.addon{display:grid;grid-template-columns:auto minmax(0,1fr);gap:2px 10px;align-items:start;padding:10px 12px;border:1.5px solid var(--line);border-radius:var(--r);background:var(--bg);cursor:pointer}
+.addon:hover{border-color:var(--brand)}
+.addon:has(input:checked){border-color:var(--brand);background:var(--brand-tint)}
+.addon input{width:20px;height:20px;margin-top:2px;accent-color:var(--brand);grid-row:span 2}
+.addon-t{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-weight:600}
+.addon-t .num{white-space:nowrap}.addon-t s{font-weight:400}
+.addon small{color:var(--muted);font-size:14px;line-height:1.4}
+.breakdown.svc{margin-top:-4px}
+.svcbox{border-left:3px solid var(--accent)}
+.svcnote{background:var(--accent-tint);border-radius:var(--r-sm);padding:10px 12px;font-size:15px;display:flex;flex-direction:column;gap:6px}
+.fairbox{border-left:4px solid var(--accent);margin:6px 0 14px}
+h2.sub{font-size:22px;margin:22px 0 10px}
+.plans{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:12px 0 16px}
+.plan{position:relative;padding:20px 18px;display:flex;flex-direction:column;gap:10px}
+.plan.best{border:2px solid var(--brand)}
+.plan.current{box-shadow:0 0 0 3px var(--accent-tint)}
+.plan .tag{position:absolute;top:-12px;left:16px;background:var(--accent);color:var(--on-accent);font-size:13px;font-weight:700;padding:2px 10px;border-radius:999px;border:0}
+.plan .price b{font-family:var(--f-display);font-size:30px;color:var(--head);font-weight:800}
+.plan .price small{display:block;color:var(--muted);font-size:14px}
+.ticks{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:6px;font-size:15px;flex:1}
+.ticks li{padding-left:22px;position:relative}
+.ticks li::before{content:"";position:absolute;left:4px;top:.55em;width:8px;height:5px;border-left:2px solid var(--good);border-bottom:2px solid var(--good);transform:rotate(-45deg)}
+.plan .btn{align-self:stretch;white-space:normal}
+.planmine{display:flex;flex-direction:column;gap:12px;margin-bottom:12px}
+.planmine h2{margin-top:2px}
+.meter{display:grid;grid-template-columns:110px auto;gap:4px 10px;font-size:15px}
+.meter i{grid-column:1/-1;height:8px;border-radius:4px;background:linear-gradient(90deg,var(--brand) var(--w),var(--sunk) var(--w))}
+.locked{border-style:dashed;margin-top:12px}
+.panel.pad + .panel.pad,.two + .panel,.panel + .two{margin-top:12px}
+#s-econ .two{margin-bottom:12px}
+.whatif .fields{margin:10px 0}
+.kpi b.neg{color:var(--bad)}
+form[data-form="pricing"] h4{font-family:var(--f-display);font-size:17px;margin:16px 0 6px;color:var(--head)}
+form[data-form="pricing"] .field small{font-size:12.5px}
+#s-econ .paylist select{font-size:13.5px;padding:3px 6px;margin-left:6px;border:1.5px solid var(--line);border-radius:8px;background:var(--surface)}
+@media(max-width:480px){.meter{grid-template-columns:1fr auto}.plan .price b{font-size:26px}}
+.breakdown.pricetab td:last-child{white-space:normal;min-width:7.5em}
+.flowtop{flex-wrap:wrap}

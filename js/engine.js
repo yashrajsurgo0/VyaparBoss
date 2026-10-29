@@ -362,7 +362,7 @@ function normalizeSchedule(x,now=Date.now()){
 /* Spend this calendar month on real, live orders (not examples, cancelled or still awaiting approval). */
 function monthSpend(orders,now=Date.now()){
   const d=new Date(now),m0=new Date(d.getFullYear(),d.getMonth(),1).getTime();
-  return orders.filter(o=>!o.sample&&!o.cancelled&&o.date>=m0&&o.approval?.status!=="pending").reduce((a,o)=>a+(o.landed||0),0);
+  return orders.filter(o=>!o.sample&&!o.cancelled&&o.date>=m0&&o.approval?.status!=="pending").reduce((a,o)=>a+orderTotal(o),0);
 }
 
 /* ===================== INVOICES, PAYMENTS, FEES ===================== */
@@ -423,4 +423,155 @@ function applyMoneyAction(o,a,who,now=Date.now()){
     return {ok:true,ev:a.action};
   }
   return null;
+}
+
+/* ===================== REVENUE: PLANS, TAKE RATE, BUYER SERVICES, ECONOMICS ===================== */
+/* Every number here is a starting point to test in pilots. The team changes them in Team → Pricing
+   (stored server-side and merged over these defaults by pricingWith()). Ranking never depends on a plan or a fee. */
+const PRICING={
+  plans:{
+    free:  {name:"Free",  monthly:0,    yearly:0,     maxProducts:5,   maxCats:1, commissionOff:0,     payoutDays:7, winLoss:false,
+            blurb:"List up to 5 products in one category. Get matched requests, quote in one tap, issue GST invoices."},
+    growth:{name:"Growth",monthly:1499, yearly:14990, maxProducts:25,  maxCats:3, commissionOff:0.0025,payoutDays:3, winLoss:true,
+            blurb:"Up to 25 products in 3 categories, 0.25 points off commission, online payouts in 3 days, win/loss report."},
+    pro:   {name:"Pro",   monthly:3999, yearly:39990, maxProducts:200, maxCats:5, commissionOff:0.005, payoutDays:1, winLoss:true,
+            blurb:"Your whole catalogue in every category, 0.5 points off commission, next-day payouts, win/loss report."}
+  },
+  // Commission on the goods value (before GST and freight), charged to the supplier only where they agreed to it.
+  take:{byCat:{pack:0.02,ind:0.025,agri:0.015,elec:0.02,build:0.01},bigOrder:500000,bigOrderOff:0.005,floor:0.0025,min:99,cap:25000},
+  // Optional buyer services, billed by KaantaMandi on its own invoice with 18% GST. cost = what a partner charges us.
+  assured:{rate:0.01,min:199,cap:5000},
+  freight:{discount:0.08,costShare:0.82}, // KaantaMandi Freight: 8% below the usual rate; the partner carrier costs us 82% of the usual rate
+  inspection:{base:1500,rate:0.002,cap:10000,costShare:0.7},
+  insurance:{rate:0.0025,min:250,costShare:0.85}, // transit cover through a licensed partner; we keep the referral share
+  serviceGst:0.18,freightGst:0.05, // goods transport agency (GTA) services are 5% GST
+  // Team-only assumptions for the economics view.
+  costs:{gatewayPct:0.02,opsPerOrder:150,aiPerRequest:2,marketingMonthly:0}
+};
+const PLAN_KEYS=["free","growth","pro"];
+const SERVICE_NAMES={assured:"KaantaMandi Assured",freight:"KaantaMandi Freight",inspection:"Pre-dispatch inspection",insurance:"Transit insurance"};
+function pricingWith(over){
+  const o=over||{},P=PRICING,num=(v,d)=>isFinite(+v)&&v!==null&&v!==""?+v:d;
+  const plans={};for(const k of PLAN_KEYS)plans[k]={...P.plans[k],...(o.plans?.[k]||{})};
+  return {plans,take:{...P.take,...(o.take||{}),byCat:{...P.take.byCat,...(o.take?.byCat||{})}},assured:{...P.assured,...(o.assured||{})},
+    freight:{...P.freight,...(o.freight||{})},inspection:{...P.inspection,...(o.inspection||{})},insurance:{...P.insurance,...(o.insurance||{})},
+    serviceGst:num(o.serviceGst,P.serviceGst),freightGst:num(o.freightGst,P.freightGst),costs:{...P.costs,...(o.costs||{})}};
+}
+/* Checks a team edit to pricing. Rates are fractions (0.02 = 2%). Returns {ok, p, errors}. */
+function normalizePricing(x){
+  const errors=[],p=pricingWith(x),rng=(v,lo,hi,label)=>{if(!(isFinite(v)&&v>=lo&&v<=hi))errors.push(`${label} must be ${lo}–${hi}`);};
+  for(const k of PLAN_KEYS){const pl=p.plans[k];rng(pl.monthly,0,100000,`${pl.name} monthly price`);rng(pl.yearly,0,1000000,`${pl.name} yearly price`);rng(pl.maxProducts,1,1000,`${pl.name} products`);rng(pl.maxCats,1,Object.keys(CATS).length,`${pl.name} categories`);rng(pl.commissionOff,0,0.05,`${pl.name} commission discount`);}
+  for(const c of Object.keys(CATS))rng(p.take.byCat[c],0,0.1,`Commission for ${CATS[c]}`);
+  rng(p.take.min,0,5000,"Minimum commission");rng(p.take.cap,0,500000,"Commission cap");rng(p.assured.rate,0,0.05,"Assured rate");
+  rng(p.freight.discount,0,0.5,"Freight discount");rng(p.freight.costShare,0,1,"Freight partner cost");rng(p.inspection.base,0,50000,"Inspection base fee");
+  rng(p.insurance.rate,0,0.05,"Insurance rate");rng(p.costs.opsPerOrder,0,10000,"Ops cost per order");rng(p.costs.aiPerRequest,0,500,"AI cost per request");rng(p.costs.marketingMonthly,0,1e8,"Marketing spend");
+  return {ok:!errors.length,p,errors};
+}
+/* The plan a supplier is on right now (paid plans lapse to Free when planUntil passes). */
+function planOf(s,now=Date.now()){return s&&PLAN_KEYS.includes(s.plan)&&s.plan!=="free"&&(!s.planUntil||s.planUntil>now)?s.plan:"free";}
+/* Listing limits for a plan. Returns a list of problems (empty when the listing fits). */
+function planLimitErrors(s,pricing=PRICING,now=Date.now()){
+  const k=planOf(s,now),pl=pricing.plans[k],errs=[],cats=new Set((s.offers||[]).map(o=>PMAP[o.p]?.cat).filter(Boolean));
+  const next=k==="free"?"Growth":k==="growth"?"Pro":"";
+  if((s.offers||[]).length>pl.maxProducts)errs.push(`The ${pl.name} plan lists up to ${pl.maxProducts} products${next?`. ${next} lists more`:""}`);
+  if(cats.size>pl.maxCats)errs.push(`The ${pl.name} plan covers ${pl.maxCats} categor${pl.maxCats>1?"ies":"y"}${next?`. ${next} covers more`:""}`);
+  return errs;
+}
+/* Commission for one order. null when the supplier hasn't agreed to fees. */
+function commissionFor(o,s,pricing=PRICING,now=Date.now()){
+  if(!s?.feeAgreed)return null;
+  const T=pricing.take,cat=PMAP[o.productId]?.cat,plan=pricing.plans[planOf(s,now)];
+  let rate=s.feeRate!=null?s.feeRate:(T.byCat[cat]??0.02);
+  if(s.feeRate==null&&o.subtotal>=T.bigOrder)rate-=T.bigOrderOff;
+  rate=Math.max(T.floor,rate-(plan.commissionOff||0));rate=Math.round(rate*10000)/10000;
+  const amount=Math.min(T.cap,Math.max(T.min,Math.round((o.subtotal||0)*rate)));
+  return {rate,amount,plan:planOf(s,now),status:"due"};
+}
+/* What each optional buyer service would cost on this quote (before 18% GST). */
+function serviceQuotes(q,pricing=PRICING){
+  const goods=Math.round(q.subtotal),A=pricing.assured,F=pricing.freight,I=pricing.inspection,N=pricing.insurance;
+  const usual=Math.round(q.freight);
+  return {
+    assured:{price:Math.min(A.cap,Math.max(A.min,Math.round(goods*A.rate))),cost:0},
+    freight:{price:Math.round(usual*(1-F.discount)),cost:Math.round(usual*F.costShare),saves:usual-Math.round(usual*(1-F.discount)),usual},
+    inspection:{price:Math.min(I.cap,Math.round(I.base+goods*I.rate)),cost:0},
+    insurance:{price:Math.max(N.min,Math.round((goods+Math.round(q.gst))*N.rate)),cost:0}
+  };
+}
+/* Adds the services the buyer ticked to an order record (mutates it). KaantaMandi Freight replaces the supplier's freight,
+   so the supplier's invoice is goods + GST only. Returns the order. */
+function applyServices(o,q,picks,pricing=PRICING){
+  picks=picks||{};const sq=serviceQuotes(q,pricing),gstR=pricing.serviceGst,lines=[];
+  for(const k of ["freight","assured","inspection","insurance"]){
+    if(!picks[k]||(k==="freight"&&!(sq.freight.usual>0)))continue;
+    const price=sq[k].price;
+    const cost=k==="freight"?sq.freight.cost:k==="inspection"?Math.round(price*pricing.inspection.costShare):k==="insurance"?Math.round(price*pricing.insurance.costShare):0;
+    lines.push({k,label:SERVICE_NAMES[k],amount:price,gst:Math.round(price*(k==="freight"?pricing.freightGst:gstR)),cost});
+  }
+  if(!lines.length)return o;
+  if(lines.some(l=>l.k==="freight")){o.kmFreight={usual:o.freight,mode:q.freightMode};o.landed=Math.round(o.landed-o.freight);o.freight=0;}
+  if(lines.some(l=>l.k==="inspection"))o.inspection={status:"booked"};
+  o.services={lines,total:lines.reduce((a,l)=>a+l.amount+l.gst,0),status:"due"};
+  return o;
+}
+/* What the buyer pays in all: the supplier's invoice plus KaantaMandi's services. */
+const orderTotal=o=>Math.round((o.landed||0)+(o.services?.total||0));
+const isLateDelivery=o=>o.stage===4&&o.history?.[4]&&o.history[4]>promisedBy(o)+12*36e5;
+/* KaantaMandi's revenue from one order, by stream (net of partner costs and Assured refunds). */
+function orderRevenue(o){
+  const r={commission:0,assured:0,freight:0,inspection:0,insurance:0,costs:0};
+  if(o.sample||o.cancelled||o.approval?.status==="pending"||o.approval?.status==="rejected")return r;
+  if(o.fee&&o.fee.status!=="waived")r.commission=o.fee.amount||0;
+  for(const l of o.services?.lines||[]){
+    if(o.services.status==="waived")break;
+    if(l.k==="assured"&&isLateDelivery(o))continue; // refunded when we deliver late
+    r[l.k]+=l.amount-l.cost;r.costs+=l.cost;
+  }
+  return r;
+}
+/* Team → Economics. Pure: works the same on the server and in the offline demo. */
+function economicsReport({orders=[],rfqs=[],suppliers=[],planPayments=[],pricing=PRICING,days=30,now=Date.now()}={}){
+  const C=pricing.costs,from=now-days*864e5,real=orders.filter(o=>!o.sample);
+  const live=real.filter(o=>!o.cancelled&&o.approval?.status!=="pending"&&o.approval?.status!=="rejected");
+  const inP=live.filter(o=>o.date>=from),sum=(a,f)=>a.reduce((x,y)=>x+f(y),0);
+  const streams={commission:0,assured:0,freight:0,inspection:0,insurance:0};
+  for(const o of inP){const r=orderRevenue(o);for(const k in streams)streams[k]+=r[k];}
+  const subs=planPayments.filter(p=>p.at>=from&&p.status==="paid");streams.plans=sum(subs,p=>p.amount);
+  const revenue=Object.values(streams).reduce((a,b)=>a+b,0),gmv=sum(inP,orderTotal);
+  const online=sum(inP,o=>sum((o.payments||[]).filter(p=>p.method==="razorpay"),p=>p.amount));
+  const reqs=rfqs.filter(r=>!r.sample&&r.date>=from).length;
+  const varCosts={gateway:Math.round(online*C.gatewayPct),ops:inP.length*C.opsPerOrder,ai:reqs*C.aiPerRequest};
+  const contribution=revenue-varCosts.gateway-varCosts.ops-varCosts.ai;
+  // Buyers by the month of their first order; share who ordered again in each later month.
+  const byBuyer={};for(const o of live){const k=o.orgId||o.ownerId;if(!k)continue;(byBuyer[k]||=[]).push(o.date);}
+  const mk=t=>{const d=new Date(t);return d.getFullYear()*12+d.getMonth();},label=m=>new Date(Math.floor(m/12),m%12,1).toLocaleDateString("en-IN",{month:"short",year:"2-digit"});
+  const cohorts={};for(const ds of Object.values(byBuyer)){const first=mk(Math.min(...ds)),months=new Set(ds.map(mk));const c=cohorts[first]||={buyers:0,back:[0,0,0]};c.buyers++;for(let i=1;i<=3;i++)if(months.has(first+i))c.back[i-1]++;}
+  const nowM=mk(now),cohortRows=Object.entries(cohorts).map(([m,c])=>({month:label(+m),buyers:c.buyers,back:c.back.map((n,i)=>+m+i+1>nowM?null:Math.round(n/c.buyers*100))})).slice(-6);
+  const newBuyers=Object.values(byBuyer).filter(ds=>Math.min(...ds)>=from).length;
+  const activeBuyers=Object.values(byBuyer).filter(ds=>ds.some(t=>t>=from)).length;
+  const cac=newBuyers?Math.round(C.marketingMonthly*(days/30)/newBuyers):null;
+  const contribPerBuyerMonth=activeBuyers?contribution/activeBuyers/(days/30):0;
+  const paying=suppliers.filter(s=>planOf(s,now)!=="free");
+  const mrr=Math.round(sum(paying,s=>{const pl=pricing.plans[planOf(s,now)];return s.planPeriod==="yearly"?pl.yearly/12:pl.monthly;}));
+  return {days,orders:inP.length,gmv:Math.round(gmv),aov:inP.length?Math.round(gmv/inP.length):0,revenue:Math.round(revenue),streams,
+    takeRate:gmv?revenue/gmv:0,varCosts,contribution:Math.round(contribution),perOrder:inP.length?Math.round(contribution/inP.length):0,
+    attach:Object.fromEntries(["assured","freight","inspection","insurance"].map(k=>[k,inP.length?inP.filter(o=>o.services?.lines?.some(l=>l.k===k)).length/inP.length:0])),
+    feeShare:inP.length?inP.filter(o=>o.fee).length/inP.length:0,
+    requests:reqs,conversion:reqs?inP.length/reqs:null,newBuyers,activeBuyers,cac,payback:cac&&contribPerBuyerMonth>0?+(cac/contribPerBuyerMonth).toFixed(1):null,
+    mrr,payingSuppliers:paying.length,planMix:Object.fromEntries(PLAN_KEYS.map(k=>[k,suppliers.filter(s=>!s.sample&&planOf(s,now)===k).length])),cohorts:cohortRows};
+}
+/* What-if: monthly numbers for a month with these volumes, using the current pricing. Used in Team → Economics and the business plan. */
+function projectMonth(x,pricing=PRICING){
+  const n=Math.max(0,+x.orders||0),aov=Math.max(0,+x.aov||0),goods=aov/1.12; // goods ≈ order value without GST and freight
+  const take=+x.takeRate>=0?+x.takeRate:0.02,fee=(+x.feeShare>=0?+x.feeShare:1);
+  const commission=n*fee*Math.max(pricing.take.min,goods*take);
+  const svc=k=>n*(+x.attach?.[k]||0);
+  const q={subtotal:goods,gst:goods*0.12,freight:aov*0.04};const sq=serviceQuotes(q,pricing);
+  const assured=svc("assured")*sq.assured.price,freight=svc("freight")*(sq.freight.price-sq.freight.cost);
+  const inspection=svc("inspection")*sq.inspection.price*(1-pricing.inspection.costShare),insurance=svc("insurance")*sq.insurance.price*(1-pricing.insurance.costShare);
+  const plans=(+x.growth||0)*pricing.plans.growth.monthly+(+x.pro||0)*pricing.plans.pro.monthly;
+  const revenue=commission+assured+freight+inspection+insurance+plans;
+  const C=pricing.costs,costs=n*C.opsPerOrder+(+x.requests||n*2)*C.aiPerRequest+n*aov*(+x.onlineShare||0)*C.gatewayPct+(+x.marketing||0);
+  return {gmv:Math.round(n*aov),revenue:Math.round(revenue),streams:{commission:Math.round(commission),assured:Math.round(assured),freight:Math.round(freight),inspection:Math.round(inspection),insurance:Math.round(insurance),plans:Math.round(plans)},
+    takeRate:n*aov?revenue/(n*aov):0,costs:Math.round(costs),contribution:Math.round(revenue-costs)};
 }
