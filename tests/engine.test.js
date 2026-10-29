@@ -248,6 +248,8 @@ test("buyer services: freight replaces the supplier's, GST on our invoice, reven
   assert.strictEqual(C.orderRevenue(o).assured, 0, "Assured is refunded on a late delivery");
   assert.strictEqual(C.orderRevenue({ ...o, cancelled: { by: "buyer" } }).freight, 0, "cancelled orders earn nothing");
   const o2 = plain(C.orderRecord(r, res, q)); C.applyServices(o2, q, {}); assert.strictEqual(o2.services, undefined, "nothing ticked, nothing added");
+  const o3 = plain(C.orderRecord(r, res, q)); C.applyServices(o3, q, { insurance: true }); assert.strictEqual(o3.services, undefined, "insurance stays off until a licensed partner is switched on");
+  C.applyServices(o3, q, { insurance: true }, C.pricingWith({ insurance: { enabled: true } })); assert.strictEqual(o3.services.lines[0].k, "insurance");
 });
 test("economics report: GMV, streams, take rate, cohorts; pricing edits are checked", () => {
   const d = 864e5, now = Date.UTC(2026, 9, 20), mk = (owner, daysAgo, extra = {}) => ({ ownerId: owner, date: now - daysAgo * d, productId: "box3", subtotal: 100000, landed: 110000, stage: 0, fee: { amount: 2000, status: "due" }, ...extra });

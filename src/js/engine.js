@@ -442,8 +442,8 @@ const PRICING={
   // Optional buyer services, billed by KaantaMandi on its own invoice with 18% GST. cost = what a partner charges us.
   assured:{rate:0.01,min:199,cap:5000},
   freight:{discount:0.08,costShare:0.82}, // KaantaMandi Freight: 8% below the usual rate; the partner carrier costs us 82% of the usual rate
-  inspection:{base:1500,rate:0.002,cap:10000,costShare:0.7},
-  insurance:{rate:0.0025,min:250,costShare:0.85}, // transit cover through a licensed partner; we keep the referral share
+  inspection:{base:3500,rate:0.002,cap:15000,costShare:0.75}, // a local inspector's visit; certification audits run ~₹15,000 a day
+  insurance:{enabled:false,rate:0.0025,min:250,costShare:0.85}, // transit cover through a licensed partner; off until that partner (IRDAI-registered) is signed
   serviceGst:0.18,freightGst:0.05, // goods transport agency (GTA) services are 5% GST
   // Team-only assumptions for the economics view.
   costs:{gatewayPct:0.02,opsPerOrder:150,aiPerRequest:2,marketingMonthly:0}
@@ -459,7 +459,7 @@ function pricingWith(over){
 }
 /* Checks a team edit to pricing. Rates are fractions (0.02 = 2%). Returns {ok, p, errors}. */
 function normalizePricing(x){
-  const errors=[],p=pricingWith(x),rng=(v,lo,hi,label)=>{if(!(isFinite(v)&&v>=lo&&v<=hi))errors.push(`${label} must be ${lo}–${hi}`);};
+  const errors=[],p=pricingWith(x);p.insurance.enabled=!!p.insurance.enabled;const rng=(v,lo,hi,label)=>{if(!(isFinite(v)&&v>=lo&&v<=hi))errors.push(`${label} must be ${lo}–${hi}`);};
   for(const k of PLAN_KEYS){const pl=p.plans[k];rng(pl.monthly,0,100000,`${pl.name} monthly price`);rng(pl.yearly,0,1000000,`${pl.name} yearly price`);rng(pl.maxProducts,1,1000,`${pl.name} products`);rng(pl.maxCats,1,Object.keys(CATS).length,`${pl.name} categories`);rng(pl.commissionOff,0,0.05,`${pl.name} commission discount`);}
   for(const c of Object.keys(CATS))rng(p.take.byCat[c],0,0.1,`Commission for ${CATS[c]}`);
   rng(p.take.min,0,5000,"Minimum commission");rng(p.take.cap,0,500000,"Commission cap");rng(p.assured.rate,0,0.05,"Assured rate");
@@ -503,7 +503,7 @@ function serviceQuotes(q,pricing=PRICING){
 function applyServices(o,q,picks,pricing=PRICING){
   picks=picks||{};const sq=serviceQuotes(q,pricing),gstR=pricing.serviceGst,lines=[];
   for(const k of ["freight","assured","inspection","insurance"]){
-    if(!picks[k]||(k==="freight"&&!(sq.freight.usual>0)))continue;
+    if(!picks[k]||(k==="freight"&&!(sq.freight.usual>0))||(k==="insurance"&&!pricing.insurance.enabled))continue;
     const price=sq[k].price;
     const cost=k==="freight"?sq.freight.cost:k==="inspection"?Math.round(price*pricing.inspection.costShare):k==="insurance"?Math.round(price*pricing.insurance.costShare):0;
     lines.push({k,label:SERVICE_NAMES[k],amount:price,gst:Math.round(price*(k==="freight"?pricing.freightGst:gstR)),cost});
