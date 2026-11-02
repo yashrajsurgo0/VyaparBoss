@@ -824,6 +824,8 @@ try{const hd=document.querySelector("header.top");if(hd)addEventListener("scroll
 (async function boot(){
   applyStatic();renderBuy();renderAiChip();
   await Repo.init();
+  // Later scripts (grow, roles, biz) may not have run yet when init resolves fast (offline demo); wait for them.
+  if(document.readyState==="loading")await new Promise(r=>document.addEventListener("DOMContentLoaded",r,{once:true}));
   if(Repo.mode==="server"){aiState=Repo.info.ai?"server":"off";setInterval(()=>{if(!document.hidden)Repo.refresh().then(ch=>ch&&renderAll()).catch(()=>{});},20000);}
   renderAiChip();
   if(typeof rolesBoot==="function")rolesBoot();else renderAll();
