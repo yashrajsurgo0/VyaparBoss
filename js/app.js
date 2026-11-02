@@ -9,6 +9,9 @@ let ai=null;           // claude.ai artifact runtime `sample` function, or null
 let aiState="pending"; // pending | server | live | off
 const store=()=>Repo.data;
 const fail=e=>{console.error(e);toast(e.message||"Something went wrong. Try again.");};
+/* Inside the Android/iOS app (Capacitor shell around this site). Store rules: no web sign-in popups, no plan purchases in the app. */
+const NATIVE=!!window.Capacitor?.isNativePlatform?.();
+if(NATIVE)document.documentElement.dataset.native=window.Capacitor.getPlatform();
 const initials=n=>String(n).split(/\s+/).filter(w=>/^[A-Za-z]/.test(w)).slice(0,2).map(w=>w[0]).join("").toUpperCase()||"S";
 const ico=(id,cls="ic")=>`<svg class="${cls}" aria-hidden="true"><use href="#${id}"/></svg>`;
 const CAT_INFO={pack:{icon:"cat-pack",name:"Packaging",hint:"Boxes, film, tape"},ind:{icon:"cat-ind",name:"Industrial",hint:"Safety, welding, cleaning"},agri:{icon:"cat-agri",name:"Agri inputs",hint:"Drip, crates, fertiliser"},
@@ -749,7 +752,11 @@ const ACTIONS={
     Repo.decideOrder(a.dataset.po,false,note).then(()=>{toast("Declined. They'll get an email.");renderAll();}).catch(e=>{a.disabled=false;fail(e);});},
   oact:a=>orderAct(a.dataset.po,a.dataset.act,a.dataset.side,a.dataset.id?{id:a.dataset.id}:{},a),
   "print-inv":a=>printInvoice(a.dataset.po),
-  "pay-online":a=>{a.disabled=true;Repo.payLink(a.dataset.po).then(l=>{a.disabled=false;try{window.open(l.url,"_blank","noopener");}catch(e){}toast(l.test?"Opened Razorpay (test mode, no real money)":"Opened Razorpay");}).catch(e=>{a.disabled=false;fail(e);});},
+  "pay-online":a=>{const po=a.dataset.po;a.disabled=true;
+    Repo.checkout(po).then(c=>payWithCheckout(c,r=>Repo.verifyCheckout(po,r))).then(()=>{toast("Payment received. Thank you!");renderAll();})
+      .catch(e=>{a.disabled=false;if(e.cancelled)return;if(!e.noSheet)return fail(e);
+        // The pay sheet couldn't load (blocked or offline): fall back to Razorpay's hosted page.
+        Repo.payLink(po).then(l=>{try{window.open(l.url,"_blank","noopener");}catch(x){}toast(l.test?"Opened Razorpay (test mode, no real money)":"Opened Razorpay");}).catch(fail);});},
   locale:a=>setLocale(a.dataset.v),
   theme:a=>{setTheme(a.dataset.v);toast(a.dataset.v==="dark"?"Dark look":"Beige look");},
   go:a=>showTab(a.dataset.tab),

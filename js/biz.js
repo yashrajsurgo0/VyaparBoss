@@ -102,13 +102,14 @@ function renderPlan(){
   const k=planOf(me),pl=P.plans[k],cats=new Set(me.offers.map(o=>PMAP[o.p]?.cat)).size,pays=store().planPayments||[],pend=pays.find(p=>p.status==="pending");
   const left=me.planUntil?Math.ceil((me.planUntil-Date.now())/864e5):null;
   const meter=(n,max,label)=>`<div class="meter"><span>${label}</span><b class="num">${n} of ${qfmt(max)}</b><i style="--w:${Math.min(100,Math.round(n/max*100))}%"></i></div>`;
-  const cta=(key,price)=>key==="free"?(k==="free"?`<button class="btn" disabled>Your plan</button>`:`<p class="hint">Your plan moves to Free when it ends. Nothing to cancel.</p>`)
+  // App Store and Play rules: no plan purchases inside the app. Plans are still shown; the team can switch them on.
+  const cta=(key,price)=>NATIVE?(k===key?`<button class="btn" disabled>Your plan</button>`:""):key==="free"?(k==="free"?`<button class="btn" disabled>Your plan</button>`:`<p class="hint">Your plan moves to Free when it ends. Nothing to cancel.</p>`)
     :`<button class="btn ${key==="growth"?"primary":""}" data-action="plan-buy" data-v="${key}">${k===key?`Renew ${esc(P.plans[key].name)}`:`Switch to ${esc(P.plans[key].name)}`}: ${inr(price)}</button>`;
   setHTML(el,`<div class="pagehead"><div><h1>Your plan</h1><p class="muted">Plans add products, categories, a lower commission and faster payouts. They never change how Bhai ranks you.</p></div></div>
     <div class="panel pad planmine"><div class="ohead"><div><span class="muted">Current plan</span><h2>${esc(pl.name)}</h2>
       <p class="hint">${k==="free"?"Free, no end date.":`${me.planPeriod==="yearly"?"Yearly":"Monthly"} · until ${new Date(me.planUntil).toLocaleDateString("en-IN",{day:"numeric",month:"long",year:"numeric"})}${left!=null&&left<=7?` <span class="pill warn">${left} day${left===1?"":"s"} left</span>`:""}`}</p></div></div>
       ${meter(me.offers.length,pl.maxProducts,"Products")}${meter(cats,pl.maxCats,"Categories")}</div>
-    ${pend?`<div class="note">${pend.url?`Your ${esc(planName(pend.plan))} plan is waiting for payment of ${inr(pend.amount+pend.gst)} (with GST). <a class="btn sm primary" href="${esc(pend.url)}" target="_blank" rel="noopener">Pay now</a>`:`You asked for ${esc(planName(pend.plan))} (${pend.period}). Our team will call to collect ${inr(pend.amount+pend.gst)} with GST and switch it on.`}</div>`:""}
+    ${pend&&!NATIVE?`<div class="note">${pend.url?`Your ${esc(planName(pend.plan))} plan is waiting for payment of ${inr(pend.amount+pend.gst)} (with GST). <a class="btn sm primary" href="${esc(pend.url)}" target="_blank" rel="noopener">Pay now</a>`:`You asked for ${esc(planName(pend.plan))} (${pend.period}). Our team will call to collect ${inr(pend.amount+pend.gst)} with GST and switch it on.`}</div>`:""}
     ${periodSeg(pricingPeriod,"pr-period")}
     ${planCards(P,pricingPeriod,k,cta)}
     ${pays.length?`<details class="more"><summary>Plan payments ${ico("i-chev","")}</summary><div><ul class="paylist">${pays.slice().reverse().map(p=>`<li><span>${esc(planName(p.plan))}, ${p.period} · ${fdate(p.at)}</span><span class="num">${inr(p.amount+p.gst)} <span class="pill ${p.status==="paid"?"good":p.status==="pending"?"gold":""}">${esc(p.status)}</span></span></li>`).join("")}</ul></div></details>`:""}
@@ -198,7 +199,11 @@ function formNested(f){const out={};f.querySelectorAll("input[name]").forEach(i=
 function renderBizViews(){if(!document.getElementById("v-plan")?.hidden)renderPlan();}
 Object.assign(ACTIONS,{
   "pr-period":a=>{pricingPeriod=a.dataset.v;if(pub?.view==="pricing")renderPricingPage();else renderPlan();},
-  "plan-buy":a=>{const b=a;b.disabled=true;Repo.buyPlan(a.dataset.v,pricingPeriod).then(j=>{if(j.url){toast("Opening Razorpay to pay");window.open(j.url,"_blank","noopener");}else toast("Request sent. Our team will call to collect the payment.");$("#v-plan")._html=null;renderPlan();}).catch(e=>{b.disabled=false;fail(e);});},
+  "plan-buy":a=>{const b=a;b.disabled=true;const done=()=>{$("#v-plan")._html=null;renderPlan();};
+    Repo.buyPlan(a.dataset.v,pricingPeriod).then(j=>{
+      if(j.checkout)return payWithCheckout(j.checkout,r=>Repo.verifyPlan(j.id,r)).then(()=>{toast("Paid. Your plan is on.");done();},e=>{b.disabled=false;if(!e.cancelled)fail(e);});
+      if(j.url){toast("Opening Razorpay to pay");window.open(j.url,"_blank","noopener");}else toast("Request sent. Our team will call to collect the payment.");done();
+    }).catch(e=>{b.disabled=false;fail(e);});},
   "econ-days":a=>{econ.days=+a.dataset.v;econ.data=null;renderEconomics();},
   "pp-paid":a=>Repo.decidePlanPayment(a.dataset.id,"paid").then(()=>{toast("Plan switched on");econ.data=null;renderEconomics();}).catch(fail),
   "pp-cancel":a=>Repo.decidePlanPayment(a.dataset.id,"cancelled").then(()=>{toast("Cancelled");econ.data=null;renderEconomics();}).catch(fail),
@@ -215,3 +220,18 @@ document.addEventListener("submit",e=>{
   if(k==="whatif"){e.preventDefault();const v=formNested(f);econ.what={...econ.what,...v,attach:{...econ.what.attach,...(v.attach||{})}};document.activeElement?.blur?.();$("#s-econ")._html=null;renderEconomics();}
   if(k==="pricing"){e.preventDefault();econ.editing=true;Repo.savePricing(formNested(f)).then(()=>{toast("Pricing saved. It applies to new orders and plans.");econ.data=null;document.activeElement?.blur?.();renderEconomics();}).catch(fail);}
 });
+
+/* Razorpay Checkout: the pay sheet opens over the page (website and app; UPI, cards, netbanking).
+   Resolves once the server has checked the payment's signature; rejects with .cancelled if closed. */
+let rzpScript=null;
+function payWithCheckout(c,verify){
+  rzpScript=rzpScript||new Promise((ok,no)=>{const s=document.createElement("script");s.src="https://checkout.razorpay.com/v1/checkout.js";s.async=true;s.onload=ok;
+    s.onerror=()=>{rzpScript=null;no(Object.assign(new Error("Couldn't open the payment window. Check your connection."),{noSheet:true}));};document.head.appendChild(s);});
+  return rzpScript.then(()=>new Promise((ok,no)=>{
+    const brand=getComputedStyle(document.documentElement).getPropertyValue("--brand").trim()||"#2F3A9E";
+    const rz=new window.Razorpay({key:c.key,order_id:c.orderId,amount:c.amount,currency:c.currency,name:c.name,description:c.description,prefill:c.prefill,theme:{color:brand},
+      handler:r=>{toast("Checking the payment…");verify(r).then(ok,no);},
+      modal:{ondismiss:()=>no(Object.assign(new Error("Payment cancelled"),{cancelled:true}))}});
+    rz.open();
+  }));
+}
