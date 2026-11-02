@@ -1,0 +1,24 @@
+{
+  "name": "kaantamandi-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "KaantaMandi for Android and iOS: a Capacitor shell around https://kaantamandi.com. The web app in ../src is the app; this folder only holds the native projects.",
+  "scripts": {
+    "icons": "npx -y node@22 node_modules/@capacitor/assets/bin/capacitor-assets generate --iconBackgroundColor '#2F3A9E' --iconBackgroundColorDark '#12142A' --splashBackgroundColor '#F8F4EC' --splashBackgroundColorDark '#12142A'",
+    "sync": "npx -y node@22 node_modules/@capacitor/cli/bin/capacitor sync",
+    "android": "npx -y node@22 node_modules/@capacitor/cli/bin/capacitor open android",
+    "ios": "npx -y node@22 node_modules/@capacitor/cli/bin/capacitor open ios"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.6.0",
+    "@capacitor/app": "8.1.2",
+    "@capacitor/core": "8.6.0",
+    "@capacitor/ios": "8.6.0",
+    "@capacitor/splash-screen": "8.0.2",
+    "@capacitor/status-bar": "8.0.4"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "4.0.0",
+    "@capacitor/cli": "8.6.0"
+  }
+}

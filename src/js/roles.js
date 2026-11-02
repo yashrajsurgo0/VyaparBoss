@@ -70,7 +70,8 @@ function renderAuth(){
   const el=$("#v-auth");el.hidden=false;
   const r=au.role,cfg=au.cfg||{},sup=r==="supplier",signup=au.mode==="signup";
   const roleBtn=(k,t,s,icon)=>`<button class="rolecard" data-action="au-role" data-v="${k}" aria-pressed="${r===k}">${ico(icon,"")}<b>${t}</b><span>${s}</span></button>`;
-  const prov=(k,label)=>k==="google"&&cfg.google?`<div class="gsi" id="gsiBtn" aria-label="${label}"></div>`
+  // Google, Apple and Facebook web sign-in don't run inside the app's web view: the app uses email and password.
+  const prov=(k,label)=>NATIVE?"":k==="google"&&cfg.google?`<div class="gsi" id="gsiBtn" aria-label="${label}"></div>`
     :`<button class="btn provider" data-action="au-provider" data-v="${k}">${label}</button>`;
   const providers=`<div class="providers">
       ${prov("google",`Continue with Google`)}${prov("apple",`Continue with Apple`)}${prov("facebook",`Continue with Facebook`)}
@@ -494,8 +495,8 @@ async function renderSetup(){
   const st=s.storage,keep=st.kind!=="disk"||st.dataFile;
   const html=`<p class="muted lede-sm">Everything below is set in Render → vyaparboss → Environment. After saving, Render restarts the app and this page updates.</p>
     <ol class="setup">
-      ${item(keep&&!st.error,"Data survives redeploys",st.kind==="upstash"?(st.error?`Saving to Upstash failed: ${esc(st.error)}`:`Saved to Upstash ${ago(st.lastSaved)}.`):st.dataFile?"Saved on a permanent disk (DATA_FILE).":"Data is on a temporary disk. A redeploy erases accounts and orders.",
-        `Create a free Redis database at <a href="https://upstash.com" target="_blank" rel="noopener">upstash.com</a> (Mumbai region), then add <code>UPSTASH_REDIS_REST_URL</code> and <code>UPSTASH_REDIS_REST_TOKEN</code>.`,true)}
+      ${item(keep&&!st.error,"Data survives redeploys",st.kind!=="disk"?(()=>{const db=st.kind==="supabase"?"the Supabase database":"Upstash";return st.error?`Saving to ${db} failed: ${esc(st.error)}`:`Saved to ${db} ${ago(st.lastSaved)}.`;})():st.dataFile?"Saved on a permanent disk (DATA_FILE).":"Data is on a temporary disk. A redeploy erases accounts and orders.",
+        `Create a Supabase project at <a href="https://supabase.com" target="_blank" rel="noopener">supabase.com</a> (Mumbai region), run <code>db/schema.sql</code> in its SQL editor, then add <code>SUPABASE_URL</code> and <code>SUPABASE_SECRET_KEY</code>. (A free Upstash Redis copy also works for the pilot.)`,true)}
       ${item(true,"Team tools","The admin key is set; you're using it now.")}
       ${item(s.email.on,"Email",s.email.on?`Sending through ${esc(s.email.provider)} as ${esc(s.email.from)}.${s.email.contactTo?" Contact messages are forwarded.":" Add <code>CONTACT_TO</code> to get contact messages by email."}`:"Off: no password resets, email confirmation, order emails or outreach.",
         `Free Brevo account → SMTP &amp; API → API key. Add <code>EMAIL_API_KEY</code>, <code>OUTREACH_FROM_EMAIL</code> (a sender verified in Brevo) and <code>CONTACT_TO</code>.`,true)}

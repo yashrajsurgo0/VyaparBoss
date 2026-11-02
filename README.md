@@ -185,6 +185,12 @@ AI reads buyer messages and drafts supplier replies. It never sets prices or pic
 - As a claude.ai artifact: uses the artifact runtime's Claude access.
 - Anywhere else: the built-in Hinglish rule parser.
 
+## Database, payments and the mobile app
+
+- **Database:** Supabase Postgres (Mumbai), one row per account, supplier, request and order. Setup in `docs/DEPLOY.md`, tables in `db/schema.sql`.
+- **Payments:** Razorpay Checkout opens in the page for order payments and supplier plans, on the website and in the app. The server makes the Razorpay order and checks every payment's signature.
+- **App:** `mobile/` builds the Android and iPhone apps (Capacitor). See `docs/MOBILE_APP.md`.
+
 ## Roadmap (next)
 
 1. Onboard the first 10–15 real suppliers and hide the samples.

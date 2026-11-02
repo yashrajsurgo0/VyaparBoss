@@ -1,6 +1,6 @@
 # Render blueprint: render.com → New → Blueprint → pick this repo.
-# FREE plan: the disk resets on every restart/redeploy. Set UPSTASH_REDIS_REST_URL and
-# UPSTASH_REDIS_REST_TOKEN (free Upstash database, docs/DEPLOY.md) and data survives anyway.
+# FREE plan: the disk resets on every restart/redeploy. Set SUPABASE_URL and SUPABASE_SECRET_KEY
+# (Postgres, run db/schema.sql first; docs/DEPLOY.md) or the Upstash pair, and data survives anyway.
 # Or switch to a paid plan with a disk:
 #   plan: starter
 #   disk: { name: vyaparboss-data, mountPath: /var/data, sizeGB: 1 }
@@ -45,6 +45,10 @@ services:
         sync: false
       - key: OUTREACH_DAILY_CAP
         value: "30"
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
       - key: UPSTASH_REDIS_REST_URL
         sync: false
       - key: UPSTASH_REDIS_REST_TOKEN

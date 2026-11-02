@@ -5,10 +5,22 @@
 // How it works: on boot the server pulls the snapshot into data/db.json before it starts; after every
 // change it pushes the whole file back (debounced, so a burst of changes is one write). If the snapshot
 // can't be read on boot the server refuses to start, so an empty disk never overwrites good data.
+//
+// With SUPABASE_URL and SUPABASE_SECRET_KEY set, Postgres on Supabase is used instead (server/supabase.js):
+// a real table per collection. If its tables are still empty and Upstash is set too, the first boot copies
+// the Upstash snapshot across, so moving over loses nothing.
 const fs = require("fs");
 const path = require("path");
+const { createSupabase } = require("./supabase");
 
 function createRemote(env, fetchImpl = globalThis.fetch) {
+  const pg = createSupabase(env, fetchImpl), kv = createUpstash(env, fetchImpl);
+  if (!pg) return kv;
+  if (!kv) return pg;
+  return { ...pg, kind: "supabase", async get() { return (await pg.get()) ?? kv.get(); }, set: json => pg.set(json) };
+}
+
+function createUpstash(env, fetchImpl = globalThis.fetch) {
   const url = String(env.UPSTASH_REDIS_REST_URL || "").replace(/\/+$/, ""), token = env.UPSTASH_REDIS_REST_TOKEN;
   if (!url || !token) return null;
   const key = env.UPSTASH_KEY || "vyaparboss:db";
@@ -64,4 +76,4 @@ function attachRemote(store, remote, { delayMs = 1200, log = console } = {}) {
   return { status, flush: () => { if (timer) { clearTimeout(timer); timer = null; } return push(); } };
 }
 
-module.exports = { createRemote, pullSnapshot, attachRemote };
+module.exports = { createRemote, createUpstash, pullSnapshot, attachRemote };

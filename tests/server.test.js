@@ -408,6 +408,58 @@ const { createApp } = require("../server");
       const h = await (async () => { const { server: s6 } = a1; await new Promise(r => s6.listen(0, r)); try { return await fetch(`http://127.0.0.1:${s6.address().port}/api/health`).then(x => x.json()); } finally { s6.close(); } })();
       assert.strictEqual(h.storage, "upstash");
     });
+    await test("Supabase storage: one row per record, only changed rows written, moves over from Upstash", async () => {
+      const { createRemote, pullSnapshot, attachRemote } = require("../server/remote");
+      // A tiny stand-in for Supabase's REST API: tables of { id, doc }.
+      const db = {}, writes = []; let down = false;
+      const fakePg = async (url, init) => {
+        const u = new URL(url), table = u.pathname.split("/").pop(), rows = db[table] ||= new Map();
+        assert.strictEqual(init.headers.apikey, "sb_secret_x"); assert.ok(!init.headers.authorization, "new-style keys go in apikey only");
+        if (down) return { ok: false, status: 503, json: async () => ({ message: "down" }) };
+        if (init.method === "GET") { const off = +u.searchParams.get("offset"), lim = +u.searchParams.get("limit"); return { ok: true, json: async () => [...rows].sort().slice(off, off + lim).map(([id, doc]) => ({ id, doc })) }; }
+        if (init.method === "POST") { const b = JSON.parse(init.body); writes.push(...b.map(r => table + "/" + r.id)); for (const r of b) rows.set(r.id, r.doc); return { ok: true, json: async () => null }; }
+        if (init.method === "DELETE") { const ids = JSON.parse("[" + u.searchParams.get("id").slice(4, -1) + "]"); for (const id of ids) rows.delete(id); return { ok: true, json: async () => null }; }
+      };
+      const env = { SUPABASE_URL: "https://p.supabase.co/", SUPABASE_SECRET_KEY: "sb_secret_x" };
+      const pg = createRemote(env, fakePg);
+      assert.strictEqual(pg.kind, "supabase");
+      const f1 = path.join(dir, "pg1", "db.json");
+      assert.strictEqual(await pullSnapshot(pg, f1), "empty");
+      const a = createApp({ dataFile: f1, claude: null, remote: pg, env: { ADMIN_KEY: "" } });
+      a.store.data.users.push({ id: "U9", role: "buyer", email: "a@b.in" }, { id: "U8", role: "supplier" });
+      a.store.data.sessions.h1 = { uid: "U9", exp: 1 };
+      a.store.save(); await a.sync.flush();
+      assert.deepStrictEqual(db.users.get("U9"), { id: "U9", role: "buyer", email: "a@b.in" }, "a user is its own row");
+      assert.deepStrictEqual(db.sessions.get("h1"), { uid: "U9", exp: 1 });
+      assert.ok(db.orders.size >= 1 && db.app_state.has("seq"), "orders are rows; counters live in app_state");
+      // Only what changed is written; removed records are deleted.
+      writes.length = 0;
+      a.store.data.users.find(x => x.id === "U9").name = "Asha"; a.store.data.users = a.store.data.users.filter(x => x.id !== "U8");
+      a.store.save(); await a.sync.flush();
+      assert.deepStrictEqual(writes.sort(), ["app_state/__order:users", "users/U9"]);
+      assert.ok(!db.users.has("U8"));
+      // A fresh disk gets everything back, in the same order.
+      const f2 = path.join(dir, "pg2", "db.json");
+      assert.strictEqual(await pullSnapshot(createRemote(env, fakePg), f2), "restored");
+      const b = createApp({ dataFile: f2, claude: null, remote: null });
+      assert.deepStrictEqual(b.store.data.users.map(x => x.id + (x.name || "")), ["U9Asha"]);
+      assert.strictEqual(JSON.stringify(b.store.data.orders.map(o => o.po)), JSON.stringify(a.store.data.orders.map(o => o.po))); // seed arrays come from the engine's sandbox
+      assert.strictEqual(b.store.data.sessions.h1.uid, "U9");
+      // Supabase down on boot: refuse to start.
+      down = true;
+      await assert.rejects(pullSnapshot(createRemote(env, fakePg), path.join(dir, "pg3", "db.json"), { tries: 2, waitMs: 1 }), /Not starting/);
+      down = false;
+      // Moving over: empty Supabase + Upstash set → the Upstash snapshot is used, then written into Postgres.
+      for (const k of Object.keys(db)) delete db[k];
+      const snap = JSON.stringify({ ...JSON.parse(fs.readFileSync(f2, "utf8")), users: [{ id: "U7", role: "buyer" }] });
+      const both = createRemote({ ...env, UPSTASH_REDIS_REST_URL: "https://x.upstash.io", UPSTASH_REDIS_REST_TOKEN: "tok" },
+        async (url, init) => String(url).includes("upstash") ? { ok: true, json: async () => ({ result: JSON.parse(init.body)[0] === "GET" ? snap : "OK" }) } : fakePg(url, init));
+      const f4 = path.join(dir, "pg4", "db.json");
+      assert.strictEqual(await pullSnapshot(both, f4), "restored");
+      const c = createApp({ dataFile: f4, claude: null, remote: both, env: { ADMIN_KEY: "" } });
+      c.store.save(); await c.sync.flush();
+      assert.deepStrictEqual(db.users.get("U7"), { id: "U7", role: "buyer" });
+    });
     await test("account emails: reset password, updates to the right side, opt-out, delete account, contact", async () => {
       const mails = [];
       const fakeMail = async (url, init) => { if (String(url).includes("resend")) { const b = JSON.parse(init.body); mails.push({ to: b.to[0], subject: b.subject, text: b.text }); } return { ok: true, json: async () => ({}), text: async () => "" }; };
@@ -808,6 +860,61 @@ const { createApp } = require("../server");
         assert.ok(s2.plan === "pro" && s2.planPeriod === "yearly" && s2.planUntil > Date.now() + 360 * 864e5, "a year of Pro");
         assert.strictEqual(stB.data.planPayments.filter(p => p.status === "paid").length, 1, "paid once");
       } finally { sA.close(); sB.close(); }
+    });
+    await test("Razorpay Checkout: order and plan payments, signature checked, recorded once with the webhook", async () => {
+      const crypto = require("crypto");
+      const made = [];
+      const fakeRzp = async (url, init) => { const b = JSON.parse(init.body); made.push({ url, b }); return { ok: true, json: async () => ({ id: "order_" + made.length, currency: "INR", amount: b.amount }) }; };
+      const { server: sC, store: stC } = createApp({ dataFile: path.join(dir, "dbC.json"), claude: null, fetch: fakeRzp, noTimers: true,
+        env: { ADMIN_KEY: "kC", RAZORPAY_KEY_ID: "rzp_test_pub", RAZORPAY_KEY_SECRET: "sec", RAZORPAY_WEBHOOK_SECRET: "wh", PUBLIC_URL: "https://vb.test" } });
+      await new Promise(r => sC.listen(0, r));
+      const bC = `http://127.0.0.1:${sC.address().port}`;
+      const agent = () => { let cookie = ""; return async (method, p, body) => {
+        const r = await fetch(bC + p, { method, headers: { "content-type": "application/json", ...(cookie ? { cookie } : {}) }, body: body ? JSON.stringify(body) : undefined });
+        const sc = r.headers.get("set-cookie"); if (sc) cookie = sc.split(";")[0];
+        return { status: r.status, body: await r.json() }; }; };
+      const signed = (orderId, payId, secret = "sec") => ({ razorpay_order_id: orderId, razorpay_payment_id: payId, razorpay_signature: crypto.createHmac("sha256", secret).update(`${orderId}|${payId}`).digest("hex") });
+      try {
+        const sup = agent(), buyer = agent(), other = agent();
+        await sup("POST", "/api/auth/signup", { role: "supplier", name: "Asha", business: "Asha Packaging", email: "asha@c.in", password: "longenough1" });
+        const sid = (await sup("PUT", "/api/my/listing", { name: "Asha Packaging", city: "Chakan", gstin: "27AAPFU0939F1ZV", lead: 2, coverage: 400, offers: [{ p: "box3", tiersText: "500:14.5, 5000:14", cap: 50000 }] })).body.id;
+        await buyer("POST", "/api/auth/signup", { role: "buyer", name: "Ravi", business: "Ravi Exports", email: "ravi@c.in", password: "longenough1", phone: "9876543210" });
+        await other("POST", "/api/auth/signup", { role: "buyer", name: "Zed", business: "Zed Co", email: "zed@c.in", password: "longenough1" });
+        const r = (await buyer("POST", "/api/rfqs", { productId: "box3", qty: 6000, city: "Pune", quotes: [{ sid, unit: 14, landed: 1, eta: 3, meets: true }] })).body;
+        const o = (await buyer("POST", "/api/orders", { order: { productId: "box3", sid, rfqId: r.id } })).body;
+        const P = "/api/orders/" + encodeURIComponent(o.po) + "/checkout";
+        const raw = stC.data.orders.find(x => x.po === o.po);
+        // The server makes the Razorpay order for exactly what's due; the page only gets the public key.
+        const c = (await buyer("POST", P)).body;
+        assert.deepStrictEqual([c.key, c.orderId, c.amount, c.currency, c.prefill.email, c.test], ["rzp_test_pub", "order_1", Math.round(raw.landed * 100), "INR", "ravi@c.in", true]);
+        assert.ok(!JSON.stringify(c).includes("sec"), "the key secret never leaves the server");
+        assert.deepStrictEqual([made[0].url, made[0].b.notes.po, made[0].b.amount], ["https://api.razorpay.com/v1/orders", o.po, Math.round(raw.landed * 100)]);
+        assert.strictEqual((await buyer("POST", P)).body.orderId, "order_1", "same amount due: the same Razorpay order is reused");
+        assert.strictEqual((await other("POST", P)).status, 404, "another buyer can't pay (or see) this order");
+        // Forged or mismatched callbacks are refused; a genuine one records the payment.
+        assert.strictEqual((await buyer("POST", P + "/verify", signed("order_1", "pay_A", "wrong"))).status, 400);
+        assert.strictEqual((await buyer("POST", P + "/verify", signed("order_9", "pay_A"))).status, 400, "must be this order's Razorpay order");
+        const paid = (await buyer("POST", P + "/verify", signed("order_1", "pay_A"))).body;
+        assert.deepStrictEqual([paid.payments.length, paid.payments[0].amount, paid.payments[0].status, paid.payments[0].method], [1, raw.landed, "confirmed", "razorpay"]);
+        // The webhook for the same payment arrives later: not counted twice.
+        const ev = JSON.stringify({ event: "order.paid", payload: { order: { entity: { id: "order_1", notes: { kind: "order", po: o.po }, amount_paid: raw.landed * 100 } }, payment: { entity: { id: "pay_A", amount: raw.landed * 100 } } } });
+        const hook = (body, id) => fetch(bC + "/webhooks/razorpay", { method: "POST", headers: { "content-type": "application/json", "x-razorpay-signature": crypto.createHmac("sha256", "wh").update(body).digest("hex"), "x-razorpay-event-id": id }, body });
+        assert.strictEqual((await hook(ev, "c1")).status, 200);
+        assert.strictEqual(stC.data.orders.find(x => x.po === o.po).payments.length, 1, "recorded once");
+        assert.strictEqual((await buyer("POST", P)).status, 409, "nothing left to pay");
+        // Supplier plan through Checkout.
+        const plan = (await sup("POST", "/api/my/plan", { plan: "growth", period: "monthly", checkout: true })).body;
+        assert.ok(plan.checkout && plan.checkout.orderId && !plan.url, "Checkout instead of a link");
+        assert.strictEqual(made.at(-1).b.notes.kind, "plan");
+        assert.strictEqual(plan.checkout.amount, (plan.amount + plan.gst) * 100, "plan price plus 18% GST");
+        assert.strictEqual((await sup("POST", "/api/my/plan/verify", { id: plan.id, ...signed(plan.checkout.orderId, "pay_P", "nope") })).status, 400);
+        const on = (await sup("POST", "/api/my/plan/verify", { id: plan.id, ...signed(plan.checkout.orderId, "pay_P") })).body;
+        assert.deepStrictEqual([on.status, on.plan], ["paid", "growth"]);
+        assert.strictEqual(stC.data.suppliers.find(s => s.id === sid).plan, "growth");
+        const pev = JSON.stringify({ event: "order.paid", payload: { order: { entity: { id: plan.checkout.orderId, notes: { kind: "plan", planPayment: plan.id, sid } } }, payment: { entity: { id: "pay_P" } } } });
+        await hook(pev, "c2");
+        assert.strictEqual(stC.data.planPayments.filter(p => p.status === "paid").length, 1, "plan paid once");
+      } finally { sC.close(); }
     });
     await test("unknown API path is a JSON 404", async () => {
       const { status, body } = await call("GET", "/api/nope");

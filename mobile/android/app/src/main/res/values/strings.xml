@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">KaantaMandi</string>
+    <string name="title_activity_main">KaantaMandi</string>
+    <string name="package_name">com.kaantamandi.app</string>
+    <string name="custom_url_scheme">com.kaantamandi.app</string>
+</resources>

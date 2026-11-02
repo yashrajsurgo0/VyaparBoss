@@ -1,0 +1,16 @@
+{
+  "appId": "com.kaantamandi.app",
+  "appName": "KaantaMandi",
+  "webDir": "www",
+  "server": {
+    "url": "https://kaantamandi.com",
+    "allowNavigation": ["kaantamandi.com", "www.kaantamandi.com", "*.razorpay.com"],
+    "errorPath": "offline.html"
+  },
+  "android": { "allowMixedContent": false },
+  "ios": { "contentInset": "never", "limitsNavigationsToAppBoundDomains": false },
+  "plugins": {
+    "SplashScreen": { "launchShowDuration": 800, "backgroundColor": "#F8F4EC", "showSpinner": false },
+    "StatusBar": { "style": "LIGHT", "backgroundColor": "#F8F4EC", "overlaysWebView": false }
+  }
+}

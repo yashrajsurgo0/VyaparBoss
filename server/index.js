@@ -23,12 +23,12 @@ const TYPES = { ".html": "text/html; charset=utf-8", ".css": "text/css; charset=
 // (the app sets a few style attributes); inline scripts are not.
 const CSP = [
   "default-src 'self'",
-  "script-src 'self' https://accounts.google.com https://appleid.cdn-apple.com https://connect.facebook.net",
+  "script-src 'self' https://accounts.google.com https://appleid.cdn-apple.com https://connect.facebook.net https://checkout.razorpay.com https://cdn.razorpay.com",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com",
   "font-src 'self' https://fonts.gstatic.com",
   "img-src 'self' data: blob: https:",
-  "connect-src 'self' https://accounts.google.com https://*.facebook.com https://graph.facebook.com",
-  "frame-src https://accounts.google.com https://appleid.apple.com https://*.facebook.com",
+  "connect-src 'self' https://accounts.google.com https://*.facebook.com https://graph.facebook.com https://*.razorpay.com",
+  "frame-src https://accounts.google.com https://appleid.apple.com https://*.facebook.com https://api.razorpay.com https://checkout.razorpay.com",
   "form-action 'self' https://appleid.apple.com",
   "base-uri 'self'", "object-src 'none'", "frame-ancestors 'self'",
 ].join("; ");
@@ -84,6 +84,26 @@ function createApp(opts = {}) {
   const publicPricing = () => { const { costs, ...pub } = plainJ(pricing()); return pub; }; // cost assumptions stay with the team
   const PLAN_DAYS = { monthly: 30, yearly: 365 };
   /** Switches a supplier onto a paid plan (extends it when they renew the same plan). */
+  /** An order the caller may pay online now, and what's due on it. */
+  function payable(req, po) {
+    if (!razorpay) throw Object.assign(new Error("Online payment isn't switched on yet. Pay the supplier directly and record it here."), { status: 503 });
+    const o = store.data.orders.find(x => x.po === po); const u = auth.userOf(req);
+    if (!o || !(isAdmin(req) || sameOrg(u, o))) throw notFound("Order");
+    if (o.cancelled || o.approval?.status === "pending") throw Object.assign(new Error("This order can't be paid right now"), { status: 409 });
+    // What's due, minus payments the buyer already recorded that the supplier hasn't confirmed yet: no paying twice.
+    const due = Math.round(core.dueOf(o) - core.claimedOf(o)); if (due < 1) throw Object.assign(new Error("Nothing is due on this order (payments waiting for the supplier's confirmation count)"), { status: 409 });
+    return { o, u, due };
+  }
+  /** Adds a confirmed Razorpay payment to an order once, whichever of webhook or Checkout callback arrives first. */
+  function recordOnlinePayment(o, paymentId, amount) {
+    if (!paymentId || (o.payments || []).some(x => x.ref === paymentId)) return false;
+    o.payments = (o.payments || []).concat({ id: "RZP" + paymentId, amount, method: "razorpay", ref: paymentId, at: Date.now(), by: "razorpay", status: "confirmed", settled: false, test: razorpay.test });
+    notify.moneyEvent(o, "pay_online", null);
+    return true;
+  }
+  /** What the Checkout pay sheet needs. Only the public key id; prefill is the payer's own details. */
+  const checkoutParams = (c, description, u) => ({ key: razorpay.keyId, orderId: c.id, amount: Math.round(c.amount * 100), currency: "INR", name: "KaantaMandi", description,
+    prefill: { name: u?.name || "", email: u?.email || "", contact: u?.phone || "" }, test: !!c.test });
   function activatePlan(pay, via) {
     const s = store.data.suppliers.find(x => x.id === pay.sid); if (!s) return null;
     const now = Date.now(), from = s.plan === pay.plan && s.planUntil > now ? s.planUntil : now;
@@ -744,17 +764,32 @@ function createApp(opts = {}) {
     }],
     // Online payment: a Razorpay link for what's still due on one order (buyer side).
     ["POST", /^\/api\/orders\/(.+)\/paylink$/, async (req, m) => {
-      if (!razorpay) throw Object.assign(new Error("Online payment isn't switched on yet. Pay the supplier directly and record it here."), { status: 503 });
-      const o = store.data.orders.find(x => x.po === m[1]); const u = auth.userOf(req);
-      if (!o || !(isAdmin(req) || sameOrg(u, o))) throw notFound("Order");
-      if (o.cancelled || o.approval?.status === "pending") throw Object.assign(new Error("This order can't be paid right now"), { status: 409 });
+      const { o, due } = payable(req, m[1]);
       limit(req, "paylink", 20, 36e5);
-      // What's due, minus payments the buyer already recorded that the supplier hasn't confirmed yet: no paying twice.
-      const due = Math.round(core.dueOf(o) - core.claimedOf(o)); if (due < 1) throw Object.assign(new Error("Nothing is due on this order (payments waiting for the supplier's confirmation count)"), { status: 409 });
       if (o.payLink && o.payLink.amount === due && o.payLink.at > Date.now() - 6 * 864e5) return o.payLink;
       const p = core.PMAP[o.productId];
       const link = await razorpay.createLink({ amount: due, po: o.po, description: `${o.po}: ${core.qfmt(o.qty)} ${p.unit} ${p.name} from ${o.sname}`, callbackUrl: `${PUBLIC_URL}/#orders` });
       o.payLink = { ...link, at: Date.now(), test: razorpay.test }; store.save(); return o.payLink;
+    }],
+    // Online payment in the page (website and app): Razorpay Checkout for what's still due on one order.
+    ["POST", /^\/api\/orders\/([^/]+)\/checkout$/, async (req, m) => {
+      const { o, u, due } = payable(req, m[1]);
+      limit(req, "checkout", 30, 36e5);
+      if (!(o.checkout && o.checkout.amount === due && !o.checkout.paid && o.checkout.at > Date.now() - 6 * 864e5)) {
+        const ord = await razorpay.createOrder({ amount: due, receipt: o.po, notes: { kind: "order", po: o.po } });
+        o.checkout = { id: ord.id, amount: due, at: Date.now(), test: razorpay.test }; store.save();
+      }
+      const p = core.PMAP[o.productId];
+      return checkoutParams(o.checkout, `${o.po}: ${core.qfmt(o.qty)} ${p.unit} ${p.name}`, u);
+    }],
+    ["POST", /^\/api\/orders\/([^/]+)\/checkout\/verify$/, async (req, m) => {
+      const o = store.data.orders.find(x => x.po === m[1]); const u = auth.userOf(req);
+      if (!o || !(isAdmin(req) || sameOrg(u, o))) throw notFound("Order");
+      const b = await jsonBody(req);
+      if (!razorpay || !o.checkout || b.razorpay_order_id !== o.checkout.id || !razorpay.verifyPayment(b.razorpay_order_id, b.razorpay_payment_id, b.razorpay_signature))
+        throw Object.assign(new Error("We couldn't confirm that payment. If money left your account, it will show here within a few minutes."), { status: 400 });
+      recordOnlinePayment(o, b.razorpay_payment_id, o.checkout.amount);
+      o.checkout.paid = true; store.save(); return o;
     }],
     ["POST", /^\/webhooks\/razorpay$/, async (req, m, url, res) => {
       const raw = await readBody(req);
@@ -768,10 +803,16 @@ function createApp(opts = {}) {
       } else if (j.event === "payment_link.paid") {
         const link = j.payload?.payment_link?.entity || {}, pay = j.payload?.payment?.entity || {};
         const o = store.data.orders.find(x => x.po === link.notes?.po);
-        if (o && pay.id && !(o.payments || []).some(x => x.ref === pay.id)) {
-          o.payments = (o.payments || []).concat({ id: "RZP" + pay.id, amount: (pay.amount || link.amount_paid || 0) / 100, method: "razorpay", ref: pay.id, at: Date.now(), by: "razorpay", status: "confirmed", settled: false, test: razorpay.test });
-          if (o.payLink) o.payLink.paid = true;
-          notify.moneyEvent(o, "pay_online", null);
+        if (o && pay.id && recordOnlinePayment(o, pay.id, (pay.amount || link.amount_paid || 0) / 100) && o.payLink) o.payLink.paid = true;
+      } else if (j.event === "order.paid") {
+        // Checkout: the same payment may already be recorded by /checkout/verify; recordOnlinePayment skips repeats.
+        const ord = j.payload?.order?.entity || {}, pay = j.payload?.payment?.entity || {};
+        if (ord.notes?.kind === "plan") {
+          const pp = store.data.planPayments.find(x => x.id === ord.notes.planPayment && x.checkout?.id === ord.id);
+          if (pp && pp.status === "pending") activatePlan(pp, "razorpay");
+        } else {
+          const o = store.data.orders.find(x => x.po === ord.notes?.po && x.checkout?.id === ord.id);
+          if (o && pay.id && recordOnlinePayment(o, pay.id, (pay.amount || ord.amount_paid || 0) / 100)) o.checkout.paid = true;
         }
       }
       if (evId) store.data.rzEvents = store.data.rzEvents.concat(evId).slice(-500);
@@ -821,13 +862,26 @@ function createApp(opts = {}) {
       const old = store.data.planPayments.find(x => x.sid === s.id && x.status === "pending");
       if (old) old.status = "replaced";
       const pay = { id: "PP" + Date.now().toString(36), sid: s.id, plan: b.plan, period, amount, gst: Math.round(amount * pricing().serviceGst), status: "pending", at: Date.now() };
-      if (razorpay) {
+      if (razorpay && b.checkout) {
+        const ord = await razorpay.createOrder({ amount: amount + pay.gst, receipt: pay.id, notes: { kind: "plan", planPayment: pay.id, sid: s.id } });
+        pay.checkout = { id: ord.id, amount: amount + pay.gst, at: Date.now(), test: razorpay.test };
+      } else if (razorpay) {
         pay.link = await razorpay.createLink({ amount: amount + pay.gst, po: "PLAN-" + s.id, description: `KaantaMandi ${pl.name} plan, ${period} (incl. 18% GST)`, callbackUrl: `${PUBLIC_URL}/#plan`, notes: { kind: "plan", planPayment: pay.id, sid: s.id } });
       }
       store.data.planPayments.push(pay); store.save();
       if (!razorpay && env.CONTACT_TO && mailer.configured) // no online payment yet: tell the team to collect it
         mailer.send({ to: env.CONTACT_TO, subject: `[KaantaMandi] ${s.name} wants the ${pl.name} plan (${period})`, text: `${s.name}, ${s.city}\nPlan: ${pl.name}, ${period}: ${core.inr(amount)} + GST ${core.inr(pay.gst)}\n\nCollect the payment, then confirm it in Team → Economics → Plan payments.` }).catch(() => {});
-      return { id: pay.id, plan: pay.plan, period, amount, gst: pay.gst, status: pay.status, url: pay.link?.url || null };
+      return { id: pay.id, plan: pay.plan, period, amount, gst: pay.gst, status: pay.status, url: pay.link?.url || null,
+        checkout: pay.checkout ? checkoutParams(pay.checkout, `KaantaMandi ${pl.name} plan, ${period} (incl. 18% GST)`, u) : null };
+    }],
+    ["POST", /^\/api\/my\/plan\/verify$/, async req => {
+      const u = needUser(req, "supplier"); const b = await jsonBody(req);
+      const pay = store.data.planPayments.find(x => x.id === b.id && x.sid === u.supplierId);
+      if (!pay) throw notFound("Plan payment");
+      if (!razorpay || !pay.checkout || b.razorpay_order_id !== pay.checkout.id || !razorpay.verifyPayment(b.razorpay_order_id, b.razorpay_payment_id, b.razorpay_signature))
+        throw Object.assign(new Error("We couldn't confirm that payment. If money left your account, your plan switches on within a few minutes."), { status: 400 });
+      if (pay.status === "pending") { pay.ref = b.razorpay_payment_id; activatePlan(pay, "razorpay"); store.save(); }
+      return { id: pay.id, status: pay.status, plan: pay.plan };
     }],
     ["PATCH", /^\/api\/admin\/plan-payments\/(.+)$/, async (req, m) => {
       admin(req); const pay = store.data.planPayments.find(x => x.id === m[1]); if (!pay) throw notFound("Plan payment");
@@ -1048,18 +1102,19 @@ if (require.main === module) {
   loadEnv();
   const port = Number(process.env.PORT) || 5173;
   (async () => {
-    // With UPSTASH_* set, bring the saved database onto this (possibly fresh) disk before anything reads it.
+    // With SUPABASE_* or UPSTASH_* set, bring the saved database onto this (possibly fresh) disk before anything reads it.
     const remote = createRemote(process.env);
     const dataFile = process.env.DATA_FILE || path.join(ROOT, "data", "db.json");
     let pulled = null;
     if (remote) pulled = await pullSnapshot(remote, dataFile);
     const { ctx, server, store, sync } = createApp({ remote, dataFile });
-    if (pulled === "empty") store.save(); // first run with remote storage: push what we have
+    // First run with remote storage, or a copy just moved from Upstash into Supabase: push what we have.
+    if (pulled === "empty" || remote?.kind === "supabase") store.save();
     server.listen(port, () => {
       console.log(`KaantaMandi running at http://localhost:${port}`);
       console.log(`  AI parsing: ${ctx.claude ? `${ctx.claude.provider} (${ctx.claude.model})` : "rule parser (set GEMINI_API_KEY or ANTHROPIC_API_KEY in .env)"}`);
       console.log(`  WhatsApp:   ${process.env.WHATSAPP_TOKEN ? "configured" : "not configured (see docs/WHATSAPP_SETUP.md)"}`);
-      console.log(`  Storage:    ${remote ? `disk + Upstash copy (${pulled})` : "disk only (data/db.json; set UPSTASH_REDIS_REST_URL to keep data across redeploys)"}`);
+      console.log(`  Storage:    ${remote ? `${remote.kind === "supabase" ? "Supabase Postgres" : "disk + Upstash copy"} (${pulled})` : "disk only (data/db.json; set SUPABASE_URL or UPSTASH_REDIS_REST_URL to keep data across redeploys)"}`);
     });
     // Render sends SIGTERM before a redeploy: push the last changes, then exit.
     const stop = async () => { try { if (sync) await sync.flush(); } finally { process.exit(0); } };

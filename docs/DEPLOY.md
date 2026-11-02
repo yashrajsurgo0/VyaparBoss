@@ -15,7 +15,16 @@ The repo includes a `render.yaml` blueprint.
 
 **Free vs paid.** The free plan sleeps when idle (the first request takes about a minute) and **wipes its disk on every restart or redeploy**. Two ways to keep your data:
 
-**Free: Upstash (about 3 minutes, recommended now).**
+**Recommended: Supabase Postgres (about 10 minutes).** A real database: each user, session, supplier, request and order is its own row, Supabase backs it up daily, and a Mumbai project keeps the data in India.
+1. Sign up at **supabase.com** → **New project**, region **Mumbai (ap-south-1)**, free plan. Save the database password somewhere safe.
+2. Open **SQL Editor → New query**, paste all of `db/schema.sql`, **Run**. It creates the tables with row-level security on (the public anon key can read nothing).
+3. **Project Settings → API Keys**: copy the **Project URL** and create a **secret key** (`sb_secret_…`). The secret key is for the server only: never put it in the website, the app or GitHub.
+4. In Render → **Environment** add `SUPABASE_URL` and `SUPABASE_SECRET_KEY`, keep the Upstash pair if you have it, and save. On the first boot the server copies the Upstash data into the empty tables.
+5. `/api/health` should say `"storage":"supabase"`. In Supabase → **Table editor → users** you can now see every account (email, role, name; passwords only as scrypt hashes).
+
+The app still keeps everything in memory and writes only the rows that changed, about a second after each change. If Supabase can't be read at start-up, the server refuses to start rather than start empty. Once Supabase works, you can remove the Upstash keys.
+
+**Free: Upstash (about 3 minutes).**
 1. Sign up at **upstash.com** (Google or GitHub login), **Create database** → Redis, any name, region **ap-south-1 (Mumbai)** or the one nearest your Render region, free plan.
 2. On the database page, open **REST API** and copy `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`.
 3. In Render → your service → **Environment**, add both, save. Render redeploys.
@@ -55,11 +64,12 @@ Put it behind Caddy or nginx for HTTPS, since WhatsApp requires `https://`.
 | `GEMINI_MODEL` | Optional, default `gemini-3.8-flash` | — |
 | `ANTHROPIC_API_KEY` | Alternative to Gemini (Claude) | console.anthropic.com → API Keys |
 | `DATA_FILE` | Where data is saved (`/var/data/db.json` on Render) | — |
+| `SUPABASE_URL`, `SUPABASE_SECRET_KEY` | The database (Postgres). Run `db/schema.sql` first | supabase.com → your project → Project Settings → API Keys |
 | `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | Keeps data across redeploys on the free plan | upstash.com → your database → REST API |
 | `ADMIN_KEY` | Team tools (Sign-ups, Outreach, network edits) | Any long random string you make up |
 | `EMAIL_PROVIDER`, `EMAIL_API_KEY`, `OUTREACH_FROM_EMAIL` | Password resets, order emails, outreach | docs/OUTREACH.md |
 | `CONTACT_TO` | Where contact-page messages and new problems are forwarded | Your inbox |
-| `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET` | "Pay online" on orders (test keys first) | Razorpay dashboard → API keys; Webhooks → `<PUBLIC_URL>/webhooks/razorpay`, event `payment_link.paid` |
+| `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET` | "Pay online" on orders and supplier plans: Razorpay Checkout in the page, website and app (test keys first) | Razorpay dashboard → API keys; Webhooks → `<PUBLIC_URL>/webhooks/razorpay`, events `order.paid` and `payment_link.paid` |
 
 **Before real online payments:** with plain Payment Links the money lands in KaantaMandi's Razorpay account and the team settles it to the supplier (Team → Ops → Paid online, to settle). For a marketplace that usually needs Razorpay Route (or a similar split-payment product) and legal advice, so suppliers are paid directly. Keep test keys until that's in place.
 | `WHATSAPP_*` | WhatsApp intake | docs/WHATSAPP_SETUP.md |

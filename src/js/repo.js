@@ -124,6 +124,12 @@ const Repo={
     const i=this.data.orders.findIndex(x=>x.po===po);if(i>=0)this.data.orders[i]=o;this.refresh().catch(()=>{});return o;
   },
   async payLink(po){return this.api("POST","api/orders/"+encodeURIComponent(po)+"/paylink");},
+  /* Razorpay Checkout: the server makes the Razorpay order, then checks the signature the pay sheet returns. */
+  async checkout(po){return this.api("POST","api/orders/"+encodeURIComponent(po)+"/checkout");},
+  async verifyCheckout(po,r){
+    const o=await this.api("POST","api/orders/"+encodeURIComponent(po)+"/checkout/verify",r);
+    const i=this.data.orders.findIndex(x=>x.po===po);if(i>=0)this.data.orders[i]=o;this.refresh().catch(()=>{});return o;
+  },
   async teamOrder(po,patch){const o=await this.api("PATCH","api/admin/orders/"+encodeURIComponent(po),patch);const i=this.data.orders.findIndex(x=>x.po===po);if(i>=0)this.data.orders[i]=o;return o;},
   async setFeeTerms(sid,feeAgreed,feeRatePct){const out=await this.api("PATCH","api/admin/suppliers/"+encodeURIComponent(sid),{feeAgreed,feeRatePct});const s=this.data.suppliers.find(x=>x.id===sid);if(s)Object.assign(s,{feeAgreed:out.feeAgreed,feeRate:out.feeRate});return out;},
   async setFeeRate(ratePct){return this.api("PUT","api/admin/fees",{ratePct});},
@@ -318,8 +324,9 @@ const Repo={
   },
   async buyPlan(plan,period){
     if(this.mode!=="server")throw new Error("Plans are bought on the live site, kaantamandi.com. This demo keeps everything in your browser.");
-    const out=await this.api("POST","api/my/plan",{plan,period});await this.refresh();return out;
+    const out=await this.api("POST","api/my/plan",{plan,period,checkout:true});await this.refresh();return out;
   },
+  async verifyPlan(id,r){const out=await this.api("POST","api/my/plan/verify",{id,...r});await this.refresh();return out;},
   async decidePlanPayment(id,status){return this.api("PATCH","api/admin/plan-payments/"+encodeURIComponent(id),{status});},
   async setSupplierPlan(sid,plan,days){const s=await this.api("PATCH","api/admin/suppliers/"+encodeURIComponent(sid),{plan,days});const i=this.data.suppliers.findIndex(x=>x.id===sid);if(i>=0)this.data.suppliers[i]=s;return s;},
   async serviceStatus(po,patch){
